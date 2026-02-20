@@ -1,17 +1,12 @@
 <?php
 /**
- * This file is part of webman.
+ * Home Guardian - 异常处理器配置
  *
- * Licensed under The MIT License
- * For full copyright and license information, please see the MIT-LICENSE.txt
- * Redistributions of files must retain the above copyright notice.
- *
- * @author    walkor<walkor@workerman.net>
- * @copyright walkor<walkor@workerman.net>
- * @link      http://www.workerman.net/
- * @license   http://www.opensource.org/licenses/mit-license.php MIT License
+ * 将不同的 URL 路径映射到不同的异常处理器。
+ * 空字符串 '' 表示全局默认处理器，所有未匹配的路径都走此处理。
  */
 
 return [
-    '' => support\exception\Handler::class,
+    // 全局默认：使用自定义的 JSON 异常处理器
+    '' => app\exception\Handler::class,
 ];

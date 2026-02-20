@@ -1,17 +1,14 @@
 <?php
 /**
- * This file is part of webman.
+ * Home Guardian - Bootstrap 配置
  *
- * Licensed under The MIT License
- * For full copyright and license information, please see the MIT-LICENSE.txt
- * Redistributions of files must retain the above copyright notice.
+ * 在此注册需要在 Worker 启动时初始化的引导类。
+ * 引导类必须实现 Webman\Bootstrap 接口的 start(Worker $worker) 方法。
  *
- * @author    walkor<walkor@workerman.net>
- * @copyright walkor<walkor@workerman.net>
- * @link      http://www.workerman.net/
- * @license   http://www.opensource.org/licenses/mit-license.php MIT License
+ * 执行顺序：按数组顺序依次执行，Session 必须在最前面。
  */
 
 return [
+    // Session 初始化（框架内置，必须保留）
     support\bootstrap\Session::class,
 ];

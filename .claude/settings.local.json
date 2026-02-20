@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /d/workspace/php/Home-Guardian status --short)",
+      "Bash(git -C /d/workspace/php/Home-Guardian log --name-status --oneline)",
+      "Bash(git -C /d/workspace/php/Home-Guardian ls-files:*)"
+    ]
+  }
+}

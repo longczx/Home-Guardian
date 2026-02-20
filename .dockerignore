@@ -1,0 +1,15 @@
+.git/
+.github/
+.idea/
+.vscode/
+vendor/
+runtime/
+node_modules/
+.env
+.env.local
+.env.*.local
+*.swp
+*~
+.DS_Store
+docker-compose.yml
+PROJECT_BLUEPRINT.md

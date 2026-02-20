@@ -1,35 +1,29 @@
 {
-  "name": "workerman/webman",
+  "name": "longczx/home-guardian",
   "type": "project",
   "keywords": [
-    "high performance",
-    "http service"
+    "iot",
+    "smart home",
+    "mqtt",
+    "webman"
   ],
-  "homepage": "https://www.workerman.net",
   "license": "MIT",
-  "description": "High performance HTTP Service Framework.",
-  "authors": [
-    {
-      "name": "walkor",
-      "email": "walkor@workerman.net",
-      "homepage": "https://www.workerman.net",
-      "role": "Developer"
-    }
-  ],
-  "support": {
-    "email": "walkor@workerman.net",
-    "issues": "https://github.com/walkor/webman/issues",
-    "forum": "https://wenda.workerman.net/",
-    "wiki": "https://workerman.net/doc/webman",
-    "source": "https://github.com/walkor/webman"
-  },
+  "description": "Home Guardian - A private, high-performance home IoT management platform.",
   "require": {
-    "php": ">=8.1",
+    "php": ">=8.2",
     "workerman/webman-framework": "^2.1",
-    "monolog/monolog": "^2.0"
+    "monolog/monolog": "^2.0",
+    "illuminate/database": "^11.0",
+    "illuminate/pagination": "^11.0",
+    "illuminate/events": "^11.0",
+    "illuminate/redis": "^11.0",
+    "vlucas/phpdotenv": "^5.6",
+    "firebase/php-jwt": "^6.10",
+    "workerman/mqtt": "^1.0",
+    "symfony/cache": "^7.0"
   },
   "suggest": {
-    "ext-event": "For better performance. "
+    "ext-event": "For better performance."
   },
   "autoload": {
     "psr-4": {

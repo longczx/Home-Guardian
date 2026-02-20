@@ -1,4 +1,10 @@
 <?php
+/**
+ * Home Guardian - 首页控制器
+ *
+ * 处理根路径请求，返回 API 概览信息。
+ * 在单页应用（SPA）部署后，此路由可改为返回 index.html。
+ */
 
 namespace app\controller;
 
@@ -6,37 +12,17 @@ use support\Request;
 
 class IndexController
 {
+    /**
+     * API 概览
+     *
+     * GET /
+     */
     public function index(Request $request)
     {
-        return <<<EOF
-<style>
-  * {
-    padding: 0;
-    margin: 0;
-  }
-  iframe {
-    border: none;
-    overflow: scroll;
-  }
-</style>
-<iframe
-  src="https://www.workerman.net/wellcome"
-  width="100%"
-  height="100%"
-  allow="clipboard-write"
-  sandbox="allow-scripts allow-same-origin allow-popups"
-></iframe>
-EOF;
+        return api_success([
+            'name'    => 'Home Guardian API',
+            'version' => '1.0.0',
+            'docs'    => '/api/health',
+        ], 'Home Guardian 家庭守护者 IoT 平台');
     }
-
-    public function view(Request $request)
-    {
-        return view('index/view', ['name' => 'webman']);
-    }
-
-    public function json(Request $request)
-    {
-        return json(['code' => 0, 'msg' => 'ok']);
-    }
-
 }
