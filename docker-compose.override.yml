@@ -1,0 +1,12 @@
+services:
+  # 开发环境不需要 Nginx，前端用 Vite Dev Server
+  nginx:
+    profiles: ["production"]
+
+  # Webman 端口映射到宿主机，供 Vite proxy 访问
+  webman:
+    ports:
+      - "8787:8787"
+      - "8788:8788"
+    environment:
+      - APP_DEBUG=true

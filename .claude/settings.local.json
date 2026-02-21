@@ -6,7 +6,10 @@
       "Bash(git -C /d/workspace/php/Home-Guardian ls-files:*)",
       "Bash(php start.php start 2>&1)",
       "Bash(sleep 4 && php start.php status 2>&1)",
-      "Bash(php -m | grep -i redis; php --ini | head -3)"
+      "Bash(php -m | grep -i redis; php --ini | head -3)",
+      "WebFetch(domain:admin.vuestic.dev)",
+      "Bash(head:*)",
+      "Bash(cd D:/workspace/php/Home-Guardian/frontend && npx vite build 2>&1)"
     ]
   }
 }

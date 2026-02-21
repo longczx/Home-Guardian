@@ -1,0 +1,16 @@
+{
+  "name": "Home Guardian",
+  "short_name": "Guardian",
+  "description": "智能家居守护平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#18a058",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
