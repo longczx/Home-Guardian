@@ -1,4 +1,4 @@
-FROM php:8.2-cli
+FROM php:8.5-cli
 
 # 安装系统依赖和 PHP 扩展
 RUN apt-get update && apt-get install -y \
@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     zip \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && docker-php-ext-install pdo pdo_pgsql pgsql zip sockets bcmath \
+    && docker-php-ext-install pdo pdo_pgsql pgsql zip sockets bcmath pcntl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

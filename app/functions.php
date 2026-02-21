@@ -7,35 +7,6 @@
  */
 
 /**
- * 获取环境变量值
- *
- * 从 .env 文件加载的环境变量中读取值，支持布尔和 null 类型的自动转换。
- * 在 Webman 中，.env 由 support/bootstrap.php 通过 vlucas/phpdotenv 加载。
- *
- * @param  string $key     环境变量名
- * @param  mixed  $default 变量不存在时的默认值
- * @return mixed
- */
-function env(string $key, mixed $default = null): mixed
-{
-    $value = getenv($key);
-
-    // getenv() 未找到时返回 false
-    if ($value === false) {
-        return $default;
-    }
-
-    // 自动转换常见的字符串表示为对应的 PHP 类型
-    return match (strtolower($value)) {
-        'true', '(true)'   => true,
-        'false', '(false)' => false,
-        'null', '(null)'   => null,
-        'empty', '(empty)' => '',
-        default             => $value,
-    };
-}
-
-/**
  * 生成标准 JSON API 成功响应
  *
  * @param  mixed  $data    响应数据
