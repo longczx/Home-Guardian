@@ -14,9 +14,10 @@ class TelemetryController
 {
     public function index(Request $request)
     {
-        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location']);
+        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
         $deviceId = (int)$request->get('device_id', 0);
-        $data     = [];
+        $data     = null;
+        $dataList = [];
 
         if ($deviceId) {
             $query = TelemetryLog::forDevice($deviceId);
@@ -35,11 +36,13 @@ class TelemetryController
 
             $perPage = min((int)($request->get('per_page', 50)), 500);
             $data = $query->orderBy('ts', 'desc')->paginate($perPage);
+            $dataList = array_map(fn($r) => $r->toArray(), $data->items());
         }
 
         return view('admin/telemetry/index', [
             'devices'   => $devices,
             'data'      => $data,
+            'dataList'  => $dataList,
             'filters'   => $request->get(),
             'nav'       => 'telemetry',
             'adminUser' => $request->adminUser,

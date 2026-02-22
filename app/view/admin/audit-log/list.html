@@ -36,7 +36,7 @@
                 <tr><th>ID</th><th>用户</th><th>操作</th><th>资源类型</th><th>资源ID</th><th>详情</th><th>IP</th><th>时间</th></tr>
             </thead>
             <tbody>
-                {volist name="logs" id="log"}
+                {volist name="logList" id="log"}
                 <tr>
                     <td>{{$log['id']}}</td>
                     <td>{{$log['user']['username'] ?? '(已删除)'}}</td>

@@ -95,6 +95,9 @@ Route::group('/admin', function () {
     // 审计日志
     Route::get('/audit-logs', [app\controller\admin\AuditLogController::class, 'index']);
 
+    // 系统管理
+    Route::get('/system', [app\controller\admin\SystemController::class, 'index']);
+
     // 位置管理
     Route::get('/locations', [app\controller\admin\LocationController::class, 'index']);
     Route::post('/locations/store', [app\controller\admin\LocationController::class, 'store']);

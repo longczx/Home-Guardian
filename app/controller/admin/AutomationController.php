@@ -25,8 +25,10 @@ class AutomationController
 
         $perPage = min((int)($request->get('per_page', 20)), 100);
         $automations = $query->orderBy('id', 'desc')->paginate($perPage);
+        $automationList = array_map(fn($a) => $a->toArray(), $automations->items());
 
         return view('admin/automation/list', [
+            'automationList' => $automationList,
             'automations' => $automations,
             'filters'     => $request->get(),
             'nav'         => 'automations',
@@ -36,7 +38,7 @@ class AutomationController
 
     public function create(Request $request)
     {
-        $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid']);
+        $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid'])->toArray();
 
         return view('admin/automation/form', [
             'automation' => null,
@@ -51,7 +53,7 @@ class AutomationController
         $data = $request->post();
 
         if (empty($data['name']) || empty($data['trigger_type'])) {
-            $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid']);
+            $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid'])->toArray();
             return view('admin/automation/form', [
                 'automation' => null,
                 'devices'    => $devices,
@@ -81,7 +83,7 @@ class AutomationController
             return redirect('/admin/automations');
         }
 
-        $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid']);
+        $devices = Device::orderBy('name')->get(['id', 'name', 'device_uid'])->toArray();
 
         return view('admin/automation/form', [
             'automation' => $automation,

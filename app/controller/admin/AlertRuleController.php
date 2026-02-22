@@ -26,8 +26,10 @@ class AlertRuleController
 
         $perPage = min((int)($request->get('per_page', 20)), 100);
         $rules = $query->orderBy('id', 'desc')->paginate($perPage);
+        $ruleList = array_map(fn($r) => $r->toArray(), $rules->items());
 
         return view('admin/alert-rule/list', [
+            'ruleList'  => $ruleList,
             'rules'     => $rules,
             'filters'   => $request->get(),
             'nav'       => 'alert-rules',
@@ -37,8 +39,8 @@ class AlertRuleController
 
     public function create(Request $request)
     {
-        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location']);
-        $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type']);
+        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+        $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
 
         return view('admin/alert-rule/form', [
             'rule'      => null,
@@ -54,8 +56,8 @@ class AlertRuleController
         $data = $request->post();
 
         if (empty($data['name']) || empty($data['device_id']) || empty($data['telemetry_key']) || empty($data['condition'])) {
-            $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location']);
-            $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type']);
+            $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+            $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
             return view('admin/alert-rule/form', [
                 'rule'      => null,
                 'devices'   => $devices,
@@ -84,8 +86,8 @@ class AlertRuleController
             return redirect('/admin/alert-rules');
         }
 
-        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location']);
-        $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type']);
+        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+        $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
 
         return view('admin/alert-rule/form', [
             'rule'      => $rule,

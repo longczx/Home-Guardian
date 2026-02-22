@@ -22,7 +22,7 @@ class LocationController
             ->where('location', '!=', '')
             ->groupBy('location')
             ->orderBy('location')
-            ->get();
+            ->get()->map(fn($l) => (array)$l)->toArray();
 
         return view('admin/location/list', [
             'locations' => $locations,

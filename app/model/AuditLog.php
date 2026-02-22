@@ -41,6 +41,15 @@ class AuditLog extends Model
     ];
 
     /**
+     * UPDATED_AT = null 会在 PHP 8.1+ 触发 "null as array offset" 弃用警告，
+     * 此处过滤掉 null，避免 toArray() 时报错。
+     */
+    public function getDates(): array
+    {
+        return array_values(array_filter(parent::getDates()));
+    }
+
+    /**
      * 操作类型常量
      */
     const ACTION_LOGIN        = 'login';

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "65a94627ed82379a883841a3d2030b74",
+    "content-hash": "7443dceceb1cb7d3b6e28b8e8da6338e",
     "packages": [
         {
             "name": "brick/math",
@@ -4783,20 +4783,25 @@
         },
         {
             "name": "workerman/mqtt",
-            "version": "v1.7",
+            "version": "v2.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/walkor/mqtt.git",
-                "reference": "e19f9de02732d412a2f3fd1cf9a06cdaf5187f24"
+                "reference": "f9ca4eafbc15e3a38431dbd2edfac875dc9c0d48"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/walkor/mqtt/zipball/e19f9de02732d412a2f3fd1cf9a06cdaf5187f24",
-                "reference": "e19f9de02732d412a2f3fd1cf9a06cdaf5187f24",
+                "url": "https://api.github.com/repos/walkor/mqtt/zipball/f9ca4eafbc15e3a38431dbd2edfac875dc9c0d48",
+                "reference": "f9ca4eafbc15e3a38431dbd2edfac875dc9c0d48",
                 "shasum": ""
             },
             "require": {
-                "workerman/workerman": ">=3.3.0"
+                "php": "^8.0",
+                "workerman/workerman": "^5.0"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.0",
+                "revolt/event-loop": "^1.0"
             },
             "suggest": {
                 "ext-event": "For better performance. "
@@ -4817,12 +4822,18 @@
                     "email": "walkor@workerman.net",
                     "homepage": "https://www.workerman.net",
                     "role": "Developer"
+                },
+                {
+                    "name": "chaz6chez",
+                    "email": "chaz6chez1993@outlook.com",
+                    "role": "Developer"
                 }
             ],
             "homepage": "https://www.workerman.net",
             "keywords": [
                 "event-loop",
                 "mqtt",
+                "mqtt over websocket",
                 "mqtt3",
                 "mqtt5.0",
                 "mqtt_client",
@@ -4832,9 +4843,9 @@
             "support": {
                 "email": "walkor@workerman.net",
                 "issues": "https://github.com/walkor/mqtt/issues",
-                "source": "https://github.com/walkor/mqtt/tree/v1.7"
+                "source": "https://github.com/walkor/mqtt/tree/v2.2"
             },
-            "time": "2024-10-21T03:10:53+00:00"
+            "time": "2025-05-07T15:00:06+00:00"
         },
         {
             "name": "workerman/webman-framework",

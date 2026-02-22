@@ -27,8 +27,10 @@ class AlertLogController
 
         $perPage = min((int)($request->get('per_page', 20)), 100);
         $logs = $query->orderBy('triggered_at', 'desc')->paginate($perPage);
+        $logList = array_map(fn($l) => $l->toArray(), $logs->items());
 
         return view('admin/alert-log/list', [
+            'logList'   => $logList,
             'logs'      => $logs,
             'filters'   => $request->get(),
             'nav'       => 'alert-logs',

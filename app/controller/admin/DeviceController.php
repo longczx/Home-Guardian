@@ -33,8 +33,10 @@ class DeviceController
 
         $perPage = min((int)($request->get('per_page', 20)), 100);
         $devices = $query->orderBy('id', 'desc')->paginate($perPage);
+        $deviceList = array_map(fn($d) => $d->toArray(), $devices->items());
 
         return view('admin/device/list', [
+            'deviceList' => $deviceList,
             'devices'   => $devices,
             'filters'   => $request->get(),
             'nav'       => 'devices',

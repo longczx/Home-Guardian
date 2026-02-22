@@ -24,7 +24,7 @@
                 <tr><th>ID</th><th>规则</th><th>设备</th><th>状态</th><th>触发时间</th><th>操作</th></tr>
             </thead>
             <tbody>
-                {volist name="logs" id="log"}
+                {volist name="logList" id="log"}
                 <tr>
                     <td>{{$log['id']}}</td>
                     <td>{{$log['rule']['name'] ?? '-'}}</td>

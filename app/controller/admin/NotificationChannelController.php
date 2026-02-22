@@ -19,7 +19,7 @@ class NotificationChannelController
             $query->ofType($type);
         }
 
-        $channels = $query->orderBy('id', 'asc')->get();
+        $channels = $query->orderBy('id', 'asc')->get()->toArray();
 
         return view('admin/notification-channel/list', [
             'channels'  => $channels,

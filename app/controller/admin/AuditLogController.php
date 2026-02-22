@@ -30,8 +30,10 @@ class AuditLogController
 
         $perPage = min((int)($request->get('per_page', 50)), 200);
         $logs = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        $logList = array_map(fn($l) => $l->toArray(), $logs->items());
 
         return view('admin/audit-log/list', [
+            'logList'   => $logList,
             'logs'      => $logs,
             'filters'   => $request->get(),
             'nav'       => 'audit-logs',

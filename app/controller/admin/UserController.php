@@ -27,7 +27,10 @@ class UserController
         $perPage = min((int)($request->get('per_page', 20)), 100);
         $users = $query->orderBy('id', 'asc')->paginate($perPage);
 
+        $userList = array_map(fn($u) => $u->toArray(), $users->items());
+var_dump($userList);
         return view('admin/user/list', [
+            'userList'  => $userList,
             'users'     => $users,
             'filters'   => $request->get(),
             'nav'       => 'users',
@@ -37,7 +40,7 @@ class UserController
 
     public function create(Request $request)
     {
-        $roles = Role::all();
+        $roles = Role::all()->toArray();
         return view('admin/user/form', [
             'user'      => null,
             'roles'     => $roles,
@@ -49,7 +52,7 @@ class UserController
     public function store(Request $request)
     {
         $data  = $request->post();
-        $roles = Role::all();
+        $roles = Role::all()->toArray();
 
         if (empty($data['username']) || empty($data['password'])) {
             return view('admin/user/form', [
@@ -100,7 +103,7 @@ class UserController
             return redirect('/admin/users');
         }
 
-        $roles = Role::all();
+        $roles = Role::all()->toArray();
         return view('admin/user/form', [
             'user'      => $user,
             'roles'     => $roles,

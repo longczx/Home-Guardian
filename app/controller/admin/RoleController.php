@@ -12,7 +12,7 @@ class RoleController
 {
     public function index(Request $request)
     {
-        $roles = Role::withCount('users')->get();
+        $roles = Role::withCount('users')->get()->toArray();
 
         return view('admin/role/list', [
             'roles'     => $roles,
