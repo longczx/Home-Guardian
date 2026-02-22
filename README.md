@@ -12,6 +12,7 @@
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
   <a href="#"><img src="https://img.shields.io/badge/Database-PostgreSQL-blue.svg" alt="PostgreSQL"></a>
   <a href="#"><img src="https://img.shields.io/badge/Frontend-Vue_3-42b883.svg" alt="Vue 3"></a>
+  <a href="#"><img src="https://img.shields.io/badge/UI-Naive_UI-18a058.svg" alt="Naive UI"></a>
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
 </p>
 
@@ -50,15 +51,16 @@
 | **消息中间件** | EMQX 5.8 | MQTT Broker，处理设备连接与消息传递 |
 | **主数据库** | PostgreSQL + TimescaleDB | 持久化存储设备信息和海量时序数据 |
 | **缓存数据库** | Redis 7 | 热数据、设备状态、任务队列、Pub/Sub |
-| **前端界面** | Vue 3 + Vite + Element Plus + ECharts | 响应式 SPA + PWA，数据可视化仪表盘 |
+| **前端界面** | Vue 3 + Vite 6 + Naive UI + ECharts | 响应式 SPA + PWA，暗色主题仪表盘 |
 
 ## 快速开始
 
 **前提条件:**
 *   [Docker](https://www.docker.com/get-started)
 *   [Docker Compose](https://docs.docker.com/compose/install/)
+*   [Node.js](https://nodejs.org/) >= 18（前端开发时需要）
 
-**启动步骤:**
+### 生产部署
 
 1.  **克隆仓库:**
     ```bash
@@ -70,18 +72,62 @@
     ```bash
     cp .env.example .env
     ```
-    *修改 `.env` 文件中的数据库密码和 Redis 密码。*
+    *修改 `.env` 文件中的数据库密码、Redis 密码和 JWT 密钥。*
 
-3.  **启动服务:**
+3.  **构建前端:**
     ```bash
-    docker compose up -d
+    cd frontend
+    npm install
+    npm run build    # 产物输出到 ../public/
+    cd ..
     ```
 
-4.  **检查服务状态:**
+4.  **启动服务:**
+    ```bash
+    docker compose -f docker-compose.yml up -d
+    ```
+    > 生产环境显式指定 `-f docker-compose.yml`，跳过 override 文件，启用 Nginx 反代。
+
+5.  **检查服务状态:**
     *   **应用首页:** 访问 `http://localhost`
     *   **EMQX 管理后台:** 访问 `http://localhost:18083` (默认用户名: `admin`, 密码: `public`)
 
     > 数据库会在 PostgreSQL 容器首次启动时自动执行 `database/migrations/` 下的 SQL 迁移文件完成建表。
+
+### 开发环境
+
+开发时前后端分离运行，前端使用 Vite Dev Server 获得 HMR 热更新体验。
+
+1.  **启动后端服务:**
+    ```bash
+    docker compose up
+    ```
+    > 默认会自动加载 `docker-compose.override.yml`：跳过 Nginx，将 Webman 8787/8788 端口映射到宿主机。
+
+2.  **启动前端开发服务器（另一个终端）:**
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+
+3.  **访问 `http://localhost:5173`**
+
+**开发环境请求链路:**
+```
+浏览器 :5173
+  ├── 页面/JS/CSS  →  Vite Dev Server (HMR 热更新)
+  ├── /api/*       →  Vite Proxy → localhost:8787 (Webman)
+  └── /ws          →  Vite Proxy → localhost:8788 (WebSocket)
+```
+
+**开发 vs 生产对比:**
+| | 开发环境 | 生产环境 |
+|:---|:---|:---|
+| 前端 | Vite :5173（HMR） | Nginx serve 静态文件 |
+| API 代理 | Vite proxy → :8787 | Nginx → webman:8787 |
+| Nginx | 不启动 | 启动 |
+| 启动命令 | `docker compose up` | `docker compose -f docker-compose.yml up -d` |
 
 ## 配置 EMQX 设备认证
 
@@ -153,9 +199,9 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 - [x] 场景自动化设计 (条件触发 + 定时触发 → 设备控制 + 通知)
 - [x] 操作审计日志 (用户操作追溯与安全审计)
 - [x] Docker Compose 环境搭建 (Nginx + Webman + PgSQL + Redis + EMQX)
-- [ ] **下一步: Web API 接口开发**
-- [ ] **下一步: WebSocket 实时推送服务**
-- [ ] **下一步: 前端仪表盘界面开发 (Vue 3 + PWA)**
+- [x] Web API 接口开发 (15+ REST Controller, 62+ Endpoints)
+- [x] WebSocket 实时推送服务 (设备遥测 + 状态 + 告警)
+- [x] 前端仪表盘界面开发 (Vue 3 + Naive UI + ECharts + PWA)
 - [ ] **下一步: 设备端 (ESP32/ESP8266) 固件开发**
 
 ## 贡献
