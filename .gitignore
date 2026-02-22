@@ -7,4 +7,4 @@
 /tests/tmp
 /tests/.phpunit.result.cache
 .claude/
-frontend/node_modules
+frontend/node_modules/
