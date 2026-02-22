@@ -38,7 +38,7 @@
                     <td>{{$row['ts']}}</td>
                     <td>{{$row['device_id']}}</td>
                     <td>{{$row['metric_key']}}</td>
-                    <td><code>{{json_encode($row['value'])}}</code></td>
+                    <td><code>{{:json_encode($row['value'])}}</code></td>
                 </tr>
                 {/volist}
                 {empty name="data"}

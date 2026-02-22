@@ -33,7 +33,7 @@
                     <td>{{$rule['id']}}</td>
                     <td>{{$rule['name']}}</td>
                     <td>{{$rule['device']['name'] ?? '-'}} ({{$rule['device']['location'] ?? ''}})</td>
-                    <td>{{$rule['telemetry_key']}} {{$rule['condition']}} {{json_encode($rule['threshold_value'])}}</td>
+                    <td>{{$rule['telemetry_key']}} {{$rule['condition']}} {{:json_encode($rule['threshold_value'])}}</td>
                     <td>{{$rule['trigger_duration_sec']}}</td>
                     <td>
                         {if $rule['is_enabled']}

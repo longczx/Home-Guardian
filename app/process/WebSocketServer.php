@@ -60,21 +60,13 @@ class WebSocketServer
     /**
      * WebSocket 握手完成回调
      *
-     * Webman 会在此回调中提供 HTTP 头信息，可以从 URL 参数中提取 token。
-     *
-     * @param TcpConnection $connection
-     * @param string        $httpBuffer HTTP 握手请求原始数据
+     * @param TcpConnection                       $connection
+     * @param \Workerman\Protocols\Http\Request   $request    HTTP 握手请求对象
      */
-    public function onWebSocketConnect(TcpConnection $connection, string $httpBuffer): void
+    public function onWebSocketConnect(TcpConnection $connection, \Workerman\Protocols\Http\Request $request): void
     {
         // 从 URL 参数中提取 token: /ws?token=xxx
-        $queryString = '';
-        if (preg_match('/GET\s+\/ws\?([^\s]+)\s+HTTP/', $httpBuffer, $matches)) {
-            $queryString = $matches[1];
-        }
-
-        parse_str($queryString, $params);
-        $token = $params['token'] ?? '';
+        $token = $request->get('token', '');
 
         if (empty($token)) {
             $connection->send(json_encode([
@@ -97,6 +89,12 @@ class WebSocketServer
         }
 
         // 认证成功，注册连接
+        // JWT::decode 将 JSON 对象解码为 stdClass，需用 -> 而非 [] 访问
+        $permissions = $payload->permissions ?? null;
+        $isAdmin = is_object($permissions)
+            ? !empty($permissions->admin)
+            : (is_array($permissions) && !empty($permissions['admin']));
+
         self::$clients[$connection->id] = [
             'connection' => $connection,
             'user'       => (object)[
@@ -104,7 +102,7 @@ class WebSocketServer
                 'username'  => $payload->username,
                 'roles'     => $payload->roles ?? [],
                 'locations' => $payload->locations ?? [],
-                'is_admin'  => !empty((array)($payload->permissions ?? [])['admin'] ?? false),
+                'is_admin'  => $isAdmin,
             ],
         ];
 

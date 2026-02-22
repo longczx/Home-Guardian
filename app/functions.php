@@ -7,6 +7,21 @@
  */
 
 /**
+ * 返回当前时间的 Carbon 实例
+ *
+ * illuminate/support 新版已将此函数移除出全局命名空间，
+ * 在此补充定义以保持与 Laravel 风格代码的兼容性。
+ *
+ * @return \Illuminate\Support\Carbon
+ */
+if (!function_exists('now')) {
+    function now(): \Illuminate\Support\Carbon
+    {
+        return \Illuminate\Support\Carbon::now();
+    }
+}
+
+/**
  * 生成标准 JSON API 成功响应
  *
  * @param  mixed  $data    响应数据
