@@ -94,6 +94,17 @@
 
     > 数据库会在 PostgreSQL 容器首次启动时自动执行 `database/migrations/` 下的 SQL 迁移文件完成建表。
 
+6.  **创建管理员账号:**
+    ```bash
+    # 默认创建 admin / admin123
+    docker exec -it home-guardian-app php create_admin.php
+
+    # 或自定义用户名密码
+    docker exec -it home-guardian-app php create_admin.php myuser MySecurePass!
+    ```
+    > 首次建库时也会通过 `17_seed_admin_user.sql` 自动创建默认管理员 `admin / admin123`。
+    > 如果数据库已存在，种子 SQL 不会重新执行，请用上面的 PHP 脚本创建。
+
 ### 开发环境
 
 开发时前后端分离运行，前端使用 Vite Dev Server 获得 HMR 热更新体验。
@@ -111,7 +122,12 @@
     npm run dev
     ```
 
-3.  **访问 `http://localhost:5173`**
+3.  **创建管理员账号（首次使用）:**
+    ```bash
+    docker exec -it home-guardian-app php create_admin.php
+    ```
+
+4.  **访问 `http://localhost:5173`**
 
 **开发环境请求链路:**
 ```
