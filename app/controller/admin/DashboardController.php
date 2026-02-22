@@ -32,6 +32,7 @@ class DashboardController
             ->get();
 
         return view('admin/dashboard', [
+            'nav'          => 'dashboard',
             'stats'        => $stats,
             'recentAlerts' => $recentAlerts,
             'adminUser'    => $request->adminUser,

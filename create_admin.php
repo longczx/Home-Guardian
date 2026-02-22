@@ -25,7 +25,7 @@ $capsule->addConnection([
     'port'     => getenv('POSTGRES_PORT') ?: 5432,
     'database' => getenv('POSTGRES_DB') ?: 'home_guardian_db',
     'username' => getenv('POSTGRES_USER') ?: 'guardian_user',
-    'password' => getenv('POSTGRES_PASSWORD') ?: '',
+    'password' => getenv('POSTGRES_PASSWORD') ?: 'home_guardian_password',
     'charset'  => 'utf8',
     'schema'   => 'public',
 ]);
