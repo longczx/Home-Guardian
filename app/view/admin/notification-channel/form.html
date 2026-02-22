@@ -1,0 +1,60 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$channel ? '编辑通知渠道' : '添加通知渠道'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$channel ? '/admin/notification-channels/'.$channel['id'].'/update' : '/admin/notification-channels/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$channel['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 管理员邮箱">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">类型</label>
+                <div class="layui-input-block">
+                    {php}$ct = $channel['type'] ?? ($old['type'] ?? '');{/php}
+                    <select name="type" lay-verify="required" {{$channel ? 'disabled' : ''}}>
+                        <option value="">请选择</option>
+                        <option value="email" {{$ct === 'email' ? 'selected' : ''}}>邮件 (email)</option>
+                        <option value="webhook" {{$ct === 'webhook' ? 'selected' : ''}}>Webhook</option>
+                        <option value="telegram" {{$ct === 'telegram' ? 'selected' : ''}}>Telegram</option>
+                        <option value="wechat_work" {{$ct === 'wechat_work' ? 'selected' : ''}}>企业微信</option>
+                        <option value="dingtalk" {{$ct === 'dingtalk' ? 'selected' : ''}}>钉钉</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">配置 JSON</label>
+                <div class="layui-input-block">
+                    {php}
+                        $cfgJson = '{}';
+                        if ($channel && isset($channel['config'])) {
+                            $cfgJson = json_encode($channel['config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                        }
+                    {/php}
+                    <textarea name="config_json" class="layui-textarea" style="font-family:monospace;min-height:120px;" placeholder='email:     {"smtp_host":"smtp.gmail.com","smtp_port":587,"smtp_user":"...","to":["admin@example.com"]}
+webhook:   {"url":"https://...","method":"POST"}
+telegram:  {"bot_token":"...","chat_id":"..."}'>{{$cfgJson}}</textarea>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">启用</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="is_enabled" lay-skin="switch" lay-text="启用|禁用" {{($channel['is_enabled'] ?? true) ? 'checked' : ''}}>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/notification-channels" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

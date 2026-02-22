@@ -1,0 +1,104 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$rule ? '编辑告警规则' : '添加告警规则'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$rule ? '/admin/alert-rules/'.$rule['id'].'/update' : '/admin/alert-rules/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">规则名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$rule['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 温度过高">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">关联设备</label>
+                <div class="layui-input-block">
+                    <select name="device_id" lay-verify="required">
+                        <option value="">请选择设备</option>
+                        {volist name="devices" id="device"}
+                        <option value="{{$device['id']}}" {{($rule['device_id'] ?? ($old['device_id'] ?? '')) == $device['id'] ? 'selected' : ''}}>{{$device['name']}} ({{$device['location'] ?? ''}})</option>
+                        {/volist}
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">遥测指标</label>
+                <div class="layui-input-block">
+                    <input type="text" name="telemetry_key" value="{{$rule['telemetry_key'] ?? ($old['telemetry_key'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 temperature, humidity">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">比较条件</label>
+                <div class="layui-input-block">
+                    {php}$currentCond = $rule['condition'] ?? ($old['condition'] ?? '');{/php}
+                    <select name="condition" lay-verify="required">
+                        <option value="">请选择</option>
+                        <option value="GREATER_THAN" {{$currentCond === 'GREATER_THAN' ? 'selected' : ''}}>大于 (>)</option>
+                        <option value="LESS_THAN" {{$currentCond === 'LESS_THAN' ? 'selected' : ''}}>小于 (<)</option>
+                        <option value="EQUALS" {{$currentCond === 'EQUALS' ? 'selected' : ''}}>等于 (=)</option>
+                        <option value="NOT_EQUALS" {{$currentCond === 'NOT_EQUALS' ? 'selected' : ''}}>不等于 (!=)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">阈值</label>
+                <div class="layui-input-block">
+                    {php}
+                        $thVal = '';
+                        if ($rule && isset($rule['threshold_value'])) {
+                            $tv = $rule['threshold_value'];
+                            $thVal = is_array($tv) ? ($tv[0] ?? '') : $tv;
+                        } elseif (isset($old['threshold_value'])) {
+                            $thVal = $old['threshold_value'];
+                        }
+                    {/php}
+                    <input type="number" step="any" name="threshold_value" value="{{$thVal}}" required class="layui-input" placeholder="阈值数值">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">持续时间(秒)</label>
+                <div class="layui-input-block">
+                    <input type="number" name="trigger_duration_sec" value="{{$rule['trigger_duration_sec'] ?? ($old['trigger_duration_sec'] ?? 0)}}" class="layui-input" placeholder="0 表示立即触发">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">通知渠道</label>
+                <div class="layui-input-block">
+                    {php}
+                        $selectedChannels = $rule['notification_channel_ids'] ?? ($old['notification_channel_ids'] ?? []);
+                        if (!is_array($selectedChannels)) $selectedChannels = [];
+                    {/php}
+                    {volist name="channels" id="channel"}
+                    <input type="checkbox" name="notification_channel_ids[]" value="{{$channel['id']}}" title="{{$channel['name']}} ({{$channel['type']}})" {{in_array($channel['id'], $selectedChannels) ? 'checked' : ''}}>
+                    {/volist}
+                    {empty name="channels"}
+                    <div class="layui-form-mid layui-word-aux">暂无可用通知渠道，请先<a href="/admin/notification-channels/create">创建</a></div>
+                    {/empty}
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" value="{{$rule['description'] ?? ($old['description'] ?? '')}}" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">启用</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="is_enabled" lay-skin="switch" lay-text="启用|禁用" {{($rule['is_enabled'] ?? true) ? 'checked' : ''}}>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/alert-rules" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

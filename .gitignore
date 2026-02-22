@@ -7,4 +7,10 @@
 /tests/tmp
 /tests/.phpunit.result.cache
 .claude/
-frontend/node_modules/
+
+# Mobile frontend
+mobile/node_modules/
+mobile/dist/
+
+# Build output
+/public/mobile/

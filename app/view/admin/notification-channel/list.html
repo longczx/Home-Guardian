@@ -1,0 +1,56 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        通知渠道
+        <a href="/admin/notification-channels/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加渠道
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col><col width="100"><col width="80"><col width="200"></colgroup>
+            <thead>
+                <tr><th>ID</th><th>名称</th><th>类型</th><th>启用</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {volist name="channels" id="ch"}
+                <tr>
+                    <td>{{$ch['id']}}</td>
+                    <td>{{$ch['name']}}</td>
+                    <td>
+                        {switch name="ch.type"}
+                            {case value="email"}<span class="layui-badge layui-bg-blue">邮件</span>{/case}
+                            {case value="webhook"}<span class="layui-badge layui-bg-green">Webhook</span>{/case}
+                            {case value="telegram"}<span class="layui-badge layui-bg-cyan">Telegram</span>{/case}
+                            {case value="wechat_work"}<span class="layui-badge layui-bg-orange">企业微信</span>{/case}
+                            {case value="dingtalk"}<span class="layui-badge layui-bg-blue">钉钉</span>{/case}
+                            {default /}<span class="layui-badge layui-bg-gray">{{$ch['type']}}</span>
+                        {/switch}
+                    </td>
+                    <td>
+                        {if $ch['is_enabled']}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">禁用</span>
+                        {/if}
+                    </td>
+                    <td>
+                        <a href="/admin/notification-channels/{{$ch['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/notification-channels/{{$ch['id']}}/test" style="display:inline;">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-warm">测试</button>
+                        </form>
+                        <form method="post" action="/admin/notification-channels/{{$ch['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="channels"}
+                <tr><td colspan="5" style="text-align:center;color:#999;">暂无通知渠道</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+    </div>
+</div>
+{/block}

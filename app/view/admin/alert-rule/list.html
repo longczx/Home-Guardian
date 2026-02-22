@@ -1,0 +1,82 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        告警规则
+        <a href="/admin/alert-rules/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加规则
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="get" style="margin-bottom:15px;">
+            <div class="layui-inline">
+                <select name="is_enabled">
+                    <option value="">全部状态</option>
+                    <option value="1" {{($filters['is_enabled'] ?? '') === '1' ? 'selected' : ''}}>启用</option>
+                    <option value="0" {{($filters['is_enabled'] ?? '') === '0' ? 'selected' : ''}}>禁用</option>
+                </select>
+            </div>
+            <div class="layui-inline">
+                <button class="layui-btn layui-btn-sm" lay-submit>筛选</button>
+                <a href="/admin/alert-rules" class="layui-btn layui-btn-sm layui-btn-primary">重置</a>
+            </div>
+        </form>
+
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col><col><col><col width="80"><col width="80"><col width="150"></colgroup>
+            <thead>
+                <tr><th>ID</th><th>名称</th><th>设备</th><th>条件</th><th>持续(秒)</th><th>启用</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {volist name="rules" id="rule"}
+                <tr>
+                    <td>{{$rule['id']}}</td>
+                    <td>{{$rule['name']}}</td>
+                    <td>{{$rule['device']['name'] ?? '-'}} ({{$rule['device']['location'] ?? ''}})</td>
+                    <td>{{$rule['telemetry_key']}} {{$rule['condition']}} {{json_encode($rule['threshold_value'])}}</td>
+                    <td>{{$rule['trigger_duration_sec']}}</td>
+                    <td>
+                        {if $rule['is_enabled']}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">禁用</span>
+                        {/if}
+                    </td>
+                    <td>
+                        <a href="/admin/alert-rules/{{$rule['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/alert-rules/{{$rule['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="rules"}
+                <tr><td colspan="7" style="text-align:center;color:#999;">暂无告警规则</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+
+        {if $rules instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $rules->lastPage() > 1}
+        <div id="pager"></div>
+        {/if}
+    </div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+{if $rules instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $rules->lastPage() > 1}
+layui.use('laypage', function(){
+    layui.laypage.render({
+        elem: 'pager',
+        count: {{$rules->total()}},
+        curr: {{$rules->currentPage()}},
+        limit: {{$rules->perPage()}},
+        jump: function(obj, first){
+            if(!first){ var url = new URL(window.location); url.searchParams.set('page', obj.curr); window.location = url; }
+        }
+    });
+});
+{/if}
+</script>
+{/block}

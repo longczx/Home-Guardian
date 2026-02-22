@@ -1,0 +1,33 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">位置管理</div>
+    <div class="layui-card-body">
+        <div class="layui-form-mid layui-word-aux" style="margin-bottom:15px;">
+            位置来自设备的 location 字段，通过编辑设备来添加或修改位置。
+        </div>
+
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col><col width="120"><col width="120"></colgroup>
+            <thead>
+                <tr><th>位置名称</th><th>设备数量</th><th>在线设备</th></tr>
+            </thead>
+            <tbody>
+                {volist name="locations" id="loc"}
+                <tr>
+                    <td><strong>{{$loc->location}}</strong></td>
+                    <td>{{$loc->device_count}}</td>
+                    <td>
+                        <span class="layui-badge layui-bg-green">{{$loc->online_count}}</span>
+                        / {{$loc->device_count}}
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="locations"}
+                <tr><td colspan="3" style="text-align:center;color:#999;">暂无位置数据，请先添加设备并设置位置</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+    </div>
+</div>
+{/block}

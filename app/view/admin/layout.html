@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{$title ?? 'Home Guardian 管理后台'}}</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/layui@2.9.21/dist/css/layui.css">
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; }
+        .layui-layout-admin .layui-body { top: 60px; bottom: 0; }
+        .layui-layout-admin .layui-header { height: 60px; line-height: 60px; background: #2f363e; }
+        .layui-layout-admin .layui-side { top: 60px; background: #20222a; }
+        .layui-layout-admin .layui-side .layui-nav { background: #20222a; }
+        .layui-layout-admin .layui-side .layui-nav .layui-nav-item a { color: #b0b3b8; }
+        .layui-layout-admin .layui-side .layui-nav .layui-nav-item a:hover,
+        .layui-layout-admin .layui-side .layui-nav .layui-this a { color: #fff; }
+        .layui-layout-admin .layui-side .layui-nav .layui-this { background: #009688; }
+        .layui-header .layui-nav { background: transparent; }
+        .layui-header .layui-nav .layui-nav-item a { color: #d2d6de; }
+        .admin-logo { font-size: 20px; color: #fff !important; font-weight: bold; padding: 0 20px; }
+        .admin-body { padding: 20px; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .stat-card .stat-num { font-size: 36px; font-weight: bold; color: #333; }
+        .stat-card .stat-label { font-size: 14px; color: #999; margin-top: 5px; }
+        .layui-table { margin-top: 0; }
+    </style>
+</head>
+<body class="layui-layout-body">
+<div class="layui-layout layui-layout-admin">
+
+    <!-- 顶栏 -->
+    <div class="layui-header">
+        <a class="admin-logo" href="/admin/dashboard">Home Guardian</a>
+        <ul class="layui-nav layui-layout-right">
+            <li class="layui-nav-item">
+                <a href="javascript:;">{{$adminUser['fullName'] ?? 'Admin'}}</a>
+                <dl class="layui-nav-child">
+                    <dd><a href="/admin/logout">退出登录</a></dd>
+                </dl>
+            </li>
+        </ul>
+    </div>
+
+    <!-- 侧边栏 -->
+    <div class="layui-side layui-bg-black">
+        <div class="layui-side-scroll">
+            <ul class="layui-nav layui-nav-tree" lay-filter="admin-nav" lay-shrink="all">
+                <li class="layui-nav-item {{$nav === 'dashboard' ? 'layui-this' : ''}}">
+                    <a href="/admin/dashboard"><i class="layui-icon layui-icon-home"></i> 仪表盘</a>
+                </li>
+                <li class="layui-nav-item {{in_array($nav, ['devices','telemetry']) ? 'layui-nav-itemed' : ''}}">
+                    <a href="javascript:;"><i class="layui-icon layui-icon-wifi"></i> 设备管理</a>
+                    <dl class="layui-nav-child">
+                        <dd class="{{$nav === 'devices' ? 'layui-this' : ''}}"><a href="/admin/devices">设备列表</a></dd>
+                        <dd class="{{$nav === 'telemetry' ? 'layui-this' : ''}}"><a href="/admin/telemetry">遥测数据</a></dd>
+                    </dl>
+                </li>
+                <li class="layui-nav-item {{in_array($nav, ['alert-rules','alert-logs']) ? 'layui-nav-itemed' : ''}}">
+                    <a href="javascript:;"><i class="layui-icon layui-icon-notice"></i> 告警中心</a>
+                    <dl class="layui-nav-child">
+                        <dd class="{{$nav === 'alert-rules' ? 'layui-this' : ''}}"><a href="/admin/alert-rules">告警规则</a></dd>
+                        <dd class="{{$nav === 'alert-logs' ? 'layui-this' : ''}}"><a href="/admin/alert-logs">告警日志</a></dd>
+                    </dl>
+                </li>
+                <li class="layui-nav-item {{$nav === 'automations' ? 'layui-this' : ''}}">
+                    <a href="/admin/automations"><i class="layui-icon layui-icon-engine"></i> 自动化</a>
+                </li>
+                <li class="layui-nav-item {{in_array($nav, ['users','roles']) ? 'layui-nav-itemed' : ''}}">
+                    <a href="javascript:;"><i class="layui-icon layui-icon-user"></i> 用户权限</a>
+                    <dl class="layui-nav-child">
+                        <dd class="{{$nav === 'users' ? 'layui-this' : ''}}"><a href="/admin/users">用户管理</a></dd>
+                        <dd class="{{$nav === 'roles' ? 'layui-this' : ''}}"><a href="/admin/roles">角色管理</a></dd>
+                    </dl>
+                </li>
+                <li class="layui-nav-item {{$nav === 'notification-channels' ? 'layui-this' : ''}}">
+                    <a href="/admin/notification-channels"><i class="layui-icon layui-icon-email"></i> 通知渠道</a>
+                </li>
+                <li class="layui-nav-item {{$nav === 'locations' ? 'layui-this' : ''}}">
+                    <a href="/admin/locations"><i class="layui-icon layui-icon-location"></i> 位置管理</a>
+                </li>
+                <li class="layui-nav-item {{$nav === 'audit-logs' ? 'layui-this' : ''}}">
+                    <a href="/admin/audit-logs"><i class="layui-icon layui-icon-log"></i> 审计日志</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 主体内容 -->
+    <div class="layui-body">
+        <div class="admin-body">
+            {__CONTENT__}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/layui@2.9.21/dist/layui.js"></script>
+<script>
+layui.use(['element', 'layer', 'table', 'form'], function(){
+    var element = layui.element;
+});
+</script>
+{__SCRIPT__}
+</body>
+</html>

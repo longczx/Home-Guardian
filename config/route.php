@@ -18,6 +18,89 @@ use Webman\Route;
 use app\middleware\AuthMiddleware;
 use app\middleware\PermissionMiddleware;
 use app\middleware\AuditLogMiddleware;
+use app\middleware\AdminAuthMiddleware;
+
+/*
+|--------------------------------------------------------------------------
+| Admin 后台路由（session 认证，服务端渲染）
+|--------------------------------------------------------------------------
+*/
+Route::group('/admin', function () {
+    // 认证
+    Route::get('/login', [app\controller\admin\AuthController::class, 'loginPage']);
+    Route::post('/login', [app\controller\admin\AuthController::class, 'login']);
+    Route::get('/logout', [app\controller\admin\AuthController::class, 'logout']);
+
+    // Dashboard
+    Route::get('/dashboard', [app\controller\admin\DashboardController::class, 'index']);
+    Route::get('/', function () { return redirect('/admin/dashboard'); });
+
+    // 设备管理
+    Route::get('/devices', [app\controller\admin\DeviceController::class, 'index']);
+    Route::get('/devices/create', [app\controller\admin\DeviceController::class, 'create']);
+    Route::post('/devices/store', [app\controller\admin\DeviceController::class, 'store']);
+    Route::get('/devices/{id:\d+}/edit', [app\controller\admin\DeviceController::class, 'edit']);
+    Route::post('/devices/{id:\d+}/update', [app\controller\admin\DeviceController::class, 'update']);
+    Route::post('/devices/{id:\d+}/delete', [app\controller\admin\DeviceController::class, 'delete']);
+
+    // 用户管理
+    Route::get('/users', [app\controller\admin\UserController::class, 'index']);
+    Route::get('/users/create', [app\controller\admin\UserController::class, 'create']);
+    Route::post('/users/store', [app\controller\admin\UserController::class, 'store']);
+    Route::get('/users/{id:\d+}/edit', [app\controller\admin\UserController::class, 'edit']);
+    Route::post('/users/{id:\d+}/update', [app\controller\admin\UserController::class, 'update']);
+    Route::post('/users/{id:\d+}/delete', [app\controller\admin\UserController::class, 'delete']);
+
+    // 角色管理
+    Route::get('/roles', [app\controller\admin\RoleController::class, 'index']);
+    Route::get('/roles/create', [app\controller\admin\RoleController::class, 'create']);
+    Route::post('/roles/store', [app\controller\admin\RoleController::class, 'store']);
+    Route::get('/roles/{id:\d+}/edit', [app\controller\admin\RoleController::class, 'edit']);
+    Route::post('/roles/{id:\d+}/update', [app\controller\admin\RoleController::class, 'update']);
+    Route::post('/roles/{id:\d+}/delete', [app\controller\admin\RoleController::class, 'delete']);
+
+    // 告警规则
+    Route::get('/alert-rules', [app\controller\admin\AlertRuleController::class, 'index']);
+    Route::get('/alert-rules/create', [app\controller\admin\AlertRuleController::class, 'create']);
+    Route::post('/alert-rules/store', [app\controller\admin\AlertRuleController::class, 'store']);
+    Route::get('/alert-rules/{id:\d+}/edit', [app\controller\admin\AlertRuleController::class, 'edit']);
+    Route::post('/alert-rules/{id:\d+}/update', [app\controller\admin\AlertRuleController::class, 'update']);
+    Route::post('/alert-rules/{id:\d+}/delete', [app\controller\admin\AlertRuleController::class, 'delete']);
+
+    // 告警日志
+    Route::get('/alert-logs', [app\controller\admin\AlertLogController::class, 'index']);
+    Route::post('/alert-logs/{id:\d+}/acknowledge', [app\controller\admin\AlertLogController::class, 'acknowledge']);
+    Route::post('/alert-logs/{id:\d+}/resolve', [app\controller\admin\AlertLogController::class, 'resolve']);
+
+    // 自动化
+    Route::get('/automations', [app\controller\admin\AutomationController::class, 'index']);
+    Route::get('/automations/create', [app\controller\admin\AutomationController::class, 'create']);
+    Route::post('/automations/store', [app\controller\admin\AutomationController::class, 'store']);
+    Route::get('/automations/{id:\d+}/edit', [app\controller\admin\AutomationController::class, 'edit']);
+    Route::post('/automations/{id:\d+}/update', [app\controller\admin\AutomationController::class, 'update']);
+    Route::post('/automations/{id:\d+}/delete', [app\controller\admin\AutomationController::class, 'delete']);
+
+    // 通知渠道
+    Route::get('/notification-channels', [app\controller\admin\NotificationChannelController::class, 'index']);
+    Route::get('/notification-channels/create', [app\controller\admin\NotificationChannelController::class, 'create']);
+    Route::post('/notification-channels/store', [app\controller\admin\NotificationChannelController::class, 'store']);
+    Route::get('/notification-channels/{id:\d+}/edit', [app\controller\admin\NotificationChannelController::class, 'edit']);
+    Route::post('/notification-channels/{id:\d+}/update', [app\controller\admin\NotificationChannelController::class, 'update']);
+    Route::post('/notification-channels/{id:\d+}/delete', [app\controller\admin\NotificationChannelController::class, 'delete']);
+    Route::post('/notification-channels/{id:\d+}/test', [app\controller\admin\NotificationChannelController::class, 'test']);
+
+    // 遥测数据
+    Route::get('/telemetry', [app\controller\admin\TelemetryController::class, 'index']);
+
+    // 审计日志
+    Route::get('/audit-logs', [app\controller\admin\AuditLogController::class, 'index']);
+
+    // 位置管理
+    Route::get('/locations', [app\controller\admin\LocationController::class, 'index']);
+    Route::post('/locations/store', [app\controller\admin\LocationController::class, 'store']);
+    Route::post('/locations/{id:\d+}/delete', [app\controller\admin\LocationController::class, 'delete']);
+
+})->middleware([AdminAuthMiddleware::class]);
 
 /*
 |--------------------------------------------------------------------------
@@ -192,7 +275,11 @@ Route::group('/api', function () {
 | 404 兜底路由
 |--------------------------------------------------------------------------
 */
-Route::fallback(function () {
+Route::fallback(function (\support\Request $request) {
+    $path = $request->path();
+    if (str_starts_with($path, '/admin')) {
+        return redirect('/admin/dashboard');
+    }
     return api_error('接口不存在', 404, 404);
 });
 

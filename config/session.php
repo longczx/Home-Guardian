@@ -50,7 +50,7 @@ return [
 
     'cookie_lifetime' => 365*24*60*60,
 
-    'cookie_path' => '/',
+    'cookie_path' => '/admin',
 
     'domain' => '',
     

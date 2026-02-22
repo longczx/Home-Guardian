@@ -1,0 +1,110 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        设备列表
+        <a href="/admin/devices/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加设备
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <!-- 筛选栏 -->
+        <form class="layui-form" method="get" style="margin-bottom:15px;">
+            <div class="layui-inline">
+                <input type="text" name="keyword" placeholder="搜索名称/UID" value="{{$filters['keyword'] ?? ''}}" class="layui-input" style="width:200px;">
+            </div>
+            <div class="layui-inline">
+                <select name="type">
+                    <option value="">所有类型</option>
+                    <option value="sensor" {{($filters['type'] ?? '') === 'sensor' ? 'selected' : ''}}>传感器</option>
+                    <option value="actuator" {{($filters['type'] ?? '') === 'actuator' ? 'selected' : ''}}>执行器</option>
+                    <option value="gateway" {{($filters['type'] ?? '') === 'gateway' ? 'selected' : ''}}>网关</option>
+                </select>
+            </div>
+            <div class="layui-inline">
+                <button class="layui-btn layui-btn-sm" lay-submit>筛选</button>
+                <a href="/admin/devices" class="layui-btn layui-btn-sm layui-btn-primary">重置</a>
+            </div>
+        </form>
+
+        <table class="layui-table" lay-skin="line">
+            <colgroup>
+                <col width="60">
+                <col>
+                <col>
+                <col width="80">
+                <col width="100">
+                <col width="80">
+                <col width="160">
+                <col width="150">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>设备UID</th>
+                    <th>名称</th>
+                    <th>类型</th>
+                    <th>位置</th>
+                    <th>在线</th>
+                    <th>最后上线</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {volist name="devices" id="device"}
+                <tr>
+                    <td>{{$device['id']}}</td>
+                    <td><code>{{$device['device_uid']}}</code></td>
+                    <td>{{$device['name']}}</td>
+                    <td>{{$device['type']}}</td>
+                    <td>{{$device['location'] ?? '-'}}</td>
+                    <td>
+                        {if $device['is_online']}
+                        <span class="layui-badge layui-bg-green">在线</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">离线</span>
+                        {/if}
+                    </td>
+                    <td>{{$device['last_seen'] ?? '-'}}</td>
+                    <td>
+                        <a href="/admin/devices/{{$device['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/devices/{{$device['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除该设备？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="devices"}
+                <tr><td colspan="8" style="text-align:center;color:#999;">暂无设备</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+
+        {if $devices instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $devices->lastPage() > 1}
+        <div id="pager"></div>
+        {/if}
+    </div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+{if $devices instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $devices->lastPage() > 1}
+layui.use('laypage', function(){
+    layui.laypage.render({
+        elem: 'pager',
+        count: {{$devices->total()}},
+        curr: {{$devices->currentPage()}},
+        limit: {{$devices->perPage()}},
+        jump: function(obj, first){
+            if(!first){
+                var url = new URL(window.location);
+                url.searchParams.set('page', obj.curr);
+                window.location = url;
+            }
+        }
+    });
+});
+{/if}
+</script>
+{/block}

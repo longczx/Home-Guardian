@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录 - Home Guardian</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/layui@2.9.21/dist/css/layui.css">
+    <style>
+        body { background: #1a1c23; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .login-box { background: #fff; border-radius: 12px; padding: 40px; width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+        .login-title { text-align: center; margin-bottom: 30px; }
+        .login-title h2 { font-size: 24px; color: #333; margin: 0 0 5px; }
+        .login-title p { color: #999; margin: 0; font-size: 14px; }
+        .login-error { color: #e74c3c; font-size: 13px; text-align: center; margin-bottom: 15px; min-height: 20px; }
+        .layui-form-item { margin-bottom: 20px; }
+        .login-btn { width: 100%; height: 42px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-title">
+            <h2>Home Guardian</h2>
+            <p>管理后台</p>
+        </div>
+
+        <div class="login-error">{{$error}}</div>
+
+        <form class="layui-form" method="post" action="/admin/login">
+            <div class="layui-form-item">
+                <input type="text" name="username" required lay-verify="required" placeholder="用户名" autocomplete="username" class="layui-input">
+            </div>
+            <div class="layui-form-item">
+                <input type="password" name="password" required lay-verify="required" placeholder="密码" autocomplete="current-password" class="layui-input">
+            </div>
+            <div class="layui-form-item">
+                <button class="layui-btn layui-btn-normal login-btn" lay-submit>登 录</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/layui@2.9.21/dist/layui.js"></script>
+    <script>layui.use('form');</script>
+</body>
+</html>

@@ -7,6 +7,8 @@
  */
 
 return [
+    // Admin 后台：渲染为 HTML 错误页面
+    'admin' => app\exception\AdminExceptionHandler::class,
     // 全局默认：使用自定义的 JSON 异常处理器
     '' => app\exception\Handler::class,
 ];

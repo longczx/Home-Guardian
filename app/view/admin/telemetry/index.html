@@ -1,0 +1,78 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">遥测数据查看</div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="get" style="margin-bottom:15px;">
+            <div class="layui-inline">
+                <select name="device_id" lay-verify="required">
+                    <option value="">选择设备</option>
+                    {volist name="devices" id="device"}
+                    <option value="{{$device['id']}}" {{($filters['device_id'] ?? '') == $device['id'] ? 'selected' : ''}}>{{$device['name']}} ({{$device['location'] ?? ''}})</option>
+                    {/volist}
+                </select>
+            </div>
+            <div class="layui-inline">
+                <input type="text" name="metric_key" placeholder="指标 (如 temperature)" value="{{$filters['metric_key'] ?? ''}}" class="layui-input" style="width:160px;">
+            </div>
+            <div class="layui-inline">
+                <input type="datetime-local" name="start" value="{{$filters['start'] ?? ''}}" class="layui-input" style="width:180px;" placeholder="开始时间">
+            </div>
+            <div class="layui-inline">
+                <input type="datetime-local" name="end" value="{{$filters['end'] ?? ''}}" class="layui-input" style="width:180px;" placeholder="结束时间">
+            </div>
+            <div class="layui-inline">
+                <button class="layui-btn layui-btn-sm" lay-submit>查询</button>
+            </div>
+        </form>
+
+        {if $data && ($data instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)}
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="170"><col><col><col></colgroup>
+            <thead>
+                <tr><th>时间</th><th>设备ID</th><th>指标</th><th>值</th></tr>
+            </thead>
+            <tbody>
+                {volist name="data" id="row"}
+                <tr>
+                    <td>{{$row['ts']}}</td>
+                    <td>{{$row['device_id']}}</td>
+                    <td>{{$row['metric_key']}}</td>
+                    <td><code>{{json_encode($row['value'])}}</code></td>
+                </tr>
+                {/volist}
+                {empty name="data"}
+                <tr><td colspan="4" style="text-align:center;color:#999;">暂无数据</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+
+        {if $data->lastPage() > 1}
+        <div id="pager"></div>
+        {/if}
+        {elseif !empty($filters['device_id'])/}
+        <div style="text-align:center;color:#999;padding:40px;">暂无数据</div>
+        {else/}
+        <div style="text-align:center;color:#999;padding:40px;">请选择设备后查询</div>
+        {/if}
+    </div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+{if $data && ($data instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) && $data->lastPage() > 1}
+layui.use('laypage', function(){
+    layui.laypage.render({
+        elem: 'pager',
+        count: {{$data->total()}},
+        curr: {{$data->currentPage()}},
+        limit: {{$data->perPage()}},
+        jump: function(obj, first){
+            if(!first){ var url = new URL(window.location); url.searchParams.set('page', obj.curr); window.location = url; }
+        }
+    });
+});
+{/if}
+</script>
+{/block}

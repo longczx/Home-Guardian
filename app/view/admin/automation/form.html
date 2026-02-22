@@ -1,0 +1,74 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$automation ? '编辑自动化规则' : '添加自动化规则'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$automation ? '/admin/automations/'.$automation['id'].'/update' : '/admin/automations/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$automation['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" value="{{$automation['description'] ?? ($old['description'] ?? '')}}" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">触发类型</label>
+                <div class="layui-input-block">
+                    {php}$tt = $automation['trigger_type'] ?? ($old['trigger_type'] ?? '');{/php}
+                    <select name="trigger_type" lay-verify="required">
+                        <option value="">请选择</option>
+                        <option value="telemetry" {{$tt === 'telemetry' ? 'selected' : ''}}>遥测条件 (telemetry)</option>
+                        <option value="schedule" {{$tt === 'schedule' ? 'selected' : ''}}>定时计划 (schedule)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">触发配置</label>
+                <div class="layui-input-block">
+                    {php}
+                        $tcJson = '{}';
+                        if ($automation && isset($automation['trigger_config'])) {
+                            $tcJson = json_encode($automation['trigger_config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                        }
+                    {/php}
+                    <textarea name="trigger_config_json" class="layui-textarea" style="font-family:monospace;min-height:100px;" placeholder='telemetry: {"device_id":1,"metric_key":"temperature","condition":"GREATER_THAN","value":30}
+schedule: {"cron":"0 22 * * *","timezone":"Asia/Shanghai"}'>{{$tcJson}}</textarea>
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">动作列表</label>
+                <div class="layui-input-block">
+                    {php}
+                        $actJson = '[]';
+                        if ($automation && isset($automation['actions'])) {
+                            $actJson = json_encode($automation['actions'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                        }
+                    {/php}
+                    <textarea name="actions_json" class="layui-textarea" style="font-family:monospace;min-height:100px;" placeholder='[{"type":"device_command","device_id":2,"payload":{"action":"turn_on"}}]'>{{$actJson}}</textarea>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">启用</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="is_enabled" lay-skin="switch" lay-text="启用|禁用" {{($automation['is_enabled'] ?? true) ? 'checked' : ''}}>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/automations" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

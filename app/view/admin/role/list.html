@@ -1,0 +1,44 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        角色管理
+        <a href="/admin/roles/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加角色
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col><col><col width="100"><col width="100"><col width="150"></colgroup>
+            <thead>
+                <tr><th>ID</th><th>名称</th><th>描述</th><th>用户数</th><th>权限</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {volist name="roles" id="role"}
+                <tr>
+                    <td>{{$role['id']}}</td>
+                    <td><strong>{{$role['name']}}</strong></td>
+                    <td>{{$role['description'] ?? '-'}}</td>
+                    <td>{{$role['users_count']}}</td>
+                    <td>
+                        {if !empty($role['permissions']['admin'])}
+                        <span class="layui-badge layui-bg-red">全部权限</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-blue">自定义</span>
+                        {/if}
+                    </td>
+                    <td>
+                        <a href="/admin/roles/{{$role['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        {if !in_array($role['name'], ['admin', 'member', 'guest'])}
+                        <form method="post" action="/admin/roles/{{$role['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除该角色？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger" {{$role['users_count'] > 0 ? 'disabled title="有关联用户"' : ''}}>删除</button>
+                        </form>
+                        {/if}
+                    </td>
+                </tr>
+                {/volist}
+            </tbody>
+        </table>
+    </div>
+</div>
+{/block}

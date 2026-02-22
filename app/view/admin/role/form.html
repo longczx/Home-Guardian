@@ -1,0 +1,51 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$role ? '编辑角色' : '添加角色'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$role ? '/admin/roles/'.$role['id'].'/update' : '/admin/roles/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">角色名</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$role['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 operator">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" value="{{$role['description'] ?? ($old['description'] ?? '')}}" class="layui-input" placeholder="角色描述">
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">权限 JSON</label>
+                <div class="layui-input-block">
+                    {php}
+                        $permJson = '{}';
+                        if ($role && isset($role['permissions'])) {
+                            $permJson = json_encode($role['permissions'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                        } elseif (isset($old['permissions_json'])) {
+                            $permJson = $old['permissions_json'];
+                        }
+                    {/php}
+                    <textarea name="permissions_json" class="layui-textarea" style="font-family:monospace;min-height:150px;" placeholder='{"devices": ["view", "control"], "alerts": ["view"]}'>{{$permJson}}</textarea>
+                    <div class="layui-form-mid layui-word-aux">
+                        格式: {"资源": ["操作"]}，admin 角色使用 {"admin": true}。
+                        支持的资源: devices, dashboards, alerts, commands, users。
+                        支持的操作: view, create, edit, delete, control, send。
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/roles" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

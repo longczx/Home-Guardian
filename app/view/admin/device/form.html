@@ -1,0 +1,64 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$device ? '编辑设备' : '添加设备'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$device ? '/admin/devices/'.$device['id'].'/update' : '/admin/devices/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">设备 UID</label>
+                <div class="layui-input-block">
+                    <input type="text" name="device_uid" value="{{$device['device_uid'] ?? ($old['device_uid'] ?? '')}}" class="layui-input" {{$device ? 'disabled' : 'required lay-verify="required"'}} placeholder="如 esp32-living-room-01">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$device['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="设备显示名称">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">类型</label>
+                <div class="layui-input-block">
+                    <select name="type" lay-verify="required">
+                        <option value="">请选择</option>
+                        {php}$currentType = $device['type'] ?? ($old['type'] ?? '');{/php}
+                        <option value="sensor" {{$currentType === 'sensor' ? 'selected' : ''}}>sensor (传感器)</option>
+                        <option value="actuator" {{$currentType === 'actuator' ? 'selected' : ''}}>actuator (执行器)</option>
+                        <option value="gateway" {{$currentType === 'gateway' ? 'selected' : ''}}>gateway (网关)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">位置</label>
+                <div class="layui-input-block">
+                    <input type="text" name="location" value="{{$device['location'] ?? ($old['location'] ?? '')}}" class="layui-input" placeholder="如 客厅、卧室">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">固件版本</label>
+                <div class="layui-input-block">
+                    <input type="text" name="firmware_version" value="{{$device['firmware_version'] ?? ($old['firmware_version'] ?? '')}}" class="layui-input">
+                </div>
+            </div>
+            {if !$device}
+            <div class="layui-form-item">
+                <label class="layui-form-label">MQTT 密码</label>
+                <div class="layui-input-block">
+                    <input type="password" name="mqtt_password" class="layui-input" placeholder="设备连接 MQTT 时使用的密码">
+                </div>
+            </div>
+            {/if}
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/devices" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

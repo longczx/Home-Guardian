@@ -32,7 +32,7 @@
 | **消息中间件** | **EMQX 5.8** | **通信枢纽**。作为高性能 MQTT Broker，负责处理所有设备与服务器之间的实时、双向消息传递，支持海量设备连接。 |
 | **主数据库** | **PostgreSQL + TimescaleDB** | **数据仓库**。使用 PostgreSQL 存储结构化数据（如设备、用户），并利用 TimescaleDB 扩展高效地存储和查询海量时序遥测数据。 |
 | **缓存/队列** | **Redis 7** | **高速公路**。作为高性能内存数据库，用于：1. 存储热数据（设备最新状态）；2. 作为数据写入和告警处理的缓冲队列；3. Redis Pub/Sub 桥接 MQTT 数据到 WebSocket。 |
-| **前端界面** | **Vue 3 + Vite + Element Plus + ECharts** | **用户界面**。响应式 SPA + PWA，同时适配 PC 和移动端。通过 WebSocket 接收实时数据，支持 PWA 安装和推送通知。 |
+| **前端界面** | **LayUI 2.9 (Admin) + React 19 + Ant Design Mobile (Mobile)** | Admin: 服务端渲染管理面板。Mobile: 响应式 PWA 移动端，卡片式布局 + ECharts 数据可视化。 |
 | **部署方案** | **Docker / Docker Compose** | **运行环境**。将所有服务容器化，实现一键部署、环境隔离和跨平台一致性，极大简化开发和运维。 |
 | **版本控制** | **Git / GitHub** | **代码管理**。所有代码和文档都将在 GitHub 仓库中进行版本控制，便于协作和追踪。 |
 
@@ -247,10 +247,20 @@ Authorization → HTTP Server
 3.  **WebSocket 推送过滤:** 推送实时数据时同样按位置作用域过滤，用户只收到有权限的设备数据。
 
 #### **4.8. 前端界面方案**
-采用 **Vue 3 响应式 SPA + PWA** 方案，一套代码同时适配 PC 和移动端。
-*   **PC 端:** 完整仪表盘布局，多面板并排展示，ECharts 数据图表。
-*   **移动端:** 卡片式堆叠布局，触控优化。通过 PWA 安装到桌面，支持 Web Push 推送通知。
-*   **通知保底:** 邮件 + Webhook（企业微信/钉钉/Telegram Bot）确保告警必达。
+采用 **双端分离** 方案：
+
+**后台管理面板 (`/admin/*`)**
+*   **技术栈:** Webman + ThinkPHP Template + LayUI 2.9 CDN
+*   **认证方式:** Session 认证 (cookie_path=/admin)
+*   **目标用户:** 系统管理员
+*   **功能:** 设备/用户/角色/告警/自动化等全部 CRUD 管理，遥测数据查看，审计日志
+
+**移动端前端 (`/mobile/*`)**
+*   **技术栈:** React 19 + Ant Design Mobile + Zustand + ECharts + PWA
+*   **认证方式:** JWT 双 Token (access 2h + refresh 30d)
+*   **目标用户:** 普通家庭成员
+*   **功能:** 环境概览、设备控制（开关/亮度等）、数据图表（1h/24h/7d）、告警通知列表
+*   **通知保底:** 邮件 + Webhook（企业微信/钉钉/Telegram Bot）确保告警必达
 
 #### **4.9. 场景自动化**
 在告警系统基础上扩展，支持"条件触发"和"定时触发"两种方式，执行设备控制和通知推送。

@@ -1,0 +1,84 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-row layui-col-space15">
+    <div class="layui-col-xs4 layui-col-sm4">
+        <div class="stat-card">
+            <div class="stat-num">{{$stats['device_total']}}</div>
+            <div class="stat-label">设备总数 (在线 {{$stats['device_online']}})</div>
+        </div>
+    </div>
+    <div class="layui-col-xs4 layui-col-sm4">
+        <div class="stat-card">
+            <div class="stat-num">{{$stats['user_total']}}</div>
+            <div class="stat-label">用户总数</div>
+        </div>
+    </div>
+    <div class="layui-col-xs4 layui-col-sm4">
+        <div class="stat-card">
+            <div class="stat-num" style="color: {{$stats['alert_triggered'] > 0 ? '#e74c3c' : '#333'}}">{{$stats['alert_triggered']}}</div>
+            <div class="stat-label">待处理告警</div>
+        </div>
+    </div>
+</div>
+
+<div class="layui-row layui-col-space15" style="margin-top: 10px;">
+    <div class="layui-col-xs6">
+        <div class="stat-card">
+            <div class="stat-num">{{$stats['automation_total']}}</div>
+            <div class="stat-label">启用自动化规则</div>
+        </div>
+    </div>
+    <div class="layui-col-xs6">
+        <div class="stat-card">
+            <div class="stat-num">{{$stats['device_online']}}/{{$stats['device_total']}}</div>
+            <div class="stat-label">设备在线率</div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 20px;">
+    <div class="layui-card">
+        <div class="layui-card-header">最近告警</div>
+        <div class="layui-card-body">
+            <table class="layui-table">
+                <colgroup>
+                    <col width="60">
+                    <col>
+                    <col>
+                    <col width="100">
+                    <col width="170">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>规则名称</th>
+                        <th>设备</th>
+                        <th>状态</th>
+                        <th>触发时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {volist name="recentAlerts" id="alert"}
+                    <tr>
+                        <td>{{$alert['id']}}</td>
+                        <td>{{$alert['rule']['name'] ?? '-'}}</td>
+                        <td>{{$alert['device']['name'] ?? '-'}} ({{$alert['device']['location'] ?? ''}})</td>
+                        <td>
+                            {switch name="alert.status"}
+                                {case value="triggered"}<span class="layui-badge">触发</span>{/case}
+                                {case value="acknowledged"}<span class="layui-badge layui-bg-orange">已确认</span>{/case}
+                                {case value="resolved"}<span class="layui-badge layui-bg-green">已解决</span>{/case}
+                            {/switch}
+                        </td>
+                        <td>{{$alert['triggered_at']}}</td>
+                    </tr>
+                    {/volist}
+                    {empty name="recentAlerts"}
+                    <tr><td colspan="5" style="text-align:center;color:#999;">暂无告警记录</td></tr>
+                    {/empty}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{/block}

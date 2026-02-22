@@ -1,0 +1,79 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$user ? '编辑用户' : '添加用户'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$user ? '/admin/users/'.$user['id'].'/update' : '/admin/users/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">用户名</label>
+                <div class="layui-input-block">
+                    <input type="text" name="username" value="{{$user['username'] ?? ($old['username'] ?? '')}}" class="layui-input" {{$user ? 'disabled' : 'required lay-verify="required"'}}>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">密码</label>
+                <div class="layui-input-block">
+                    <input type="password" name="password" class="layui-input" placeholder="{{$user ? '留空则不修改' : '请输入密码'}}" {{$user ? '' : 'required lay-verify="required"'}}>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">姓名</label>
+                <div class="layui-input-block">
+                    <input type="text" name="full_name" value="{{$user['full_name'] ?? ($old['full_name'] ?? '')}}" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">邮箱</label>
+                <div class="layui-input-block">
+                    <input type="email" name="email" value="{{$user['email'] ?? ($old['email'] ?? '')}}" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">角色</label>
+                <div class="layui-input-block">
+                    {php}
+                        $userRoleIds = [];
+                        if ($user && isset($user['roles'])) {
+                            foreach ($user['roles'] as $r) { $userRoleIds[] = $r['id']; }
+                        }
+                    {/php}
+                    {volist name="roles" id="role"}
+                    <input type="checkbox" name="role_ids[]" value="{{$role['id']}}" title="{{$role['name']}} - {{$role['description'] ?? ''}}" {{in_array($role['id'], $userRoleIds) ? 'checked' : ''}}>
+                    {/volist}
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">启用</label>
+                <div class="layui-input-block">
+                    {php}$isActive = $user ? $user['is_active'] : true;{/php}
+                    <input type="checkbox" name="is_active" lay-skin="switch" lay-text="启用|禁用" {{$isActive ? 'checked' : ''}}>
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">位置作用域</label>
+                <div class="layui-input-block">
+                    {php}
+                        $locText = '';
+                        if ($user && isset($user['allowed_locations'])) {
+                            $locs = [];
+                            foreach ($user['allowed_locations'] as $loc) { $locs[] = $loc['location']; }
+                            $locText = implode("\n", $locs);
+                        }
+                    {/php}
+                    <textarea name="allowed_locations" class="layui-textarea" placeholder="每行一个位置名称，留空表示不限制">{{$locText}}</textarea>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/users" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

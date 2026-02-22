@@ -1,1 +1,0 @@
-import{u as t}from"./index-WsV9NrLY.js";function m(){const i=t();function r(s){return i.hasPermission(s)}function e(...s){return s.some(n=>i.hasPermission(n))}function o(...s){return s.every(n=>i.hasPermission(n))}return{hasPermission:r,hasAnyPermission:e,hasAllPermissions:o,isAdmin:i.isAdmin}}export{m as u};
