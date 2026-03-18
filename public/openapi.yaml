@@ -1,0 +1,2678 @@
+openapi: 3.0.0
+info:
+  title: 'Home Guardian API'
+  description: "Home Guardian 智能家居平台 RESTful API。\n\n## 认证方式\n除公开接口（登录、Token 刷新、健康检查）外，所有接口需在请求头中携带 JWT：\n```\nAuthorization: Bearer {access_token}\n```\n\n## 响应格式\n所有接口返回统一 JSON 结构：\n```json\n{\n  \"code\": 0,\n  \"message\": \"ok\",\n  \"data\": { ... }\n}\n```\n- `code = 0` 表示成功，非 0 为业务错误码\n- 分页接口的 `data` 包含 `items`、`total`、`per_page`、`current_page`、`last_page`\n\n## 权限模型\nRBAC 角色权限 + 位置作用域。权限格式：`resource.action`（如 `devices.view`、`alerts.create`）。\n用户可被限制只能访问特定位置的设备和数据。"
+  version: 1.0.0
+servers:
+  -
+    url: /api
+    description: 当前服务器
+paths:
+  /alert-logs:
+    get:
+      tags:
+        - 告警日志
+      summary: 告警日志列表
+      description: 查询告警记录，支持按设备、规则、状态筛选。自动按用户位置作用域过滤。
+      operationId: 8403a15ec19e77cd6bf6cd18c5a5312a
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        -
+          name: rule_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        -
+          name: status
+          in: query
+          description: 'triggered / acknowledged / resolved'
+          required: false
+          schema:
+            type: string
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+  '/alert-logs/{id}':
+    get:
+      tags:
+        - 告警日志
+      summary: 告警详情
+      description: 获取指定告警的详细信息，包含关联规则、设备和确认人信息。
+      operationId: 63fe8a3e45516989e31ee868c78ced3f
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/AlertLog' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/alert-logs/{id}/acknowledge':
+    patch:
+      tags:
+        - 告警日志
+      summary: 确认告警
+      description: 标记告警为已确认状态，记录确认人和时间。
+      operationId: 3f91968df5b04ffca656428d3e54ef47
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  message: { type: string, example: 告警已确认 }
+                  data: { $ref: '#/components/schemas/AlertLog' }
+                type: object
+      security:
+        -
+          bearerAuth: []
+  '/alert-logs/{id}/resolve':
+    patch:
+      tags:
+        - 告警日志
+      summary: 解决告警
+      description: 标记告警为已解决状态。
+      operationId: ea136132c0a1084042e16619df3b53ad
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 解决成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  message: { type: string, example: 告警已解决 }
+                  data: { $ref: '#/components/schemas/AlertLog' }
+                type: object
+      security:
+        -
+          bearerAuth: []
+  /alert-rules:
+    get:
+      tags:
+        - 告警规则
+      summary: 告警规则列表
+      description: 获取告警规则列表，支持按设备和启用状态筛选。自动按用户位置作用域过滤。
+      operationId: 8221259959438247f40ebc4cb6caea09
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        -
+          name: is_enabled
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 告警规则
+      summary: 创建告警规则
+      description: 创建新的告警规则。当设备遥测值满足条件并持续指定时间后触发告警。
+      operationId: 27365c870d58eb1e4442e2ab5585b5f1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+                - device_id
+                - telemetry_key
+                - condition
+                - threshold_value
+              properties:
+                name:
+                  type: string
+                  example: 温度过高
+                device_id:
+                  type: integer
+                  example: 1
+                telemetry_key:
+                  type: string
+                  example: temperature
+                condition:
+                  description: 'GREATER_THAN / LESS_THAN / EQUAL / NOT_EQUAL / BETWEEN / NOT_BETWEEN'
+                  type: string
+                  example: GREATER_THAN
+                threshold_value:
+                  description: '阈值，单值或数组（BETWEEN 用 [min, max]）'
+                  example: [35]
+                trigger_duration_sec:
+                  description: 持续触发秒数（0=立即）
+                  type: integer
+                  example: 60
+                notification_channel_ids:
+                  description: '通知渠道 ID 列表'
+                  type: array
+                  items: { type: integer }
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/AlertRule' }
+                type: object
+        '422':
+          description: 参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/alert-rules/{id}':
+    get:
+      tags:
+        - 告警规则
+      summary: 告警规则详情
+      operationId: 77476b2d0fe4a5a5326f158d871122b7
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/AlertRule' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 告警规则
+      summary: 更新告警规则
+      operationId: d1bfe5c5cb0a3d218c6e62bff7a506b8
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                telemetry_key:
+                  type: string
+                condition:
+                  type: string
+                threshold_value: {  }
+                trigger_duration_sec:
+                  type: integer
+                is_enabled:
+                  type: boolean
+                notification_channel_ids:
+                  type: array
+                  items: { type: integer }
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/AlertRule' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 告警规则
+      summary: 删除告警规则
+      operationId: 7a81828e59e8613738b07fe3001cd4c4
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /audit-logs:
+    get:
+      tags:
+        - 审计日志
+      summary: 审计日志列表
+      description: '查询操作审计日志。非 admin 用户只能查看自己的操作记录。'
+      operationId: 0c18f5b255befbc21c8cdac3b3105388
+      parameters:
+        -
+          name: user_id
+          in: query
+          description: '按用户筛选（仅 admin）'
+          required: false
+          schema:
+            type: integer
+        -
+          name: action
+          in: query
+          description: '操作类型（login/create/update/delete 等）'
+          required: false
+          schema:
+            type: string
+        -
+          name: resource_type
+          in: query
+          description: '资源类型（device/user/alert_rule 等）'
+          required: false
+          schema:
+            type: string
+        -
+          name: resource_id
+          in: query
+          description: '资源 ID（需配合 resource_type 使用）'
+          required: false
+          schema:
+            type: integer
+        -
+          name: start
+          in: query
+          description: 起始时间
+          required: false
+          schema:
+            type: string
+            format: date-time
+        -
+          name: end
+          in: query
+          description: 结束时间
+          required: false
+          schema:
+            type: string
+            format: date-time
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+  /auth/login:
+    post:
+      tags:
+        - 认证
+      summary: 用户登录
+      description: '使用用户名和密码登录，获取 JWT access_token 和 refresh_token。'
+      operationId: 6e56633823ccc4e9a0deffe6685ca317
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: dad
+                password:
+                  type: string
+                  example: '123456'
+              type: object
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  message: { type: string, example: 登录成功 }
+                  data: { properties: { user: { properties: { id: { type: integer, example: 1 }, username: { type: string, example: dad }, roles: { type: array, items: { type: string } }, permissions: { type: array, items: { type: string } } }, type: object }, access_token: { type: string }, refresh_token: { type: string } }, type: object }
+                type: object
+        '422':
+          description: 参数缺失
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/refresh:
+    post:
+      tags:
+        - 认证
+      summary: '刷新 access_token'
+      description: '使用 refresh_token 获取新的 access_token，无需重新登录。'
+      operationId: 29f35ae54d0d28daad2472625f30bef7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  message: { type: string, example: 刷新成功 }
+                  data: { properties: { access_token: { type: string }, refresh_token: { type: string } }, type: object }
+                type: object
+        '422':
+          description: 参数缺失
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'Token 无效或已过期'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      tags:
+        - 认证
+      summary: 注销当前设备
+      description: '注销当前设备的登录状态，使该设备的 refresh_token 失效。'
+      operationId: 5ce09bb9a6085d0ecbe39642f8d50fd8
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                refresh_token:
+                  description: '可选，传入则吊销该 token'
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 已注销
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+      security:
+        -
+          bearerAuth: []
+  /auth/logout-all:
+    post:
+      tags:
+        - 认证
+      summary: 注销所有设备
+      description: 注销该用户在所有设备上的登录状态。
+      operationId: 3f054bf8bbc500616c467344b4c3a37a
+      responses:
+        '200':
+          description: 已注销所有设备
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+      security:
+        -
+          bearerAuth: []
+  /auth/me:
+    get:
+      tags:
+        - 认证
+      summary: 获取当前用户信息
+      description: 获取当前已认证用户的基本信息、角色、权限和位置作用域。
+      operationId: 8e3504acd920cd7a0ffba166a28d3882
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { properties: { id: { type: integer, example: 1 }, username: { type: string, example: dad }, roles: { type: array, items: { type: string } }, permissions: { type: array, items: { type: string } }, locations: { type: array, items: { type: string } } }, type: object }
+                type: object
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /automations:
+    get:
+      tags:
+        - 自动化
+      summary: 自动化列表
+      description: 获取自动化规则列表，支持按触发类型和启用状态筛选。
+      operationId: dd348193e63b9771cbb2a75e9ffe85b9
+      parameters:
+        -
+          name: trigger_type
+          in: query
+          description: 'telemetry / schedule'
+          required: false
+          schema:
+            type: string
+        -
+          name: is_enabled
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 自动化
+      summary: 创建自动化
+      description: 创建新的自动化规则。支持遥测触发（telemetry）和定时触发（schedule）两种类型。
+      operationId: 8d349f602a0c0865ab2205dc5d679c8a
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+                - trigger_type
+                - trigger_config
+                - actions
+              properties:
+                name:
+                  type: string
+                  example: 温度过高开空调
+                trigger_type:
+                  type: string
+                  enum: [telemetry, schedule]
+                trigger_config:
+                  type: object
+                  example: { device_id: 1, metric_key: temperature, condition: GREATER_THAN, value: 30 }
+                actions:
+                  type: array
+                  items: { properties: { type: { type: string, example: device_command }, device_id: { type: integer, example: 2 }, payload: { type: object, example: { action: turn_on } } }, type: object }
+                is_enabled:
+                  type: boolean
+                  example: true
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Automation' }
+                type: object
+        '422':
+          description: 参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/automations/{id}':
+    get:
+      tags:
+        - 自动化
+      summary: 自动化详情
+      operationId: 3cc26ef34ae21064545aed44283d41aa
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Automation' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 自动化
+      summary: 更新自动化
+      operationId: e7a904cee69344b61d033ca349b6f9bd
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                trigger_config:
+                  type: object
+                actions:
+                  type: array
+                  items: { type: object }
+                is_enabled:
+                  type: boolean
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Automation' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 自动化
+      summary: 删除自动化
+      operationId: 54ca950e19e49894192dc1d097d652af
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /commands:
+    get:
+      tags:
+        - 指令日志
+      summary: 指令日志列表
+      description: 查询设备控制指令记录，支持按设备和状态筛选。自动按位置作用域过滤。
+      operationId: 857282477bb5416648cd55e38fded8a1
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        -
+          name: status
+          in: query
+          description: 'pending / delivered / success / failed / timeout'
+          required: false
+          schema:
+            type: string
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+  '/commands/{id}':
+    get:
+      tags:
+        - 指令日志
+      summary: 指令详情
+      operationId: eb076458c807f2400f2eb31a750b7cb0
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/CommandLog' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权查看
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /dashboards:
+    get:
+      tags:
+        - 仪表盘
+      summary: 仪表盘列表
+      description: '获取仪表盘列表。普通用户只能看到自己的，admin 可看到所有。'
+      operationId: 12c73db6340c94183e1ab651f63e9588
+      parameters:
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 仪表盘
+      summary: 创建仪表盘
+      operationId: e183ba679cc1a2e2d7d602b718db7f9f
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: 主仪表盘
+                description:
+                  type: string
+                  example: 客厅环境监控
+                configuration:
+                  description: '仪表盘配置 JSON'
+                  type: object
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Dashboard' }
+                type: object
+        '422':
+          description: 名称为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/dashboards/{id}':
+    get:
+      tags:
+        - 仪表盘
+      summary: 仪表盘详情
+      operationId: 6a2110e49be2479d29ee45196ef1a072
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Dashboard' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权查看
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 仪表盘
+      summary: 更新仪表盘
+      operationId: aa6080fef9070519b073305186ad689b
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                configuration:
+                  type: object
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Dashboard' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 仪表盘
+      summary: 删除仪表盘
+      operationId: 2050ee65939569c1e0ed729085b730df
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/devices/{deviceId}/attributes':
+    get:
+      tags:
+        - 设备属性
+      summary: 获取设备属性
+      description: '获取指定设备的所有扩展属性，返回 key-value 对象。'
+      operationId: b4ef40bcb01859f2091e7502730866c4
+      parameters:
+        -
+          name: deviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { type: object, example: { mac_address: 'AA:BB:CC:DD:EE:FF', chip_model: ESP32-S3 } }
+                type: object
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 设备属性
+      summary: 批量设置属性
+      description: '批量设置设备扩展属性。已存在的 key 会更新值，不存在的会创建。'
+      operationId: 6d7316f8aeb93e211560c3cd376ca190
+      parameters:
+        -
+          name: deviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              additionalProperties:
+                type: string
+            example:
+              mac_address: 'AA:BB:CC:DD:EE:FF'
+              chip_model: ESP32-S3
+      responses:
+        '200':
+          description: 设置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 数据为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/devices/{deviceId}/attributes/{key}':
+    delete:
+      tags:
+        - 设备属性
+      summary: 删除指定属性
+      description: 删除设备的某个扩展属性。
+      operationId: aaab290f052deb0498b64c12583cfdd5
+      parameters:
+        -
+          name: deviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+        -
+          name: key
+          in: path
+          description: 属性键名
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 设备或属性不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /devices:
+    get:
+      tags:
+        - 设备管理
+      summary: 设备列表
+      description: 获取设备列表，支持按类型、位置、在线状态、关键词筛选，自动按用户位置作用域过滤。
+      operationId: a5410df27109b613cbb63f0fa23a4e51
+      parameters:
+        -
+          name: type
+          in: query
+          description: '设备类型（sensor/switch/camera 等）'
+          required: false
+          schema:
+            type: string
+        -
+          name: location
+          in: query
+          description: 位置筛选
+          required: false
+          schema:
+            type: string
+        -
+          name: is_online
+          in: query
+          description: '在线状态（1=在线, 0=离线）'
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+        -
+          name: keyword
+          in: query
+          description: '搜索关键词（匹配名称或 UID）'
+          required: false
+          schema:
+            type: string
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 设备管理
+      summary: 创建设备
+      description: '注册一台新设备，需提供唯一的 device_uid 和 MQTT 密码。'
+      operationId: 07c8d985fd9b77285a6f90a0b8c067c5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - device_uid
+                - name
+                - type
+              properties:
+                device_uid:
+                  description: 设备唯一标识（创建后不可修改）
+                  type: string
+                  example: esp32-living-room-01
+                name:
+                  type: string
+                  example: 客厅温湿度传感器
+                type:
+                  type: string
+                  example: sensor
+                location:
+                  type: string
+                  example: 客厅
+                mqtt_password:
+                  description: '设备 MQTT 连接密码'
+                  type: string
+                  example: device_password
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  message: { type: string, example: 设备创建成功 }
+                  data: { $ref: '#/components/schemas/Device' }
+                type: object
+        '422':
+          description: 参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/devices/{id}':
+    get:
+      tags:
+        - 设备管理
+      summary: 设备详情
+      description: 获取指定设备的详细信息，包含扩展属性。
+      operationId: 8c724b68c09719ac85d99396a8f82692
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Device' }
+                type: object
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 设备管理
+      summary: 更新设备
+      description: '更新设备信息。device_uid 不可修改。'
+      operationId: f32aa1e030521abaaecd816096801c51
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                location:
+                  type: string
+                mqtt_password:
+                  description: 不传则不修改
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Device' }
+                type: object
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权操作
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 设备管理
+      summary: 删除设备
+      description: 删除指定设备及其关联数据。
+      operationId: fe7a577cec0c67a4715dd1c4bfe63631
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权操作
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/devices/{id}/command':
+    post:
+      tags:
+        - 设备管理
+      summary: 发送控制指令
+      description: '通过 MQTT 向设备发送控制指令。指令内容由设备固件定义。'
+      operationId: 2fbd0384cd8517876105df769e73ff76
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - action
+              properties:
+                action:
+                  description: 指令动作
+                  type: string
+                  example: turn_on
+                params:
+                  description: 指令参数
+                  type: object
+              type: object
+      responses:
+        '200':
+          description: 指令已发送
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { properties: { request_id: { type: string }, status: { type: string, example: pending } }, type: object }
+                type: object
+        '404':
+          description: 设备不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 指令内容为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /mqtt/auth:
+    post:
+      tags:
+        - 'MQTT 认证'
+      summary: '设备 MQTT 认证'
+      description: 'EMQX HTTP Auth 插件回调。验证设备 MQTT 连接凭证。此接口由 EMQX 内部调用，不需要 JWT。'
+      operationId: ea52b4b5179e0fc99c1913ad8896fb1c
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  description: '设备 UID'
+                  type: string
+                  example: esp32-living-room-01
+                password:
+                  description: '设备 MQTT 密码'
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 认证通过
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { properties: { result: { type: string, example: allow } }, type: object }
+                type: object
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /mqtt/acl:
+    post:
+      tags:
+        - 'MQTT 认证'
+      summary: '设备主题 ACL 鉴权'
+      description: 'EMQX ACL 回调。检查设备是否有权操作指定 MQTT 主题。'
+      operationId: 1cc074b1c2a00e1f6fcd3905a8e86d55
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - username
+                - topic
+                - action
+              properties:
+                username:
+                  type: string
+                  example: esp32-living-room-01
+                topic:
+                  type: string
+                  example: home/upstream/esp32-living-room-01/telemetry
+                action:
+                  type: string
+                  enum: [publish, subscribe]
+              type: object
+      responses:
+        '200':
+          description: 鉴权通过
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { properties: { result: { type: string, example: allow } }, type: object }
+                type: object
+        '403':
+          description: 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /notification-channels:
+    get:
+      tags:
+        - 通知渠道
+      summary: 通知渠道列表
+      description: 获取所有通知渠道，可按类型筛选。不分页。
+      operationId: 1b29c41f6bdc8beb327b39d9d397edc4
+      parameters:
+        -
+          name: type
+          in: query
+          description: 'email / webhook / telegram / wechat_work / dingtalk'
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { type: array, items: { $ref: '#/components/schemas/NotificationChannel' } }
+                type: object
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 通知渠道
+      summary: 创建通知渠道
+      operationId: 5bc4e2322f40216a08aeafadfe438a87
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+                - type
+                - config
+              properties:
+                name:
+                  type: string
+                  example: 管理员邮箱
+                type:
+                  type: string
+                  enum: [email, webhook, telegram, wechat_work, dingtalk]
+                config:
+                  type: object
+                  example: { smtp_host: smtp.gmail.com, to: [admin@example.com] }
+                is_enabled:
+                  type: boolean
+                  example: true
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/NotificationChannel' }
+                type: object
+        '422':
+          description: 参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/notification-channels/{id}':
+    get:
+      tags:
+        - 通知渠道
+      summary: 渠道详情
+      operationId: 7d6fd7e08b7ed38b66ae3a5b3355a9ae
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/NotificationChannel' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 通知渠道
+      summary: 更新通知渠道
+      operationId: 0d92faa40737fa95dfe773de08838540
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+                is_enabled:
+                  type: boolean
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/NotificationChannel' }
+                type: object
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 通知渠道
+      summary: 删除通知渠道
+      operationId: 6785d3d93b48b598e4cda8ec93110b02
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/notification-channels/{id}/test':
+    post:
+      tags:
+        - 通知渠道
+      summary: 测试通知渠道
+      description: 向指定渠道发送一条测试通知，验证渠道配置是否正确。
+      operationId: 796c41b955618d99b9db19eb6781a214
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 测试通知已发送
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: 渠道不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 发送失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /roles:
+    get:
+      tags:
+        - 角色管理
+      summary: 角色列表
+      description: 获取所有角色。不分页。
+      operationId: 54de906db918ba08ecf8338da0286f56
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { type: array, items: { $ref: '#/components/schemas/Role' } }
+                type: object
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 角色管理
+      summary: 创建角色
+      operationId: 951c08716717f8ed73d1675f02096254
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: operator
+                description:
+                  type: string
+                  example: 运维人员
+                permissions:
+                  type: object
+                  example: { devices: [view, control], alerts: [view] }
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Role' }
+                type: object
+        '409':
+          description: 角色名已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/roles/{id}':
+    get:
+      tags:
+        - 角色管理
+      summary: 角色详情
+      description: 获取角色详细信息，包含拥有该角色的用户数量。
+      operationId: 6b64ca4e08feecfc78a275c8f0679b3f
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Role' }
+                type: object
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 角色管理
+      summary: 更新角色
+      operationId: 34bfb7bc9d984ecf5c1d1d23e5d8e83a
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                permissions:
+                  type: object
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/Role' }
+                type: object
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 角色名已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 角色管理
+      summary: 删除角色
+      description: 删除角色。内置角色（admin/member/guest）和有用户关联的角色不允许删除。
+      operationId: f33b55a58fd9e5a744ef869073ef5d70
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: 内置角色不可删除或有用户关联
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /telemetry:
+    get:
+      tags:
+        - 遥测数据
+      summary: 原始遥测数据
+      description: '查询指定设备的原始遥测记录，支持按指标和时间范围筛选。必须指定 device_id。'
+      operationId: 66ef156ef65a60679da521e356d61570
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        -
+          name: metric_key
+          in: query
+          description: '指标名（如 temperature）'
+          required: false
+          schema:
+            type: string
+        -
+          name: start
+          in: query
+          description: '起始时间（ISO 8601）'
+          required: false
+          schema:
+            type: string
+            format: date-time
+        -
+          name: end
+          in: query
+          description: '结束时间（ISO 8601）'
+          required: false
+          schema:
+            type: string
+            format: date-time
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+        '422':
+          description: '缺少 device_id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /telemetry/latest:
+    get:
+      tags:
+        - 遥测数据
+      summary: 设备最新遥测值
+      description: '获取指定设备各指标的最新值。优先从 Redis 缓存读取，未命中则查询数据库。'
+      operationId: ae2d9d06cec131e16ca32fe707b5891d
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { type: array, items: { properties: { metric_key: { type: string, example: temperature }, value: { example: 25.6 }, ts: { type: string, format: date-time } }, type: object } }
+                type: object
+        '422':
+          description: '缺少 device_id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /telemetry/aggregated:
+    get:
+      tags:
+        - 遥测数据
+      summary: 小时聚合数据
+      description: '查询指定设备和指标的小时级聚合数据，用于图表展示。查询 telemetry_hourly 视图，性能优。'
+      operationId: bd0cb65995ecad959b8d8786f808d008
+      parameters:
+        -
+          name: device_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        -
+          name: metric_key
+          in: query
+          required: true
+          schema:
+            type: string
+        -
+          name: start
+          in: query
+          description: '起始时间（默认 7 天前）'
+          required: false
+          schema:
+            type: string
+            format: date-time
+        -
+          name: end
+          in: query
+          description: 结束时间（默认当前）
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { type: array, items: { properties: { bucket: { type: string, format: date-time }, avg_value: { type: number, example: 25.3 }, min_value: { type: number, example: 24.1 }, max_value: { type: number, example: 26.8 }, sample_count: { type: integer, example: 60 } }, type: object } }
+                type: object
+        '422':
+          description: 参数缺失
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  /users:
+    get:
+      tags:
+        - 用户管理
+      summary: 用户列表
+      description: 获取用户列表，支持关键词搜索和激活状态筛选。
+      operationId: 1cec78dd32b8ef70d85d460b4e529573
+      parameters:
+        -
+          name: keyword
+          in: query
+          description: 搜索用户名、姓名、邮箱
+          required: false
+          schema:
+            type: string
+        -
+          name: is_active
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+        -
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        -
+          name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationMeta'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 用户管理
+      summary: 创建用户
+      operationId: e39a2f4caf4adeb97f10969d0900ffca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: kid
+                password:
+                  description: '至少 6 位'
+                  type: string
+                  example: '123456'
+                email:
+                  type: string
+                  example: kid@example.com
+                full_name:
+                  type: string
+                  example: 小孩
+                role_ids:
+                  type: array
+                  items: { type: integer }
+                  example: [2]
+                allowed_locations:
+                  description: 空数组=不限制
+                  type: array
+                  items: { type: string }
+                  example: [儿童房]
+              type: object
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/User' }
+                type: object
+        '422':
+          description: 参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 用户名或邮箱已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+  '/users/{id}':
+    get:
+      tags:
+        - 用户管理
+      summary: 用户详情
+      description: 获取用户详细信息，包含角色和位置作用域。
+      operationId: 4835d24d9ba1541096c2090347b908f1
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/User' }
+                type: object
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 用户管理
+      summary: 更新用户
+      operationId: af56e470aca1e790add62a65484a6fa5
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                full_name:
+                  type: string
+                password:
+                  description: 不传则不修改
+                  type: string
+                is_active:
+                  type: boolean
+                role_ids:
+                  type: array
+                  items: { type: integer }
+                allowed_locations:
+                  type: array
+                  items: { type: string }
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                properties:
+                  code: { type: integer, example: 0 }
+                  data: { $ref: '#/components/schemas/User' }
+                type: object
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 用户管理
+      summary: 删除用户
+      description: 删除指定用户。不允许删除自己的账号。
+      operationId: a3f3e2b2888f931cffc264c257970e82
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: 不能删除自己
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        -
+          bearerAuth: []
+components:
+  schemas:
+    SuccessResponse:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data: {  }
+      type: object
+    ErrorResponse:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          example: 1000
+        message:
+          type: string
+          example: 参数验证失败
+        data: {  }
+      type: object
+    PaginationMeta:
+      properties:
+        items:
+          type: array
+          items: {  }
+        total:
+          type: integer
+          example: 100
+        per_page:
+          type: integer
+          example: 20
+        current_page:
+          type: integer
+          example: 1
+        last_page:
+          type: integer
+          example: 5
+      type: object
+    Device:
+      properties:
+        id:
+          type: integer
+          example: 1
+        device_uid:
+          type: string
+          example: esp32-living-room-01
+        name:
+          type: string
+          example: 客厅温湿度传感器
+        type:
+          type: string
+          example: sensor
+        location:
+          type: string
+          example: 客厅
+        is_online:
+          type: boolean
+          example: true
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    AlertRule:
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: 温度过高
+        device_id:
+          type: integer
+        telemetry_key:
+          type: string
+          example: temperature
+        condition:
+          type: string
+          example: GREATER_THAN
+        threshold_value:
+          type: array
+          items:
+            type: number
+          example:
+            - 35
+        trigger_duration_sec:
+          type: integer
+          example: 60
+        is_enabled:
+          type: boolean
+        notification_channel_ids:
+          type: array
+          items:
+            type: integer
+      type: object
+    AlertLog:
+      properties:
+        id:
+          type: integer
+        rule_id:
+          type: integer
+        device_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - triggered
+            - acknowledged
+            - resolved
+        triggered_value:
+          type: number
+        message:
+          type: string
+          nullable: true
+        triggered_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      type: object
+    Automation:
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: 温度过高开空调
+        trigger_type:
+          type: string
+          enum:
+            - telemetry
+            - schedule
+        trigger_config:
+          type: object
+        actions:
+          type: array
+          items:
+            type: object
+        is_enabled:
+          type: boolean
+      type: object
+    NotificationChannel:
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: 管理员邮箱
+        type:
+          type: string
+          enum:
+            - email
+            - webhook
+            - telegram
+            - wechat_work
+            - dingtalk
+        config:
+          type: object
+        is_enabled:
+          type: boolean
+      type: object
+    User:
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        roles:
+          type: array
+          items:
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+            type: object
+      type: object
+    Role:
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: admin
+        description:
+          type: string
+          nullable: true
+        permissions:
+          type: object
+      type: object
+    Dashboard:
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        configuration:
+          type: object
+        owner_id:
+          type: integer
+      type: object
+    CommandLog:
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: integer
+        request_id:
+          type: string
+        action:
+          type: string
+        params:
+          type: object
+        status:
+          type: string
+          enum:
+            - pending
+            - delivered
+            - success
+            - failed
+            - timeout
+        response:
+          type: object
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+        responded_at:
+          type: string
+          format: date-time
+          nullable: true
+      type: object
+    AuditLog:
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: integer
+          nullable: true
+        changes:
+          type: object
+          nullable: true
+        ip_address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      type: object
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: '在登录接口获取 access_token，填入此处'
+      bearerFormat: JWT
+      scheme: bearer
+tags:
+  -
+    name: 告警日志
+    description: 告警记录查询、确认、解决
+  -
+    name: 告警规则
+    description: '告警规则的 CRUD'
+  -
+    name: 审计日志
+    description: 操作审计日志查询（只读）
+  -
+    name: 认证
+    description: '登录、注销、Token 刷新、个人信息'
+  -
+    name: 自动化
+    description: '自动化规则的 CRUD'
+  -
+    name: 指令日志
+    description: 设备控制指令执行历史（只读）
+  -
+    name: 仪表盘
+    description: '用户自定义仪表盘 CRUD'
+  -
+    name: 设备属性
+    description: '设备扩展属性管理（EAV 模式）'
+  -
+    name: 设备管理
+    description: '设备的 CRUD 和控制指令'
+  -
+    name: 'MQTT 认证'
+    description: 'EMQX 内部回调接口（设备认证 & ACL）'
+  -
+    name: 通知渠道
+    description: '通知渠道的 CRUD 和测试'
+  -
+    name: 角色管理
+    description: '角色的 CRUD'
+  -
+    name: 遥测数据
+    description: 设备遥测数据查询（只读）
+  -
+    name: 用户管理
+    description: '用户的 CRUD、角色分配、位置作用域'

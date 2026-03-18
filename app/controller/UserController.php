@@ -19,19 +19,27 @@ use app\model\UserAllowedLocation;
 use app\service\AuditService;
 use app\exception\BusinessException;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '用户管理', description: '用户的 CRUD、角色分配、位置作用域')]
 class UserController
 {
-    /**
-     * 用户列表
-     *
-     * GET /api/users?keyword=admin&is_active=1&page=1&per_page=20
-     */
+    #[OA\Get(
+        path: '/users',
+        summary: '用户列表',
+        description: '获取用户列表，支持关键词搜索和激活状态筛选。',
+        security: [['bearerAuth' => []]],
+        tags: ['用户管理'],
+    )]
+    #[OA\Parameter(name: 'keyword', in: 'query', description: '搜索用户名、姓名、邮箱', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'is_active', in: 'query', required: false, schema: new OA\Schema(type: 'integer', enum: [0, 1]))]
+    #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
+    #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 20))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
     public function index(Request $request)
     {
         $query = User::with('roles:id,name');
 
-        // 关键词搜索
         if ($keyword = $request->get('keyword')) {
             $query->where(function ($q) use ($keyword) {
                 $q->where('username', 'ILIKE', "%{$keyword}%")
@@ -40,7 +48,6 @@ class UserController
             });
         }
 
-        // 激活状态筛选
         if ($request->get('is_active') !== null) {
             $query->where('is_active', (bool)$request->get('is_active'));
         }
@@ -51,11 +58,21 @@ class UserController
         return api_paginate($paginator);
     }
 
-    /**
-     * 用户详情
-     *
-     * GET /api/users/{id}
-     */
+    #[OA\Get(
+        path: '/users/{id}',
+        summary: '用户详情',
+        description: '获取用户详细信息，包含角色和位置作用域。',
+        security: [['bearerAuth' => []]],
+        tags: ['用户管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/User'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '用户不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function show(Request $request, int $id)
     {
         $user = User::with(['roles:id,name,description', 'allowedLocations'])->find($id);
@@ -67,24 +84,38 @@ class UserController
         return api_success($user);
     }
 
-    /**
-     * 创建用户
-     *
-     * POST /api/users
-     * Body: {
-     *   "username": "kid",
-     *   "password": "123456",
-     *   "email": "kid@example.com",
-     *   "full_name": "小孩",
-     *   "role_ids": [2],
-     *   "allowed_locations": ["儿童房"]
-     * }
-     */
+    #[OA\Post(
+        path: '/users',
+        summary: '创建用户',
+        security: [['bearerAuth' => []]],
+        tags: ['用户管理'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['username', 'password'],
+            properties: [
+                new OA\Property(property: 'username', type: 'string', example: 'kid'),
+                new OA\Property(property: 'password', type: 'string', example: '123456', description: '至少 6 位'),
+                new OA\Property(property: 'email', type: 'string', example: 'kid@example.com'),
+                new OA\Property(property: 'full_name', type: 'string', example: '小孩'),
+                new OA\Property(property: 'role_ids', type: 'array', items: new OA\Items(type: 'integer'), example: [2]),
+                new OA\Property(property: 'allowed_locations', type: 'array', items: new OA\Items(type: 'string'), example: ['儿童房'], description: '空数组=不限制'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 201, description: '创建成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/User'),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '参数验证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 409, description: '用户名或邮箱已存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function store(Request $request)
     {
         $data = $request->post();
 
-        // 参数校验
         $errors = [];
         if (empty($data['username'])) {
             $errors[] = 'username 不能为空';
@@ -98,17 +129,14 @@ class UserController
             return api_error('参数验证失败', 422, 1000, $errors);
         }
 
-        // 检查用户名唯一
         if (User::where('username', $data['username'])->exists()) {
             throw new BusinessException('用户名已存在', 409, 5002);
         }
 
-        // 检查邮箱唯一
         if (!empty($data['email']) && User::where('email', $data['email'])->exists()) {
             throw new BusinessException('邮箱已被使用', 409, 5003);
         }
 
-        // 创建用户
         $user = new User();
         $user->username = $data['username'];
         $user->setPassword($data['password']);
@@ -117,13 +145,11 @@ class UserController
         $user->is_active = $data['is_active'] ?? true;
         $user->save();
 
-        // 分配角色
         if (!empty($data['role_ids'])) {
             $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
             $user->roles()->sync($validRoleIds);
         }
 
-        // 设置位置作用域
         if (isset($data['allowed_locations'])) {
             self::syncLocations($user->id, $data['allowed_locations']);
         }
@@ -139,11 +165,30 @@ class UserController
         );
     }
 
-    /**
-     * 更新用户
-     *
-     * PUT /api/users/{id}
-     */
+    #[OA\Put(
+        path: '/users/{id}',
+        summary: '更新用户',
+        security: [['bearerAuth' => []]],
+        tags: ['用户管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\RequestBody(content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'email', type: 'string'),
+            new OA\Property(property: 'full_name', type: 'string'),
+            new OA\Property(property: 'password', type: 'string', description: '不传则不修改'),
+            new OA\Property(property: 'is_active', type: 'boolean'),
+            new OA\Property(property: 'role_ids', type: 'array', items: new OA\Items(type: 'integer')),
+            new OA\Property(property: 'allowed_locations', type: 'array', items: new OA\Items(type: 'string')),
+        ]
+    ))]
+    #[OA\Response(response: 200, description: '更新成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/User'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '用户不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function update(Request $request, int $id)
     {
         $user = User::find($id);
@@ -154,9 +199,7 @@ class UserController
         $data = $request->post();
         $original = $user->toArray();
 
-        // 更新基本字段
         if (isset($data['email'])) {
-            // 检查邮箱唯一（排除自身）
             if (!empty($data['email']) && User::where('email', $data['email'])->where('id', '!=', $id)->exists()) {
                 throw new BusinessException('邮箱已被使用', 409, 5003);
             }
@@ -169,7 +212,6 @@ class UserController
             $user->is_active = (bool)$data['is_active'];
         }
 
-        // 修改密码
         if (!empty($data['password'])) {
             if (strlen($data['password']) < 6) {
                 return api_error('密码长度不能少于 6 位', 422, 1000);
@@ -179,13 +221,11 @@ class UserController
 
         $user->save();
 
-        // 更新角色
         if (isset($data['role_ids'])) {
             $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
             $user->roles()->sync($validRoleIds);
         }
 
-        // 更新位置作用域
         if (isset($data['allowed_locations'])) {
             self::syncLocations($user->id, $data['allowed_locations']);
         }
@@ -200,16 +240,19 @@ class UserController
         );
     }
 
-    /**
-     * 删除用户
-     *
-     * DELETE /api/users/{id}
-     *
-     * 不允许删除自己。
-     */
+    #[OA\Delete(
+        path: '/users/{id}',
+        summary: '删除用户',
+        description: '删除指定用户。不允许删除自己的账号。',
+        security: [['bearerAuth' => []]],
+        tags: ['用户管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '删除成功', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 400, description: '不能删除自己', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 404, description: '用户不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function destroy(Request $request, int $id)
     {
-        // 禁止删除自己
         if ($request->userId() === $id) {
             return api_error('不能删除自己的账号', 400, 5004);
         }
@@ -229,18 +272,10 @@ class UserController
         return api_success(null, '用户已删除');
     }
 
-    /**
-     * 同步用户的位置作用域
-     *
-     * @param int   $userId    用户 ID
-     * @param array $locations 位置名称列表，空数组表示清除（不限制）
-     */
     private static function syncLocations(int $userId, array $locations): void
     {
-        // 删除旧的
         UserAllowedLocation::where('user_id', $userId)->delete();
 
-        // 插入新的
         foreach ($locations as $location) {
             if (!empty($location)) {
                 UserAllowedLocation::create([

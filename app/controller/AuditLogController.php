@@ -11,14 +11,27 @@ namespace app\controller;
 
 use app\model\AuditLog;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '审计日志', description: '操作审计日志查询（只读）')]
 class AuditLogController
 {
-    /**
-     * 审计日志列表
-     *
-     * GET /api/audit-logs?user_id=1&action=login&resource_type=device&start=2026-02-01&end=2026-02-20&page=1&per_page=50
-     */
+    #[OA\Get(
+        path: '/audit-logs',
+        summary: '审计日志列表',
+        description: '查询操作审计日志。非 admin 用户只能查看自己的操作记录。',
+        security: [['bearerAuth' => []]],
+        tags: ['审计日志'],
+    )]
+    #[OA\Parameter(name: 'user_id', in: 'query', description: '按用户筛选（仅 admin）', required: false, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Parameter(name: 'action', in: 'query', description: '操作类型（login/create/update/delete 等）', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'resource_type', in: 'query', description: '资源类型（device/user/alert_rule 等）', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'resource_id', in: 'query', description: '资源 ID（需配合 resource_type 使用）', required: false, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Parameter(name: 'start', in: 'query', description: '起始时间', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'end', in: 'query', description: '结束时间', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
+    #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 50, maximum: 200))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
     public function index(Request $request)
     {
         $query = AuditLog::with('user:id,username');

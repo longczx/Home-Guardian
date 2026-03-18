@@ -14,19 +14,36 @@ namespace app\controller;
 
 use app\service\DeviceService;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: 'MQTT 认证', description: 'EMQX 内部回调接口（设备认证 & ACL）')]
 class MqttAuthController
 {
-    /**
-     * 设备连接认证
-     *
-     * POST /api/mqtt/auth
-     * EMQX 请求体: { "username": "esp32-xxx", "password": "device_password" }
-     *
-     * 响应：
-     *   200 → 认证通过，允许连接
-     *   401 → 认证失败，拒绝连接
-     */
+    #[OA\Post(
+        path: '/mqtt/auth',
+        summary: '设备 MQTT 认证',
+        description: 'EMQX HTTP Auth 插件回调。验证设备 MQTT 连接凭证。此接口由 EMQX 内部调用，不需要 JWT。',
+        tags: ['MQTT 认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['username', 'password'],
+            properties: [
+                new OA\Property(property: 'username', type: 'string', example: 'esp32-living-room-01', description: '设备 UID'),
+                new OA\Property(property: 'password', type: 'string', description: '设备 MQTT 密码'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '认证通过', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', properties: [
+                new OA\Property(property: 'result', type: 'string', example: 'allow'),
+            ], type: 'object'),
+        ]
+    ))]
+    #[OA\Response(response: 401, description: '认证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function auth(Request $request)
     {
         $username = $request->post('username', '');
@@ -39,29 +56,43 @@ class MqttAuthController
         $verified = DeviceService::verifyMqttCredentials($username, $password);
 
         if ($verified) {
-            // 返回 200 表示认证通过
-            // EMQX 要求返回 JSON 格式
             return api_success(['result' => 'allow'], '认证通过');
         }
 
         return api_error('认证失败', 401, 0);
     }
 
-    /**
-     * 设备主题 ACL 鉴权
-     *
-     * POST /api/mqtt/acl
-     * EMQX 请求体: { "username": "esp32-xxx", "topic": "home/upstream/...", "action": "publish" }
-     *
-     * 响应：
-     *   200 → 鉴权通过，允许操作
-     *   403 → 鉴权失败，拒绝操作
-     */
+    #[OA\Post(
+        path: '/mqtt/acl',
+        summary: '设备主题 ACL 鉴权',
+        description: 'EMQX ACL 回调。检查设备是否有权操作指定 MQTT 主题。',
+        tags: ['MQTT 认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['username', 'topic', 'action'],
+            properties: [
+                new OA\Property(property: 'username', type: 'string', example: 'esp32-living-room-01'),
+                new OA\Property(property: 'topic', type: 'string', example: 'home/upstream/esp32-living-room-01/telemetry'),
+                new OA\Property(property: 'action', type: 'string', enum: ['publish', 'subscribe']),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '鉴权通过', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', properties: [
+                new OA\Property(property: 'result', type: 'string', example: 'allow'),
+            ], type: 'object'),
+        ]
+    ))]
+    #[OA\Response(response: 403, description: '鉴权失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function acl(Request $request)
     {
         $username = $request->post('username', '');
         $topic = $request->post('topic', '');
-        $action = $request->post('action', '');  // publish / subscribe
+        $action = $request->post('action', '');
 
         if (empty($username) || empty($topic) || empty($action)) {
             return api_error('缺少鉴权参数', 403, 0);

@@ -1,61 +1,50 @@
 {extend name="admin/layout" /}
 {block name="content"}
+<!-- 统计卡片 -->
 <div class="layui-row layui-col-space15">
-    <div class="layui-col-xs4 layui-col-sm4">
+    <div class="layui-col-xs4">
         <div class="stat-card">
-            <div class="stat-num">{{$stats['device_total']}}</div>
-            <div class="stat-label">设备总数 (在线 {{$stats['device_online']}})</div>
+            <div class="stat-num" id="stat-device">{{$stats['device_total']}}</div>
+            <div class="stat-label">设备总数 (在线 <span id="stat-online">{{$stats['device_online']}}</span>)</div>
         </div>
     </div>
-    <div class="layui-col-xs4 layui-col-sm4">
+    <div class="layui-col-xs4">
         <div class="stat-card">
             <div class="stat-num">{{$stats['user_total']}}</div>
             <div class="stat-label">用户总数</div>
         </div>
     </div>
-    <div class="layui-col-xs4 layui-col-sm4">
+    <div class="layui-col-xs4">
         <div class="stat-card">
-            <div class="stat-num" style="color: {{$stats['alert_triggered'] > 0 ? '#e74c3c' : '#333'}}">{{$stats['alert_triggered']}}</div>
+            <div class="stat-num" id="stat-alert" style="color: {{$stats['alert_triggered'] > 0 ? '#e74c3c' : '#333'}}">{{$stats['alert_triggered']}}</div>
             <div class="stat-label">待处理告警</div>
         </div>
     </div>
 </div>
 
-<div class="layui-row layui-col-space15" style="margin-top: 10px;">
-    <div class="layui-col-xs6">
-        <div class="stat-card">
-            <div class="stat-num">{{$stats['automation_total']}}</div>
-            <div class="stat-label">启用自动化规则</div>
+<!-- 设备实时指标仪表盘 -->
+<div style="margin-top:10px;">
+    <div class="layui-card">
+        <div class="layui-card-header">
+            设备实时指标
+            <span id="ws-status" style="float:right;font-size:12px;color:#999;">连接中...</span>
         </div>
-    </div>
-    <div class="layui-col-xs6">
-        <div class="stat-card">
-            <div class="stat-num">{{$stats['device_online']}}/{{$stats['device_total']}}</div>
-            <div class="stat-label">设备在线率</div>
+        <div class="layui-card-body" style="padding:15px;">
+            <div id="gauge-container"></div>
+            <div id="gauge-empty" style="text-align:center;color:#bbb;padding:40px 0;display:none;">暂无设备遥测数据</div>
         </div>
     </div>
 </div>
 
-<div style="margin-top: 20px;">
+<!-- 最近告警 -->
+<div style="margin-top:10px;">
     <div class="layui-card">
         <div class="layui-card-header">最近告警</div>
         <div class="layui-card-body">
             <table class="layui-table">
-                <colgroup>
-                    <col width="60">
-                    <col>
-                    <col>
-                    <col width="100">
-                    <col width="170">
-                </colgroup>
+                <colgroup><col width="60"><col><col><col width="100"><col width="170"></colgroup>
                 <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>规则名称</th>
-                        <th>设备</th>
-                        <th>状态</th>
-                        <th>触发时间</th>
-                    </tr>
+                    <tr><th>ID</th><th>规则名称</th><th>设备</th><th>状态</th><th>触发时间</th></tr>
                 </thead>
                 <tbody>
                     {volist name="recentAlerts" id="alert"}
@@ -81,4 +70,263 @@
         </div>
     </div>
 </div>
+
+<style>
+.hg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.device-group{margin-bottom:20px;}
+.device-group:last-child{margin-bottom:0;}
+.device-group-title{font-size:14px;font-weight:bold;color:#333;padding-bottom:8px;border-bottom:1px solid #f0f0f0;margin-bottom:10px;}
+.device-group-title .loc{font-weight:normal;color:#999;font-size:12px;margin-left:8px;}
+.device-group-title .status-dot{margin-left:4px;}
+.gauge-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.gauge-item{width:150px;text-align:center;}
+.gauge-chart{width:150px;height:120px;}
+.gauge-label{font-size:11px;color:#999;margin-top:-10px;}
+</style>
+{/block}
+
+{block name="script"}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script>
+(function(){
+    var WS_TOKEN = '{{$wsToken}}';
+    var deviceMetrics = {{$deviceMetrics}};
+
+    /* ========== 指标配置（范围、单位、颜色） ========== */
+    var METRIC_CFG = {
+        temperature:  { min: -10, max: 50,   unit: '°C',    color: ['#ff6b6b','#ee5a24'] },
+        humidity:     { min: 0,   max: 100,  unit: '%',     color: ['#4ecdc4','#0abde3'] },
+        pressure:     { min: 900, max: 1100, unit: 'hPa',   color: ['#45b7d1','#0984e3'] },
+        light:        { min: 0,   max: 10000,unit: 'lux',   color: ['#f9ca24','#f0932b'] },
+        co2:          { min: 0,   max: 5000, unit: 'ppm',   color: ['#a29bfe','#6c5ce7'] },
+        pm25:         { min: 0,   max: 500,  unit: 'μg/m³', color: ['#fd79a8','#e84393'] },
+        voltage:      { min: 0,   max: 260,  unit: 'V',     color: ['#55efc4','#00b894'] },
+        current:      { min: 0,   max: 50,   unit: 'A',     color: ['#ffeaa7','#fdcb6e'] },
+        power:        { min: 0,   max: 5000, unit: 'W',     color: ['#fab1a0','#e17055'] },
+        battery:      { min: 0,   max: 100,  unit: '%',     color: ['#55efc4','#00b894'] }
+    };
+    var DEFAULT_CFG = { min: 0, max: 100, unit: '', color: ['#74b9ff','#0984e3'] };
+
+    function getCfg(key) { return METRIC_CFG[key] || DEFAULT_CFG; }
+
+    /* ========== Gauge 实例管理 ========== */
+    var gauges = {};       // key: "devId-metric" → echarts instance
+    var container = document.getElementById('gauge-container');
+    var emptyHint = document.getElementById('gauge-empty');
+
+    function getOrCreateGroup(dev) {
+        var gid = 'dg-' + dev.id;
+        var el = document.getElementById(gid);
+        if (el) return el.querySelector('.gauge-grid');
+
+        var group = document.createElement('div');
+        group.className = 'device-group';
+        group.id = gid;
+
+        var dotColor = dev.online ? '#5cb85c' : '#ccc';
+        group.innerHTML = '<div class="device-group-title">'
+            + '<span class="hg-dot status-dot" id="dev-dot-' + dev.id + '" style="background:' + dotColor + ';"></span>'
+            + dev.name
+            + '<span class="loc">' + (dev.location || '') + '</span>'
+            + '</div><div class="gauge-grid"></div>';
+        container.appendChild(group);
+        return group.querySelector('.gauge-grid');
+    }
+
+    function createGauge(devId, metric, value) {
+        var key = devId + '-' + metric;
+        if (gauges[key]) return gauges[key];
+
+        var cfg = getCfg(metric);
+        var wrap = document.createElement('div');
+        wrap.className = 'gauge-item';
+        wrap.innerHTML = '<div class="gauge-chart" id="gc-' + key + '"></div>'
+            + '<div class="gauge-label">' + metric + '</div>';
+
+        return { wrap: wrap, cfg: cfg, key: key, value: value, metric: metric };
+    }
+
+    function initGauge(chartDom, value, cfg) {
+        var inst = echarts.init(chartDom);
+        inst.setOption({
+            series: [{
+                type: 'gauge',
+                startAngle: 180,
+                endAngle: 0,
+                min: cfg.min,
+                max: cfg.max,
+                radius: '100%',
+                center: ['50%', '80%'],
+                splitNumber: 4,
+                pointer: { show: false },
+                progress: {
+                    show: true,
+                    roundCap: true,
+                    width: 12,
+                    itemStyle: {
+                        color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+                            colorStops: [
+                                { offset: 0, color: cfg.color[0] },
+                                { offset: 1, color: cfg.color[1] }
+                            ]
+                        }
+                    }
+                },
+                axisLine: { lineStyle: { width: 12, color: [[1, '#eee']] } },
+                axisTick: { show: false },
+                splitLine: { show: false },
+                axisLabel: { show: false },
+                title: { show: false },
+                detail: {
+                    valueAnimation: true,
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    color: cfg.color[1],
+                    offsetCenter: [0, '-15%'],
+                    formatter: function(v) {
+                        return v.toFixed(1) + cfg.unit;
+                    }
+                },
+                data: [{ value: value }]
+            }]
+        });
+        return inst;
+    }
+
+    function updateGauge(devId, metric, value) {
+        var key = devId + '-' + metric;
+        if (gauges[key]) {
+            gauges[key].setOption({ series: [{ data: [{ value: value }] }] });
+        }
+    }
+
+    /* ========== 初始化：从后端数据渲染 ========== */
+    var hasGauge = false;
+    for (var i = 0; i < deviceMetrics.length; i++) {
+        var dev = deviceMetrics[i];
+        var metrics = dev.metrics;
+        var keys = Object.keys(metrics);
+        if (keys.length === 0) continue;
+        hasGauge = true;
+
+        var grid = getOrCreateGroup(dev);
+        for (var j = 0; j < keys.length; j++) {
+            var m = keys[j];
+            var info = createGauge(dev.id, m, metrics[m]);
+            grid.appendChild(info.wrap);
+            var chartDom = document.getElementById('gc-' + info.key);
+            if (chartDom) {
+                gauges[info.key] = initGauge(chartDom, metrics[m], info.cfg);
+            }
+        }
+    }
+    if (!hasGauge && emptyHint) emptyHint.style.display = 'block';
+
+    /* ========== 窗口 resize ========== */
+    window.addEventListener('resize', function() {
+        for (var k in gauges) { if (gauges[k] && gauges[k].resize) gauges[k].resize(); }
+    });
+
+    /* ========== WebSocket ========== */
+    if (!WS_TOKEN) return;
+
+    var wsUrl = '{{$wsUrl}}' + '?token=' + WS_TOKEN;
+    var ws, pingTimer;
+
+    // 维护 deviceMetrics 的 id→index 映射，方便根据 uid 快速查找
+    var uidMap = {};
+    for (var i = 0; i < deviceMetrics.length; i++) {
+        uidMap[deviceMetrics[i].uid] = deviceMetrics[i];
+    }
+
+    function connect() {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = function() {
+            setWsStatus('#5cb85c', '已连接');
+            pingTimer = setInterval(function(){
+                if (ws.readyState === 1) ws.send('{"type":"ping"}');
+                else clearInterval(pingTimer);
+            }, 30000);
+        };
+
+        ws.onmessage = function(e) {
+            var msg; try { msg = JSON.parse(e.data); } catch(_) { return; }
+            if (msg.type === 'telemetry')       onTelemetry(msg);
+            else if (msg.type === 'device_status') onDeviceStatus(msg);
+            else if (msg.type === 'alert')      onAlert(msg);
+        };
+
+        ws.onclose = function() {
+            setWsStatus('#e74c3c', '已断开');
+            clearInterval(pingTimer);
+            setTimeout(connect, 3000);
+        };
+
+        ws.onerror = function() { setWsStatus('#f0ad4e', '连接失败'); };
+    }
+
+    function setWsStatus(color, text) {
+        var el = document.getElementById('ws-status');
+        el.style.color = color;
+        el.innerHTML = '<span class="hg-dot" style="background:' + color + ';"></span>' + text;
+    }
+
+    /* ---- 遥测数据：更新或创建 gauge ---- */
+    function onTelemetry(msg) {
+        var uid = msg.device_uid;
+        var devInfo = uidMap[uid];
+        if (!devInfo) return;
+
+        var devId = devInfo.id;
+        var data = msg.data || {};
+
+        // 确保设备分组存在
+        var grid = getOrCreateGroup(devInfo);
+
+        for (var key in data) {
+            if (!data.hasOwnProperty(key)) continue;
+            var val = parseFloat(data[key]);
+            if (isNaN(val)) continue;
+
+            var gkey = devId + '-' + key;
+            if (gauges[gkey]) {
+                updateGauge(devId, key, val);
+            } else {
+                // 新指标，动态创建 gauge
+                var info = createGauge(devId, key, val);
+                grid.appendChild(info.wrap);
+                var chartDom = document.getElementById('gc-' + info.key);
+                if (chartDom) {
+                    gauges[info.key] = initGauge(chartDom, val, info.cfg);
+                }
+                if (emptyHint) emptyHint.style.display = 'none';
+            }
+        }
+    }
+
+    /* ---- 设备上下线 ---- */
+    function onDeviceStatus(msg) {
+        var dot = document.getElementById('dev-dot-' + msg.device_id);
+        if (dot) dot.style.background = msg.is_online ? '#5cb85c' : '#ccc';
+
+        var el = document.getElementById('stat-online');
+        if (!el) return;
+        var n = parseInt(el.textContent) || 0;
+        el.textContent = msg.is_online ? n + 1 : Math.max(0, n - 1);
+    }
+
+    /* ---- 告警 ---- */
+    function onAlert(msg) {
+        var el = document.getElementById('stat-alert');
+        if (el) {
+            var n = (parseInt(el.textContent) || 0) + 1;
+            el.textContent = n;
+            el.style.color = '#e74c3c';
+        }
+    }
+
+    connect();
+})();
+</script>
 {/block}

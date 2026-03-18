@@ -85,6 +85,8 @@ Home-Guardian/
 │   └── vite.config.ts
 ├── public/
 │   ├── mobile/              # 移动端构建产物 (npm run build)
+│   ├── api-docs.html        # Swagger UI 页面
+│   ├── openapi.yaml         # OpenAPI 3.0 spec (自动生成)
 │   └── favicon.ico
 ├── docker/nginx/            # Nginx 配置
 ├── docker-compose.yml       # 生产环境
@@ -180,6 +182,54 @@ Home-Guardian/
 | Nginx | 不启动 | 启动 |
 | 启动命令 | `docker compose up` | `docker compose -f docker-compose.yml up -d` |
 
+## API 文档
+
+项目内置 Swagger UI 在线 API 文档，基于 [swagger-php](https://github.com/zircote/swagger-php) 注解自动生成 OpenAPI 3.0 规范。
+
+### 访问方式
+
+服务启动后，浏览器打开：
+
+```
+http://localhost/api/docs        # 生产环境（Nginx）
+http://localhost:8787/api/docs   # 开发环境（直连 Webman）
+```
+
+### 在线调试
+
+1. 点击页面顶部 **Authorize** 按钮
+2. 填入登录接口返回的 `access_token`
+3. 即可在 Swagger UI 中直接 **Try it out** 调试任意接口
+
+### 重新生成 spec 文件
+
+当 Controller 注解有变更时，重新生成 `public/openapi.yaml`：
+
+```bash
+composer openapi
+# 或者
+vendor/bin/openapi app/ -o public/openapi.yaml
+```
+
+### 文档覆盖范围
+
+| 模块 | 端点数 | 说明 |
+|:---|:---|:---|
+| 认证 | 5 | 登录、注销、Token 刷新、个人信息 |
+| 设备管理 | 6 | CRUD + 发送控制指令 |
+| 设备属性 | 3 | 扩展属性读写 |
+| 遥测数据 | 3 | 原始数据、最新值、聚合图表 |
+| 告警规则 | 5 | CRUD |
+| 告警日志 | 4 | 查询、确认、解决 |
+| 自动化 | 5 | CRUD |
+| 通知渠道 | 6 | CRUD + 测试发送 |
+| 指令日志 | 2 | 查询 |
+| 用户管理 | 5 | CRUD + 角色分配 |
+| 角色管理 | 5 | CRUD |
+| 仪表盘 | 5 | CRUD |
+| 审计日志 | 1 | 查询 |
+| MQTT 认证 | 2 | EMQX 内部回调 |
+
 ## 配置 EMQX 设备认证
 
 服务启动后，需要在 EMQX 中配置 HTTP 认证，设备才能通过鉴权连接 Broker。
@@ -241,10 +291,11 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 - [x] 权限系统设计 (RBAC + 位置作用域)
 - [x] 认证系统设计 (JWT 双 Token + session)
 - [x] Docker Compose 环境搭建
-- [x] Web API 接口开发 (15+ REST Controller, 62+ Endpoints)
+- [x] Web API 接口开发 (15 REST Controller, 45+ Endpoints)
 - [x] WebSocket 实时推送服务
 - [x] 后台管理面板 (LayUI 服务端渲染)
 - [x] 移动端前端 (React 19 + Ant Design Mobile + PWA)
+- [x] API 在线文档 (Swagger UI + swagger-php 注解)
 - [ ] **下一步: 设备端 (ESP32/ESP8266) 固件开发**
 
 ## 贡献

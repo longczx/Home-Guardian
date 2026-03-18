@@ -91,6 +91,11 @@ services:
     environment:
       - "EMQX_NAME=home_guardian_node"
       - "EMQX_HOST=emqx"
+    volumes:
+      # HTTP Auth & ACL 配置，合并入默认 emqx.conf
+      - ./docker/emqx/auth.conf:/opt/emqx/etc/emqx.d/auth.conf:ro
+      # 持久化 EMQX 运行时数据（Dashboard 配置、内置数据库等）
+      - emqx_data:/opt/emqx/data
     networks:
       - home_guardian_net
     restart: unless-stopped
@@ -102,3 +107,4 @@ networks:
 volumes:
   pg_data:
   redis_data:
+  emqx_data:

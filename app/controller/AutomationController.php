@@ -15,14 +15,23 @@ use app\model\Automation;
 use app\service\AutomationService;
 use app\service\AuditService;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '自动化', description: '自动化规则的 CRUD')]
 class AutomationController
 {
-    /**
-     * 自动化列表
-     *
-     * GET /api/automations?trigger_type=telemetry&is_enabled=1&page=1&per_page=20
-     */
+    #[OA\Get(
+        path: '/automations',
+        summary: '自动化列表',
+        description: '获取自动化规则列表，支持按触发类型和启用状态筛选。',
+        security: [['bearerAuth' => []]],
+        tags: ['自动化'],
+    )]
+    #[OA\Parameter(name: 'trigger_type', in: 'query', description: 'telemetry / schedule', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'is_enabled', in: 'query', required: false, schema: new OA\Schema(type: 'integer', enum: [0, 1]))]
+    #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
+    #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 20))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
     public function index(Request $request)
     {
         $query = Automation::query();
@@ -40,9 +49,20 @@ class AutomationController
         return api_paginate($paginator);
     }
 
-    /**
-     * 自动化详情
-     */
+    #[OA\Get(
+        path: '/automations/{id}',
+        summary: '自动化详情',
+        security: [['bearerAuth' => []]],
+        tags: ['自动化'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Automation'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function show(Request $request, int $id)
     {
         $automation = Automation::with('creator:id,username')->find($id);
@@ -54,17 +74,39 @@ class AutomationController
         return api_success($automation);
     }
 
-    /**
-     * 创建自动化
-     *
-     * POST /api/automations
-     * Body: {
-     *   "name": "温度过高开空调",
-     *   "trigger_type": "telemetry",
-     *   "trigger_config": {"device_id": 1, "metric_key": "temperature", "condition": "GREATER_THAN", "value": 30},
-     *   "actions": [{"type": "device_command", "device_id": 2, "payload": {"action": "turn_on"}}]
-     * }
-     */
+    #[OA\Post(
+        path: '/automations',
+        summary: '创建自动化',
+        description: '创建新的自动化规则。支持遥测触发（telemetry）和定时触发（schedule）两种类型。',
+        security: [['bearerAuth' => []]],
+        tags: ['自动化'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['name', 'trigger_type', 'trigger_config', 'actions'],
+            properties: [
+                new OA\Property(property: 'name', type: 'string', example: '温度过高开空调'),
+                new OA\Property(property: 'trigger_type', type: 'string', enum: ['telemetry', 'schedule']),
+                new OA\Property(property: 'trigger_config', type: 'object', example: ['device_id' => 1, 'metric_key' => 'temperature', 'condition' => 'GREATER_THAN', 'value' => 30]),
+                new OA\Property(property: 'actions', type: 'array', items: new OA\Items(
+                    properties: [
+                        new OA\Property(property: 'type', type: 'string', example: 'device_command'),
+                        new OA\Property(property: 'device_id', type: 'integer', example: 2),
+                        new OA\Property(property: 'payload', type: 'object', example: ['action' => 'turn_on']),
+                    ]
+                )),
+                new OA\Property(property: 'is_enabled', type: 'boolean', example: true),
+            ]
+        )
+    )]
+    #[OA\Response(response: 201, description: '创建成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Automation'),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '参数验证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function store(Request $request)
     {
         $data = $request->post();
@@ -96,9 +138,28 @@ class AutomationController
         return api_success($automation, '自动化规则创建成功', 201);
     }
 
-    /**
-     * 更新自动化
-     */
+    #[OA\Put(
+        path: '/automations/{id}',
+        summary: '更新自动化',
+        security: [['bearerAuth' => []]],
+        tags: ['自动化'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\RequestBody(content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'name', type: 'string'),
+            new OA\Property(property: 'trigger_config', type: 'object'),
+            new OA\Property(property: 'actions', type: 'array', items: new OA\Items(type: 'object')),
+            new OA\Property(property: 'is_enabled', type: 'boolean'),
+        ]
+    ))]
+    #[OA\Response(response: 200, description: '更新成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Automation'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function update(Request $request, int $id)
     {
         $automation = Automation::find($id);
@@ -118,9 +179,15 @@ class AutomationController
         return api_success($automation, '自动化规则更新成功');
     }
 
-    /**
-     * 删除自动化
-     */
+    #[OA\Delete(
+        path: '/automations/{id}',
+        summary: '删除自动化',
+        security: [['bearerAuth' => []]],
+        tags: ['自动化'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '删除成功', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function destroy(Request $request, int $id)
     {
         $automation = Automation::find($id);

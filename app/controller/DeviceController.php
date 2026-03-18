@@ -19,7 +19,9 @@ use app\service\DeviceService;
 use app\service\MqttCommandService;
 use app\service\AuditService;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '设备管理', description: '设备的 CRUD 和控制指令')]
 class DeviceController
 {
     /**
@@ -29,6 +31,20 @@ class DeviceController
      *
      * 自动按用户的位置作用域过滤。
      */
+    #[OA\Get(
+        path: '/devices',
+        summary: '设备列表',
+        description: '获取设备列表，支持按类型、位置、在线状态、关键词筛选，自动按用户位置作用域过滤。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\Parameter(name: 'type', in: 'query', description: '设备类型（sensor/switch/camera 等）', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'location', in: 'query', description: '位置筛选', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'is_online', in: 'query', description: '在线状态（1=在线, 0=离线）', required: false, schema: new OA\Schema(type: 'integer', enum: [0, 1]))]
+    #[OA\Parameter(name: 'keyword', in: 'query', description: '搜索关键词（匹配名称或 UID）', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
+    #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 20, maximum: 100))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
     public function index(Request $request)
     {
         $query = Device::query();
@@ -68,6 +84,22 @@ class DeviceController
      *
      * 包含设备的扩展属性。
      */
+    #[OA\Get(
+        path: '/devices/{id}',
+        summary: '设备详情',
+        description: '获取指定设备的详细信息，包含扩展属性。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Device'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '设备不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 403, description: '无权访问', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function show(Request $request, int $id)
     {
         $device = Device::with('attributes')->find($id);
@@ -96,6 +128,34 @@ class DeviceController
      *   "mqtt_password": "device_password"
      * }
      */
+    #[OA\Post(
+        path: '/devices',
+        summary: '创建设备',
+        description: '注册一台新设备，需提供唯一的 device_uid 和 MQTT 密码。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['device_uid', 'name', 'type'],
+            properties: [
+                new OA\Property(property: 'device_uid', type: 'string', example: 'esp32-living-room-01', description: '设备唯一标识（创建后不可修改）'),
+                new OA\Property(property: 'name', type: 'string', example: '客厅温湿度传感器'),
+                new OA\Property(property: 'type', type: 'string', example: 'sensor'),
+                new OA\Property(property: 'location', type: 'string', example: '客厅'),
+                new OA\Property(property: 'mqtt_password', type: 'string', example: 'device_password', description: '设备 MQTT 连接密码'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 201, description: '创建成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'message', type: 'string', example: '设备创建成功'),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Device'),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '参数验证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function store(Request $request)
     {
         // 参数校验
@@ -119,6 +179,32 @@ class DeviceController
      *
      * PUT /api/devices/{id}
      */
+    #[OA\Put(
+        path: '/devices/{id}',
+        summary: '更新设备',
+        description: '更新设备信息。device_uid 不可修改。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\RequestBody(
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'name', type: 'string'),
+                new OA\Property(property: 'type', type: 'string'),
+                new OA\Property(property: 'location', type: 'string'),
+                new OA\Property(property: 'mqtt_password', type: 'string', description: '不传则不修改'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '更新成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/Device'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '设备不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 403, description: '无权操作', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function update(Request $request, int $id)
     {
         $device = Device::find($id);
@@ -151,6 +237,17 @@ class DeviceController
      *
      * DELETE /api/devices/{id}
      */
+    #[OA\Delete(
+        path: '/devices/{id}',
+        summary: '删除设备',
+        description: '删除指定设备及其关联数据。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '删除成功', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 404, description: '设备不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 403, description: '无权操作', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function destroy(Request $request, int $id)
     {
         $device = Device::find($id);
@@ -178,6 +275,35 @@ class DeviceController
      * POST /api/devices/{id}/command
      * Body: { "action": "turn_on", "params": {} }
      */
+    #[OA\Post(
+        path: '/devices/{id}/command',
+        summary: '发送控制指令',
+        description: '通过 MQTT 向设备发送控制指令。指令内容由设备固件定义。',
+        security: [['bearerAuth' => []]],
+        tags: ['设备管理'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['action'],
+            properties: [
+                new OA\Property(property: 'action', type: 'string', example: 'turn_on', description: '指令动作'),
+                new OA\Property(property: 'params', type: 'object', description: '指令参数'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '指令已发送', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', properties: [
+                new OA\Property(property: 'request_id', type: 'string'),
+                new OA\Property(property: 'status', type: 'string', example: 'pending'),
+            ], type: 'object'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '设备不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 422, description: '指令内容为空', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function sendCommand(Request $request, int $id)
     {
         $device = Device::find($id);

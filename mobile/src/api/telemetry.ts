@@ -21,10 +21,28 @@ export interface AggregatedPoint {
   sample_count: number;
 }
 
+export interface AlertLog {
+  id: number;
+  rule: { id: number; name: string } | null;
+  device: { id: number; name: string; location: string } | null;
+  status: string;
+  triggered_at: string;
+  resolved_at: string | null;
+  acknowledged_at: string | null;
+  triggered_value: unknown;
+  message: string | null;
+}
+
 export function getLatestTelemetry(deviceId: number) {
   return request.get<{ code: number; data: LatestMetric[] }>('/telemetry/latest', {
     params: { device_id: deviceId },
   });
+}
+
+export function getRawTelemetry(params: Record<string, string | number>) {
+  return request.get<{ code: number; data: { items: TelemetryPoint[]; total: number; current_page: number; last_page: number } }>(
+    '/telemetry', { params }
+  );
 }
 
 export function getAggregatedTelemetry(
@@ -38,15 +56,6 @@ export function getAggregatedTelemetry(
   });
 }
 
-export interface AlertLog {
-  id: number;
-  rule: { id: number; name: string } | null;
-  device: { id: number; name: string; location: string } | null;
-  status: string;
-  triggered_at: string;
-  triggered_value: unknown;
-}
-
 export function getAlertLogs(params?: Record<string, string | number>) {
   return request.get<{
     code: number;
@@ -54,6 +63,14 @@ export function getAlertLogs(params?: Record<string, string | number>) {
   }>('/alert-logs', { params });
 }
 
+export function getAlertLog(id: number) {
+  return request.get<{ code: number; data: AlertLog }>(`/alert-logs/${id}`);
+}
+
 export function acknowledgeAlert(id: number) {
   return request.patch(`/alert-logs/${id}/acknowledge`);
+}
+
+export function resolveAlert(id: number) {
+  return request.patch(`/alert-logs/${id}/resolve`);
 }

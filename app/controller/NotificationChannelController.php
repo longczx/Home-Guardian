@@ -17,12 +17,25 @@ use app\service\NotificationService;
 use app\service\AuditService;
 use app\exception\BusinessException;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '通知渠道', description: '通知渠道的 CRUD 和测试')]
 class NotificationChannelController
 {
-    /**
-     * 通知渠道列表
-     */
+    #[OA\Get(
+        path: '/notification-channels',
+        summary: '通知渠道列表',
+        description: '获取所有通知渠道，可按类型筛选。不分页。',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\Parameter(name: 'type', in: 'query', description: 'email / webhook / telegram / wechat_work / dingtalk', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/NotificationChannel')),
+        ]
+    ))]
     public function index(Request $request)
     {
         $query = NotificationChannel::query();
@@ -36,9 +49,20 @@ class NotificationChannelController
         return api_success($channels);
     }
 
-    /**
-     * 渠道详情
-     */
+    #[OA\Get(
+        path: '/notification-channels/{id}',
+        summary: '渠道详情',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/NotificationChannel'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function show(Request $request, int $id)
     {
         $channel = NotificationChannel::with('creator:id,username')->find($id);
@@ -50,16 +74,31 @@ class NotificationChannelController
         return api_success($channel);
     }
 
-    /**
-     * 创建通知渠道
-     *
-     * POST /api/notification-channels
-     * Body: {
-     *   "name": "管理员邮箱",
-     *   "type": "email",
-     *   "config": {"smtp_host": "smtp.gmail.com", "to": ["admin@example.com"]}
-     * }
-     */
+    #[OA\Post(
+        path: '/notification-channels',
+        summary: '创建通知渠道',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['name', 'type', 'config'],
+            properties: [
+                new OA\Property(property: 'name', type: 'string', example: '管理员邮箱'),
+                new OA\Property(property: 'type', type: 'string', enum: ['email', 'webhook', 'telegram', 'wechat_work', 'dingtalk']),
+                new OA\Property(property: 'config', type: 'object', example: ['smtp_host' => 'smtp.gmail.com', 'to' => ['admin@example.com']]),
+                new OA\Property(property: 'is_enabled', type: 'boolean', example: true),
+            ]
+        )
+    )]
+    #[OA\Response(response: 201, description: '创建成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/NotificationChannel'),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '参数验证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function store(Request $request)
     {
         $data = $request->post();
@@ -94,9 +133,27 @@ class NotificationChannelController
         return api_success($channel, '通知渠道创建成功', 201);
     }
 
-    /**
-     * 更新通知渠道
-     */
+    #[OA\Put(
+        path: '/notification-channels/{id}',
+        summary: '更新通知渠道',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\RequestBody(content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'name', type: 'string'),
+            new OA\Property(property: 'config', type: 'object'),
+            new OA\Property(property: 'is_enabled', type: 'boolean'),
+        ]
+    ))]
+    #[OA\Response(response: 200, description: '更新成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', ref: '#/components/schemas/NotificationChannel'),
+        ]
+    ))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function update(Request $request, int $id)
     {
         $channel = NotificationChannel::find($id);
@@ -120,9 +177,15 @@ class NotificationChannelController
         return api_success($channel->fresh(), '通知渠道更新成功');
     }
 
-    /**
-     * 删除通知渠道
-     */
+    #[OA\Delete(
+        path: '/notification-channels/{id}',
+        summary: '删除通知渠道',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '删除成功', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 404, description: '不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function destroy(Request $request, int $id)
     {
         $channel = NotificationChannel::find($id);
@@ -140,13 +203,17 @@ class NotificationChannelController
         return api_success(null, '通知渠道已删除');
     }
 
-    /**
-     * 测试通知渠道
-     *
-     * POST /api/notification-channels/{id}/test
-     *
-     * 向该渠道发送一条测试通知，验证配置是否正确。
-     */
+    #[OA\Post(
+        path: '/notification-channels/{id}/test',
+        summary: '测试通知渠道',
+        description: '向指定渠道发送一条测试通知，验证渠道配置是否正确。',
+        security: [['bearerAuth' => []]],
+        tags: ['通知渠道'],
+    )]
+    #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '测试通知已发送', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 404, description: '渠道不存在', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 500, description: '发送失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function test(Request $request, int $id)
     {
         $channel = NotificationChannel::find($id);

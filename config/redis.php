@@ -15,7 +15,7 @@
 return [
     // 默认连接（通用缓存）
     'default' => [
-        'host'     => 'redis://' . (getenv('REDIS_HOST') ?: 'redis'),
+        'host'     => getenv('REDIS_HOST') ?: 'redis',
         'options'  => [
             'prefix' => 'hg:',           // 全局键前缀，防止与其他应用冲突
         ],
@@ -26,7 +26,7 @@ return [
 
     // 消息队列专用连接
     'queue' => [
-        'host'     => 'redis://' . (getenv('REDIS_HOST') ?: 'redis'),
+        'host'     => getenv('REDIS_HOST') ?: 'redis',
         'options'  => [
             'prefix' => 'hg:q:',
         ],
@@ -37,7 +37,7 @@ return [
 
     // Pub/Sub 专用连接（MQTT → WebSocket 桥接）
     'pubsub' => [
-        'host'     => 'redis://' . (getenv('REDIS_HOST') ?: 'redis'),
+        'host'     => getenv('REDIS_HOST') ?: 'redis',
         'options'  => [],
         'password' => getenv('REDIS_PASSWORD') ?: null,
         'port'     => (int)(getenv('REDIS_PORT') ?: 6379),

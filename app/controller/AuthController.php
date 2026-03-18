@@ -16,7 +16,9 @@ use app\service\AuthService;
 use app\service\AuditService;
 use app\exception\BusinessException;
 use support\Request;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '认证', description: '登录、注销、Token 刷新、个人信息')]
 class AuthController
 {
     /**
@@ -25,6 +27,44 @@ class AuthController
      * POST /api/auth/login
      * Body: { "username": "dad", "password": "123456" }
      */
+    #[OA\Post(
+        path: '/auth/login',
+        summary: '用户登录',
+        description: '使用用户名和密码登录，获取 JWT access_token 和 refresh_token。',
+        tags: ['认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['username', 'password'],
+            properties: [
+                new OA\Property(property: 'username', type: 'string', example: 'dad'),
+                new OA\Property(property: 'password', type: 'string', example: '123456'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 200,
+        description: '登录成功',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'code', type: 'integer', example: 0),
+                new OA\Property(property: 'message', type: 'string', example: '登录成功'),
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'user', properties: [
+                        new OA\Property(property: 'id', type: 'integer', example: 1),
+                        new OA\Property(property: 'username', type: 'string', example: 'dad'),
+                        new OA\Property(property: 'roles', type: 'array', items: new OA\Items(type: 'string')),
+                        new OA\Property(property: 'permissions', type: 'array', items: new OA\Items(type: 'string')),
+                    ], type: 'object'),
+                    new OA\Property(property: 'access_token', type: 'string'),
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ], type: 'object'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 422, description: '参数缺失', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 401, description: '用户名或密码错误', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function login(Request $request)
     {
         $username = $request->post('username', '');
@@ -56,6 +96,37 @@ class AuthController
      * POST /api/auth/refresh
      * Body: { "refresh_token": "abc123..." }
      */
+    #[OA\Post(
+        path: '/auth/refresh',
+        summary: '刷新 access_token',
+        description: '使用 refresh_token 获取新的 access_token，无需重新登录。',
+        tags: ['认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['refresh_token'],
+            properties: [
+                new OA\Property(property: 'refresh_token', type: 'string'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 200,
+        description: '刷新成功',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'code', type: 'integer', example: 0),
+                new OA\Property(property: 'message', type: 'string', example: '刷新成功'),
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'access_token', type: 'string'),
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ], type: 'object'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 422, description: '参数缺失', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 401, description: 'Token 无效或已过期', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function refresh(Request $request)
     {
         $refreshToken = $request->post('refresh_token', '');
@@ -76,6 +147,21 @@ class AuthController
      * Body: { "refresh_token": "abc123..." }
      * Header: Authorization: Bearer {access_token}
      */
+    #[OA\Post(
+        path: '/auth/logout',
+        summary: '注销当前设备',
+        description: '注销当前设备的登录状态，使该设备的 refresh_token 失效。',
+        security: [['bearerAuth' => []]],
+        tags: ['认证'],
+    )]
+    #[OA\RequestBody(
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'refresh_token', type: 'string', description: '可选，传入则吊销该 token'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '已注销', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
     public function logout(Request $request)
     {
         $refreshToken = $request->post('refresh_token', '');
@@ -96,6 +182,14 @@ class AuthController
      * POST /api/auth/logout-all
      * Header: Authorization: Bearer {access_token}
      */
+    #[OA\Post(
+        path: '/auth/logout-all',
+        summary: '注销所有设备',
+        description: '注销该用户在所有设备上的登录状态。',
+        security: [['bearerAuth' => []]],
+        tags: ['认证'],
+    )]
+    #[OA\Response(response: 200, description: '已注销所有设备', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
     public function logoutAll(Request $request)
     {
         AuthService::logoutAll($request->userId());
@@ -113,6 +207,30 @@ class AuthController
      * GET /api/auth/me
      * Header: Authorization: Bearer {access_token}
      */
+    #[OA\Get(
+        path: '/auth/me',
+        summary: '获取当前用户信息',
+        description: '获取当前已认证用户的基本信息、角色、权限和位置作用域。',
+        security: [['bearerAuth' => []]],
+        tags: ['认证'],
+    )]
+    #[OA\Response(
+        response: 200,
+        description: '成功',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'code', type: 'integer', example: 0),
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'id', type: 'integer', example: 1),
+                    new OA\Property(property: 'username', type: 'string', example: 'dad'),
+                    new OA\Property(property: 'roles', type: 'array', items: new OA\Items(type: 'string')),
+                    new OA\Property(property: 'permissions', type: 'array', items: new OA\Items(type: 'string')),
+                    new OA\Property(property: 'locations', type: 'array', items: new OA\Items(type: 'string')),
+                ], type: 'object'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 401, description: '未认证', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function me(Request $request)
     {
         return api_success([

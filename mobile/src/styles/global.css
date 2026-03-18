@@ -1,6 +1,42 @@
 :root {
   --color-primary: #1677ff;
+  --color-primary-light: rgba(22, 119, 255, 0.1);
+  --color-success: #00b578;
+  --color-warning: #ff8f1f;
+  --color-danger: #ff3141;
   --color-bg: #f5f5f5;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #999999;
+  --color-border: #eeeeee;
+  --color-fill: #f5f5f5;
+  --color-fill-secondary: #f0f0f0;
+  --navbar-bg: #ffffff;
+  --tabbar-bg: #ffffff;
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --card-radius: 12px;
+}
+
+[data-theme='dark'] {
+  --color-primary: #4d96ff;
+  --color-primary-light: rgba(77, 150, 255, 0.15);
+  --color-success: #34c759;
+  --color-warning: #ff9f0a;
+  --color-danger: #ff453a;
+  --color-bg: #111111;
+  --color-bg-card: #1c1c1e;
+  --color-bg-elevated: #2c2c2e;
+  --color-text: #f5f5f5;
+  --color-text-secondary: #ababab;
+  --color-text-tertiary: #8e8e93;
+  --color-border: #38383a;
+  --color-fill: #1c1c1e;
+  --color-fill-secondary: #2c2c2e;
+  --navbar-bg: #1c1c1e;
+  --tabbar-bg: #1c1c1e;
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -13,10 +49,78 @@ html, body, #root {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   background: var(--color-bg);
+  color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
 
-/* 安全区域适配 */
 body {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* antd-mobile dark overrides */
+[data-theme='dark'] .adm-nav-bar {
+  background: var(--navbar-bg);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .adm-tab-bar {
+  background: var(--tabbar-bg);
+  border-top-color: var(--color-border);
+}
+
+[data-theme='dark'] .adm-card {
+  background: var(--color-bg-card);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .adm-list {
+  --adm-color-background: var(--color-bg-card);
+}
+
+[data-theme='dark'] .adm-list-item {
+  background: var(--color-bg-card);
+}
+
+[data-theme='dark'] .adm-list-body {
+  border-color: var(--color-border);
+}
+
+[data-theme='dark'] .adm-form {
+  --adm-color-background: var(--color-bg-card);
+}
+
+[data-theme='dark'] .adm-input-element {
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .adm-capsule-tabs-header {
+  background: var(--color-fill);
+}
+
+[data-theme='dark'] .adm-swipe-action {
+  background: var(--color-bg-card);
+}
+
+[data-theme='dark'] .adm-popup-body {
+  background: var(--color-bg-card);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .adm-dialog-body {
+  background: var(--color-bg-card);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .adm-selector {
+  --adm-color-background: var(--color-fill);
+}
+
+[data-theme='dark'] .adm-switch-checked {
+  --adm-color-primary: var(--color-primary);
+}
+
+[data-theme='dark'] .adm-picker-header,
+[data-theme='dark'] .adm-picker-body {
+  background: var(--color-bg-card);
+  color: var(--color-text);
 }

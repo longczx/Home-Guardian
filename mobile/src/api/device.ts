@@ -11,6 +11,11 @@ export interface Device {
   last_seen: string | null;
 }
 
+export interface DeviceAttribute {
+  key: string;
+  value: unknown;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -19,7 +24,7 @@ export interface PaginatedResponse<T> {
   last_page: number;
 }
 
-export function getDevices(params?: Record<string, string | number>) {
+export function getDevices(params?: Record<string, string | number | boolean>) {
   return request.get<{ code: number; data: PaginatedResponse<Device> }>('/devices', { params });
 }
 
@@ -32,4 +37,12 @@ export function sendCommand(id: number, payload: Record<string, unknown>) {
     `/devices/${id}/command`,
     payload
   );
+}
+
+export function getDeviceAttributes(deviceId: number) {
+  return request.get<{ code: number; data: DeviceAttribute[] }>(`/devices/${deviceId}/attributes`);
+}
+
+export function setDeviceAttributes(deviceId: number, attrs: Record<string, unknown>) {
+  return request.put(`/devices/${deviceId}/attributes`, attrs);
 }

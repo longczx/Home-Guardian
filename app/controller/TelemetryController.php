@@ -17,7 +17,9 @@ use app\model\TelemetryLog;
 use app\model\Device;
 use support\Request;
 use support\Db;
+use OpenApi\Attributes as OA;
 
+#[OA\Tag(name: '遥测数据', description: '设备遥测数据查询（只读）')]
 class TelemetryController
 {
     /**
@@ -27,6 +29,20 @@ class TelemetryController
      *
      * 必须指定 device_id，并自动应用位置作用域。
      */
+    #[OA\Get(
+        path: '/telemetry',
+        summary: '原始遥测数据',
+        description: '查询指定设备的原始遥测记录，支持按指标和时间范围筛选。必须指定 device_id。',
+        security: [['bearerAuth' => []]],
+        tags: ['遥测数据'],
+    )]
+    #[OA\Parameter(name: 'device_id', in: 'query', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Parameter(name: 'metric_key', in: 'query', description: '指标名（如 temperature）', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'start', in: 'query', description: '起始时间（ISO 8601）', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'end', in: 'query', description: '结束时间（ISO 8601）', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 50, maximum: 500))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
+    #[OA\Response(response: 422, description: '缺少 device_id', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function index(Request $request)
     {
         $deviceId = (int)$request->get('device_id', 0);
@@ -73,6 +89,27 @@ class TelemetryController
      * 从 Redis 缓存中获取（由 MqttSubscriber 实时更新），
      * 如果缓存未命中则从数据库查询最新一条记录。
      */
+    #[OA\Get(
+        path: '/telemetry/latest',
+        summary: '设备最新遥测值',
+        description: '获取指定设备各指标的最新值。优先从 Redis 缓存读取，未命中则查询数据库。',
+        security: [['bearerAuth' => []]],
+        tags: ['遥测数据'],
+    )]
+    #[OA\Parameter(name: 'device_id', in: 'query', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', type: 'array', items: new OA\Items(
+                properties: [
+                    new OA\Property(property: 'metric_key', type: 'string', example: 'temperature'),
+                    new OA\Property(property: 'value', example: 25.6),
+                    new OA\Property(property: 'ts', type: 'string', format: 'date-time'),
+                ]
+            )),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '缺少 device_id', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function latest(Request $request)
     {
         $deviceId = (int)$request->get('device_id', 0);
@@ -116,6 +153,32 @@ class TelemetryController
      *
      * 查询 telemetry_hourly 连续聚合视图，性能远优于查原始表。
      */
+    #[OA\Get(
+        path: '/telemetry/aggregated',
+        summary: '小时聚合数据',
+        description: '查询指定设备和指标的小时级聚合数据，用于图表展示。查询 telemetry_hourly 视图，性能优。',
+        security: [['bearerAuth' => []]],
+        tags: ['遥测数据'],
+    )]
+    #[OA\Parameter(name: 'device_id', in: 'query', required: true, schema: new OA\Schema(type: 'integer'))]
+    #[OA\Parameter(name: 'metric_key', in: 'query', required: true, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'start', in: 'query', description: '起始时间（默认 7 天前）', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'end', in: 'query', description: '结束时间（默认当前）', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(
+        properties: [
+            new OA\Property(property: 'code', type: 'integer', example: 0),
+            new OA\Property(property: 'data', type: 'array', items: new OA\Items(
+                properties: [
+                    new OA\Property(property: 'bucket', type: 'string', format: 'date-time'),
+                    new OA\Property(property: 'avg_value', type: 'number', example: 25.3),
+                    new OA\Property(property: 'min_value', type: 'number', example: 24.1),
+                    new OA\Property(property: 'max_value', type: 'number', example: 26.8),
+                    new OA\Property(property: 'sample_count', type: 'integer', example: 60),
+                ]
+            )),
+        ]
+    ))]
+    #[OA\Response(response: 422, description: '参数缺失', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function aggregated(Request $request)
     {
         $deviceId = (int)$request->get('device_id', 0);
