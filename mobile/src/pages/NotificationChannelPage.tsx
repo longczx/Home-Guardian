@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavBar, List, Switch, Button, Dialog, Toast, Tag } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
+import { AddOutline } from 'antd-mobile-icons';
 import {
   getNotificationChannels,
   deleteNotificationChannel,
@@ -70,7 +71,13 @@ export default function NotificationChannelPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
-      <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
+      <NavBar
+        onBack={() => navigate(-1)}
+        right={
+          <AddOutline fontSize={22} onClick={() => navigate('/mobile/notification-channels/create')} style={{ color: 'var(--color-primary)' }} />
+        }
+        style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}
+      >
         通知渠道
       </NavBar>
 
@@ -81,6 +88,7 @@ export default function NotificationChannelPage() {
           {channels.map((ch) => (
             <List.Item
               key={ch.id}
+              onClick={() => navigate(`/mobile/notification-channels/${ch.id}/edit`)}
               description={
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                   <Button size="mini" color="primary" fill="outline" onClick={(e) => { e.stopPropagation(); handleTest(ch); }}>

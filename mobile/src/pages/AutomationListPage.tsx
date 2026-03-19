@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { List, Switch, Toast, Button, Tag } from 'antd-mobile';
+import { List, Switch, Toast, Button, Tag, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { AddOutline } from 'antd-mobile-icons';
-import { getAutomations, updateAutomation, type Automation } from '@/api/automation';
+import { getAutomations, updateAutomation, deleteAutomation, type Automation } from '@/api/automation';
 import ActionSummary from '@/components/ActionSummary';
 import EmptyState from '@/components/EmptyState';
 import PageLoading from '@/components/PageLoading';
@@ -36,6 +36,21 @@ export default function AutomationListPage() {
     }
   };
 
+  const handleDelete = (item: Automation) => {
+    Dialog.confirm({
+      content: `确认删除「${item.name}」?`,
+      onConfirm: async () => {
+        try {
+          await deleteAutomation(item.id);
+          setAutomations((prev) => prev.filter((a) => a.id !== item.id));
+          Toast.show({ content: '已删除', icon: 'success' });
+        } catch {
+          Toast.show({ content: '删除失败', icon: 'fail' });
+        }
+      },
+    });
+  };
+
   if (loading) return <PageLoading />;
 
   return (
@@ -64,6 +79,11 @@ export default function AutomationListPage() {
                       <RelativeTime date={item.last_triggered_at} />
                     </div>
                   )}
+                  <div style={{ marginTop: 6 }}>
+                    <Button size="mini" color="danger" fill="outline" onClick={(e) => { e.stopPropagation(); handleDelete(item); }}>
+                      删除
+                    </Button>
+                  </div>
                 </div>
               }
               extra={

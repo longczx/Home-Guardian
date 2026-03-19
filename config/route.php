@@ -158,6 +158,8 @@ Route::group('/api', function () {
     Route::get('/auth/me', [app\controller\AuthController::class, 'me']);
     Route::post('/auth/logout', [app\controller\AuthController::class, 'logout']);
     Route::post('/auth/logout-all', [app\controller\AuthController::class, 'logoutAll']);
+    Route::post('/auth/change-password', [app\controller\AuthController::class, 'changePassword'])
+        ->middleware([AuditLogMiddleware::class]);
 
     /* ---------- 设备管理 ---------- */
     Route::get('/devices', [app\controller\DeviceController::class, 'index'])

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { NavBar, List, Switch, Toast, Button } from 'antd-mobile';
+import { NavBar, List, Switch, Toast, Button, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { AddOutline } from 'antd-mobile-icons';
-import { getAlertRules, updateAlertRule, type AlertRule } from '@/api/alertRule';
+import { getAlertRules, updateAlertRule, deleteAlertRule, type AlertRule } from '@/api/alertRule';
 import ConditionSummary from '@/components/ConditionSummary';
 import EmptyState from '@/components/EmptyState';
 import PageLoading from '@/components/PageLoading';
@@ -30,6 +30,21 @@ export default function AlertRuleListPage() {
     }
   };
 
+  const handleDelete = (rule: AlertRule) => {
+    Dialog.confirm({
+      content: `确认删除「${rule.name}」?`,
+      onConfirm: async () => {
+        try {
+          await deleteAlertRule(rule.id);
+          setRules((prev) => prev.filter((r) => r.id !== rule.id));
+          Toast.show({ content: '已删除', icon: 'success' });
+        } catch {
+          Toast.show({ content: '删除失败', icon: 'fail' });
+        }
+      },
+    });
+  };
+
   if (loading) return <PageLoading />;
 
   return (
@@ -53,12 +68,19 @@ export default function AlertRuleListPage() {
               key={rule.id}
               onClick={() => navigate(`/mobile/alert-rules/${rule.id}/edit`)}
               description={
-                <ConditionSummary
-                  telemetryKey={rule.telemetry_key}
-                  condition={rule.condition}
-                  thresholdValue={rule.threshold_value}
-                  duration={rule.trigger_duration_sec}
-                />
+                <div>
+                  <ConditionSummary
+                    telemetryKey={rule.telemetry_key}
+                    condition={rule.condition}
+                    thresholdValue={rule.threshold_value}
+                    duration={rule.trigger_duration_sec}
+                  />
+                  <div style={{ marginTop: 6 }}>
+                    <Button size="mini" color="danger" fill="outline" onClick={(e) => { e.stopPropagation(); handleDelete(rule); }}>
+                      删除
+                    </Button>
+                  </div>
+                </div>
               }
               extra={
                 <div onClick={(e) => e.stopPropagation()}>

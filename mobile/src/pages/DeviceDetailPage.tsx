@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh } from 'antd-mobile';
+import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh, Dialog, Input, List } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getDevice, sendCommand, type Device } from '@/api/device';
+import { getDevice, sendCommand, getDeviceAttributes, setDeviceAttributes, type Device, type DeviceAttribute } from '@/api/device';
 import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
 import { useWSSubscription } from '@/hooks/useWSSubscription';
 import StatusTag from '@/components/StatusTag';
@@ -27,6 +27,7 @@ export default function DeviceDetailPage() {
   const navigate = useNavigate();
   const [device, setDevice] = useState<Device | null>(null);
   const [metrics, setMetrics] = useState<LatestMetric[]>([]);
+  const [attributes, setAttributes] = useState<DeviceAttribute[]>([]);
   const [loading, setLoading] = useState(true);
   const [switchOn, setSwitchOn] = useState(false);
   const [brightness, setBrightness] = useState(50);
@@ -36,12 +37,14 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async () => {
     if (!deviceId) return;
     try {
-      const [deviceRes, telemetryRes] = await Promise.all([
+      const [deviceRes, telemetryRes, attrRes] = await Promise.all([
         getDevice(deviceId),
         getLatestTelemetry(deviceId),
+        getDeviceAttributes(deviceId),
       ]);
       if (deviceRes.data.code === 0) setDevice(deviceRes.data.data);
       if (telemetryRes.data.code === 0) setMetrics(telemetryRes.data.data);
+      if (attrRes.data.code === 0) setAttributes(attrRes.data.data);
     } finally {
       setLoading(false);
     }
@@ -70,6 +73,56 @@ export default function DeviceDetailPage() {
     } catch {
       Toast.show({ content: '发送失败', icon: 'fail' });
     }
+  };
+
+  const handleEditAttr = (attr: DeviceAttribute) => {
+    let newValue = String(attr.value ?? '');
+    Dialog.confirm({
+      title: `编辑属性: ${attr.key}`,
+      content: (
+        <Input
+          defaultValue={newValue}
+          onChange={(v) => { newValue = v; }}
+          placeholder="属性值"
+        />
+      ),
+      onConfirm: async () => {
+        try {
+          await setDeviceAttributes(deviceId, { [attr.key]: newValue });
+          setAttributes((prev) => prev.map((a) => (a.key === attr.key ? { ...a, value: newValue } : a)));
+          Toast.show({ content: '已更新', icon: 'success' });
+        } catch {
+          Toast.show({ content: '更新失败', icon: 'fail' });
+        }
+      },
+    });
+  };
+
+  const handleAddAttr = () => {
+    let newKey = '';
+    let newValue = '';
+    Dialog.confirm({
+      title: '新增属性',
+      content: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Input onChange={(v) => { newKey = v; }} placeholder="属性名 (key)" />
+          <Input onChange={(v) => { newValue = v; }} placeholder="属性值 (value)" />
+        </div>
+      ),
+      onConfirm: async () => {
+        if (!newKey) {
+          Toast.show({ content: '属性名不能为空', icon: 'fail' });
+          return;
+        }
+        try {
+          await setDeviceAttributes(deviceId, { [newKey]: newValue });
+          setAttributes((prev) => [...prev, { key: newKey, value: newValue }]);
+          Toast.show({ content: '已添加', icon: 'success' });
+        } catch {
+          Toast.show({ content: '添加失败', icon: 'fail' });
+        }
+      },
+    });
   };
 
   if (loading) return <PageLoading />;
@@ -147,6 +200,44 @@ export default function DeviceDetailPage() {
               </Grid>
             </>
           )}
+
+          {/* Device Attributes */}
+          <Card
+            style={{ borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', background: 'var(--color-bg-card)', marginBottom: 12 }}
+            bodyStyle={{ padding: 16 }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 12 }}>
+              设备属性
+            </div>
+            {attributes.length > 0 ? (
+              <List style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+                {attributes.map((attr) => (
+                  <List.Item
+                    key={attr.key}
+                    onClick={() => handleEditAttr(attr)}
+                    extra={<span style={{ color: 'var(--color-text)', fontSize: 14 }}>{String(attr.value ?? '--')}</span>}
+                    style={{ background: 'transparent' }}
+                  >
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>{attr.key}</span>
+                  </List.Item>
+                ))}
+              </List>
+            ) : (
+              <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13, textAlign: 'center', padding: '8px 0' }}>
+                暂无属性
+              </div>
+            )}
+            <Button
+              block
+              size="small"
+              fill="outline"
+              color="primary"
+              onClick={handleAddAttr}
+              style={{ borderRadius: 6, marginTop: 8 }}
+            >
+              新增属性
+            </Button>
+          </Card>
 
           {/* Control Panel */}
           {device.type === 'actuator' && (

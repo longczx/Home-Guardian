@@ -3,15 +3,17 @@
  * Home Guardian - 认证控制器
  *
  * 处理用户认证相关的 API 请求：
- *   POST /api/auth/login       — 用户登录
- *   POST /api/auth/refresh     — 刷新 access_token
- *   POST /api/auth/logout      — 注销当前设备
- *   POST /api/auth/logout-all  — 注销所有设备
- *   GET  /api/auth/me          — 获取当前用户信息
+ *   POST /api/auth/login           — 用户登录
+ *   POST /api/auth/refresh         — 刷新 access_token
+ *   POST /api/auth/logout          — 注销当前设备
+ *   POST /api/auth/logout-all      — 注销所有设备
+ *   POST /api/auth/change-password — 修改密码
+ *   GET  /api/auth/me              — 获取当前用户信息
  */
 
 namespace app\controller;
 
+use app\model\User;
 use app\service\AuthService;
 use app\service\AuditService;
 use app\exception\BusinessException;
@@ -240,5 +242,62 @@ class AuthController
             'permissions' => $request->user->permissions,
             'locations'   => $request->user->locations,
         ]);
+    }
+
+    /**
+     * 修改密码
+     *
+     * POST /api/auth/change-password
+     * Body: { "old_password": "xxx", "new_password": "yyy" }
+     * Header: Authorization: Bearer {access_token}
+     */
+    #[OA\Post(
+        path: '/auth/change-password',
+        summary: '修改密码',
+        description: '修改当前用户的密码，需提供旧密码和新密码。',
+        security: [['bearerAuth' => []]],
+        tags: ['认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['old_password', 'new_password'],
+            properties: [
+                new OA\Property(property: 'old_password', type: 'string'),
+                new OA\Property(property: 'new_password', type: 'string', minLength: 6),
+            ]
+        )
+    )]
+    #[OA\Response(response: 200, description: '密码修改成功', content: new OA\JsonContent(ref: '#/components/schemas/SuccessResponse'))]
+    #[OA\Response(response: 422, description: '参数校验失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 401, description: '旧密码错误', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    public function changePassword(Request $request)
+    {
+        $oldPassword = $request->post('old_password', '');
+        $newPassword = $request->post('new_password', '');
+
+        if (empty($oldPassword) || empty($newPassword)) {
+            return api_error('旧密码和新密码不能为空', 422, 1000);
+        }
+
+        if (mb_strlen($newPassword) < 6) {
+            return api_error('新密码长度不能少于 6 位', 422, 1001);
+        }
+
+        $user = User::find($request->userId());
+        if (!$user) {
+            return api_error('用户不存在', 404, 1002);
+        }
+
+        if (!$user->verifyPassword($oldPassword)) {
+            return api_error('旧密码错误', 401, 1003);
+        }
+
+        $user->setPassword($newPassword);
+        $user->save();
+
+        AuditService::log($request, 'change_password', 'user', $user->id);
+
+        return api_success(null, '密码修改成功');
     }
 }

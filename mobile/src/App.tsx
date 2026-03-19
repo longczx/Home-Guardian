@@ -18,6 +18,7 @@ const AutomationListPage = lazy(() => import('@/pages/AutomationListPage'));
 const AutomationFormPage = lazy(() => import('@/pages/AutomationFormPage'));
 const CommandHistoryPage = lazy(() => import('@/pages/CommandHistoryPage'));
 const NotificationChannelPage = lazy(() => import('@/pages/NotificationChannelPage'));
+const NotificationChannelFormPage = lazy(() => import('@/pages/NotificationChannelFormPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const AboutPage = lazy(() => import('@/pages/AboutPage'));
@@ -100,6 +101,14 @@ export default function App() {
           <Route
             path="/mobile/notification-channels"
             element={<ProtectedRoute><NotificationChannelPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/mobile/notification-channels/create"
+            element={<ProtectedRoute><NotificationChannelFormPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/mobile/notification-channels/:id/edit"
+            element={<ProtectedRoute><NotificationChannelFormPage /></ProtectedRoute>}
           />
           <Route
             path="/mobile/profile/password"
