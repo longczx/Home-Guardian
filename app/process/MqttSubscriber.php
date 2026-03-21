@@ -50,6 +50,11 @@ class MqttSubscriber
     private ?\Redis $redisPub = null;
 
     /**
+     * Redis 连接（用于缓存最新遥测值，DB0）
+     */
+    private ?\Redis $redisCache = null;
+
+    /**
      * Worker 进程启动回调
      */
     public function onWorkerStart(): void
@@ -90,6 +95,14 @@ class MqttSubscriber
             $this->redisPub->auth($password);
         }
         $this->redisPub->select(2);
+
+        // 缓存连接（DB0，存储设备最新遥测值）
+        $this->redisCache = new \Redis();
+        $this->redisCache->connect($host, $port, 3);
+        if ($password) {
+            $this->redisCache->auth($password);
+        }
+        $this->redisCache->select(0);
     }
 
     /**
@@ -235,26 +248,40 @@ class MqttSubscriber
         }
 
         // 3. 缓存最新值到 Redis（供 API 快速查询）
-        $cacheKey = "hg:device:latest:{$deviceId}";
-        $cacheRedis = new \Redis();
-        $cacheRedis->connect(getenv('REDIS_HOST') ?: 'redis', (int)(getenv('REDIS_PORT') ?: 6379), 1);
-        $password = getenv('REDIS_PASSWORD') ?: '';
-        if ($password) $cacheRedis->auth($password);
-        $cacheRedis->select(0);
-        $cacheRedis->setEx($cacheKey, 3600, json_encode($data));
-        $cacheRedis->close();
+        try {
+            $cacheKey = "hg:device:latest:{$deviceId}";
+            $this->redisCache->setEx($cacheKey, 3600, json_encode($data));
+        } catch (\Throwable $e) {
+            Log::error("Redis 缓存写入失败: {$e->getMessage()}");
+            // 尝试重连
+            try {
+                $host = getenv('REDIS_HOST') ?: 'redis';
+                $port = (int)(getenv('REDIS_PORT') ?: 6379);
+                $password = getenv('REDIS_PASSWORD') ?: '';
+                $this->redisCache = new \Redis();
+                $this->redisCache->connect($host, $port, 3);
+                if ($password) $this->redisCache->auth($password);
+                $this->redisCache->select(0);
+            } catch (\Throwable $e2) {
+                $this->redisCache = null;
+            }
+        }
 
         // 4. 推送到 WebSocket（实时仪表盘更新）
-        $wsMessage = json_encode([
-            'type'            => 'telemetry',
-            'device_id'       => $deviceId,
-            'device_uid'      => $deviceUid,
-            'device_location' => $deviceInfo['location'],
-            'data'            => $data,
-            'ts'              => $now,
-        ], JSON_UNESCAPED_UNICODE);
+        try {
+            $wsMessage = json_encode([
+                'type'            => 'telemetry',
+                'device_id'       => $deviceId,
+                'device_uid'      => $deviceUid,
+                'device_location' => $deviceInfo['location'],
+                'data'            => $data,
+                'ts'              => $now,
+            ], JSON_UNESCAPED_UNICODE);
 
-        $this->redisPub->publish('ws:broadcast', $wsMessage);
+            $this->redisPub->publish('ws:broadcast', $wsMessage);
+        } catch (\Throwable $e) {
+            Log::error("WebSocket 推送失败: {$e->getMessage()}");
+        }
 
         // 更新设备在线状态
         DeviceService::updateOnlineStatus($deviceUid, true);
@@ -353,6 +380,9 @@ class MqttSubscriber
         }
         if ($this->redisPub) {
             $this->redisPub->close();
+        }
+        if ($this->redisCache) {
+            $this->redisCache->close();
         }
         Log::info('MqttSubscriber 进程已停止');
     }

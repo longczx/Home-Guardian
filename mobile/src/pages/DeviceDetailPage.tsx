@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh, Dialog, Input, List } from 'antd-mobile';
+import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh, List } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getDevice, sendCommand, getDeviceAttributes, setDeviceAttributes, type Device, type DeviceAttribute } from '@/api/device';
 import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
@@ -50,15 +50,24 @@ export default function DeviceDetailPage() {
   );
 
   // Real-time telemetry update
-  const handleWS = useCallback((msg: { type: string; data: unknown }) => {
-    const d = msg.data as { device_id: number; metric_key: string; value: unknown; ts: string };
-    if (d.device_id === deviceId) {
-      setMetrics((prev) => {
-        const idx = prev.findIndex((m) => m.metric_key === d.metric_key);
-        if (idx >= 0) return prev.map((m, i) => (i === idx ? { ...m, value: d.value, ts: d.ts } : m));
-        return [...prev, { metric_key: d.metric_key, value: d.value, ts: d.ts }];
-      });
-    }
+  const handleWS = useCallback((msg: Record<string, unknown>) => {
+    const msgDeviceId = msg.device_id as number;
+    if (msgDeviceId !== deviceId) return;
+    const data = msg.data as Record<string, unknown> | undefined;
+    const ts = (msg.ts as string) || new Date().toISOString();
+    if (!data || typeof data !== 'object') return;
+    setMetrics((prev) => {
+      const updated = [...prev];
+      for (const [key, value] of Object.entries(data)) {
+        const idx = updated.findIndex((m) => m.metric_key === key);
+        if (idx >= 0) {
+          updated[idx] = { ...updated[idx], value, ts };
+        } else {
+          updated.push({ metric_key: key, value, ts });
+        }
+      }
+      return updated;
+    });
   }, [deviceId]);
   useWSSubscription('telemetry', handleWS);
 
@@ -72,54 +81,29 @@ export default function DeviceDetailPage() {
     }
   };
 
-  const handleEditAttr = (attr: DeviceAttribute) => {
-    let newValue = String(attr.value ?? '');
-    Dialog.confirm({
-      title: `编辑属性: ${attr.key}`,
-      content: (
-        <Input
-          defaultValue={newValue}
-          onChange={(v) => { newValue = v; }}
-          placeholder="属性值"
-        />
-      ),
-      onConfirm: async () => {
-        try {
-          await setDeviceAttributes(deviceId, { [attr.key]: newValue });
-          setAttributes((prev) => prev.map((a) => (a.key === attr.key ? { ...a, value: newValue } : a)));
-          Toast.show({ content: '已更新', icon: 'success' });
-        } catch {
-          Toast.show({ content: '更新失败', icon: 'fail' });
-        }
-      },
-    });
+  const handleEditAttr = async (attr: DeviceAttribute) => {
+    const newValue = window.prompt(`编辑属性: ${attr.key}`, String(attr.value ?? ''));
+    if (newValue === null) return; // 用户取消
+    try {
+      await setDeviceAttributes(deviceId, { [attr.key]: newValue });
+      setAttributes((prev) => prev.map((a) => (a.key === attr.key ? { ...a, value: newValue } : a)));
+      Toast.show({ content: '已更新', icon: 'success' });
+    } catch {
+      Toast.show({ content: '更新失败', icon: 'fail' });
+    }
   };
 
-  const handleAddAttr = () => {
-    let newKey = '';
-    let newValue = '';
-    Dialog.confirm({
-      title: '新增属性',
-      content: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Input onChange={(v) => { newKey = v; }} placeholder="属性名 (key)" />
-          <Input onChange={(v) => { newValue = v; }} placeholder="属性值 (value)" />
-        </div>
-      ),
-      onConfirm: async () => {
-        if (!newKey) {
-          Toast.show({ content: '属性名不能为空', icon: 'fail' });
-          return;
-        }
-        try {
-          await setDeviceAttributes(deviceId, { [newKey]: newValue });
-          setAttributes((prev) => [...prev, { key: newKey, value: newValue }]);
-          Toast.show({ content: '已添加', icon: 'success' });
-        } catch {
-          Toast.show({ content: '添加失败', icon: 'fail' });
-        }
-      },
-    });
+  const handleAddAttr = async () => {
+    const newKey = window.prompt('请输入属性名 (key)');
+    if (!newKey) return;
+    const newValue = window.prompt(`请输入 "${newKey}" 的值`) ?? '';
+    try {
+      await setDeviceAttributes(deviceId, { [newKey]: newValue });
+      setAttributes((prev) => [...prev, { key: newKey, value: newValue }]);
+      Toast.show({ content: '已添加', icon: 'success' });
+    } catch {
+      Toast.show({ content: '添加失败', icon: 'fail' });
+    }
   };
 
   if (loading) return <PageLoading />;

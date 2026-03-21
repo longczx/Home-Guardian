@@ -90,7 +90,7 @@
 <script>
 (function(){
     var WS_TOKEN = '{{$wsToken}}';
-    var deviceMetrics = {{$deviceMetrics}};
+    var deviceMetrics = {php}echo $deviceMetrics;{/php};
 
     /* ========== 指标配置（范围、单位、颜色） ========== */
     var METRIC_CFG = {

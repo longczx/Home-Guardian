@@ -130,7 +130,19 @@ class TelemetryController
         $cached = \support\Redis::connection('default')->get($cacheKey);
 
         if ($cached) {
-            return api_success(json_decode($cached, true));
+            $data = json_decode($cached, true) ?: [];
+            // 转换为与数据库查询一致的格式: [{metric_key, value, ts}, ...]
+            $now = date('Y-m-d\TH:i:sP');
+            $result = [];
+            foreach ($data as $key => $value) {
+                if ($key === 'timestamp' || $key === 'request_id') continue;
+                $result[] = [
+                    'metric_key' => $key,
+                    'value'      => $value,
+                    'ts'         => $now,
+                ];
+            }
+            return api_success($result);
         }
 
         // Redis 未命中，从数据库查询每个指标的最新值
@@ -141,7 +153,12 @@ class TelemetryController
             ->orderBy('ts', 'desc')
             ->get()
             ->unique('metric_key')  // 每个指标只取最新一条
-            ->values();
+            ->values()
+            ->map(function ($item) {
+                // value 是 JSONB 字段，解码为原生类型
+                $item->value = json_decode($item->value, true) ?? $item->value;
+                return $item;
+            });
 
         return api_success($latest);
     }
@@ -200,13 +217,39 @@ class TelemetryController
         $start = $request->get('start', now()->subDays(7)->toDateTimeString());
         $end = $request->get('end', now()->toDateTimeString());
 
-        $data = Db::table('telemetry_hourly')
-            ->select('bucket', 'avg_value', 'min_value', 'max_value', 'sample_count')
-            ->where('device_id', $deviceId)
-            ->where('metric_key', $metricKey)
-            ->whereBetween('bucket', [$start, $end])
-            ->orderBy('bucket', 'asc')
-            ->get();
+        // 计算时间跨度，短范围直接查原始表（连续聚合有 1 小时延迟）
+        $startTs = strtotime($start);
+        $endTs = strtotime($end);
+        $spanHours = ($endTs - $startTs) / 3600;
+
+        if ($spanHours <= 24) {
+            // 短范围：从原始表按 5 分钟分桶聚合
+            $data = Db::select("
+                SELECT
+                    time_bucket('5 minutes', ts) AS bucket,
+                    avg((value ->> 0)::NUMERIC)  AS avg_value,
+                    min((value ->> 0)::NUMERIC)  AS min_value,
+                    max((value ->> 0)::NUMERIC)  AS max_value,
+                    count(*)                     AS sample_count
+                FROM telemetry_logs
+                WHERE device_id = ?
+                  AND metric_key = ?
+                  AND ts BETWEEN ? AND ?
+                  AND (jsonb_typeof(value) = 'number'
+                       OR (jsonb_typeof(value) = 'array' AND jsonb_typeof(value -> 0) = 'number'))
+                GROUP BY bucket
+                ORDER BY bucket ASC
+            ", [$deviceId, $metricKey, $start, $end]);
+        } else {
+            // 长范围：从连续聚合视图查询
+            $data = Db::table('telemetry_hourly')
+                ->select('bucket', 'avg_value', 'min_value', 'max_value', 'sample_count')
+                ->where('device_id', $deviceId)
+                ->where('metric_key', $metricKey)
+                ->whereBetween('bucket', [$start, $end])
+                ->orderBy('bucket', 'asc')
+                ->get();
+        }
 
         return api_success($data);
     }

@@ -4,7 +4,7 @@ type WSHandler = (msg: WSMessage) => void;
 
 export interface WSMessage {
   type: string;
-  data: unknown;
+  [key: string]: unknown;
 }
 
 interface WSState {

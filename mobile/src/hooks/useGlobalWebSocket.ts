@@ -36,12 +36,17 @@ export function useGlobalWebSocket() {
           dispatch(msg);
 
           if (msg.type === 'device_status') {
-            const d = msg.data as { device_uid: string; online: boolean };
-            updateDeviceStatus(d.device_uid, d.online);
+            updateDeviceStatus(msg.device_uid as string, msg.is_online as boolean);
           }
           if (msg.type === 'telemetry') {
-            const d = msg.data as { device_id: number; metric_key: string; value: unknown; ts: string };
-            updateMetric(d.device_id, d.metric_key, d.value, d.ts);
+            const dId = msg.device_id as number;
+            const data = msg.data as Record<string, unknown>;
+            const ts = (msg.ts as string) || new Date().toISOString();
+            if (data && typeof data === 'object') {
+              for (const [key, value] of Object.entries(data)) {
+                updateMetric(dId, key, value, ts);
+              }
+            }
           }
           if (msg.type === 'alert') {
             alertIncrement();

@@ -53,11 +53,11 @@ class DeviceAttributeController
 
         $attributes = DeviceAttribute::where('device_id', $deviceId)->get();
 
-        // 转换为 key-value 对象格式，方便前端使用
-        $result = [];
-        foreach ($attributes as $attr) {
-            $result[$attr->attribute_key] = $attr->attribute_value;
-        }
+        // 转换为 [{key, value}] 数组格式，与前端 DeviceAttribute 接口匹配
+        $result = $attributes->map(fn($attr) => [
+            'key'   => $attr->attribute_key,
+            'value' => $attr->attribute_value,
+        ])->values();
 
         return api_success($result);
     }
