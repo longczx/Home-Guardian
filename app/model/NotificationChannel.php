@@ -45,6 +45,7 @@ class NotificationChannel extends Model
     const TYPE_TELEGRAM    = 'telegram';
     const TYPE_WECHAT_WORK = 'wechat_work';
     const TYPE_DINGTALK    = 'dingtalk';
+    const TYPE_IN_APP      = 'in_app';
 
     /**
      * 创建此渠道的用户

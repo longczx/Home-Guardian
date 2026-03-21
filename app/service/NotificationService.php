@@ -3,7 +3,7 @@
  * Home Guardian - 通知服务
  *
  * 根据通知渠道配置，向不同的渠道发送告警通知。
- * 支持的渠道类型：email / webhook / telegram / wechat_work / dingtalk
+ * 支持的渠道类型：email / webhook / telegram / wechat_work / dingtalk / in_app
  *
  * 此服务被告警引擎和自动化系统调用，通知发送失败不应影响主业务流程，
  * 所有发送异常都会被捕获并记录日志。
@@ -43,6 +43,7 @@ class NotificationService
                     NotificationChannel::TYPE_TELEGRAM    => self::sendTelegram($channel->config, $title, $content),
                     NotificationChannel::TYPE_WECHAT_WORK => self::sendWechatWork($channel->config, $title, $content),
                     NotificationChannel::TYPE_DINGTALK    => self::sendDingtalk($channel->config, $title, $content),
+                    NotificationChannel::TYPE_IN_APP      => self::sendInApp($title, $content, $extra),
                     default => Log::warning("未知的通知渠道类型: {$channel->type}"),
                 };
             } catch (\Throwable $e) {
@@ -214,6 +215,34 @@ class NotificationService
         self::httpRequest($webhookUrl, 'POST', $body, ['Content-Type: application/json']);
 
         Log::info("钉钉通知已发送: {$title}");
+    }
+
+    /**
+     * 站内通知
+     *
+     * 通过 WebSocket 推送站内通知消息，前端实时展示。
+     * 告警日志已由 AlertService::triggerAlert 写入数据库，
+     * 此处额外推送一条 notification 类型的 WS 消息用于前端弹窗提醒。
+     */
+    private static function sendInApp(string $title, string $content, array $extra = []): void
+    {
+        $wsPayload = json_encode([
+            'type' => 'notification',
+            'data' => [
+                'title'   => $title,
+                'content' => $content,
+                'extra'   => $extra,
+                'time'    => date('Y-m-d H:i:s'),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            \support\Redis::connection('pubsub')->publish('ws:broadcast', $wsPayload);
+        } catch (\Throwable $e) {
+            Log::error("站内通知推送失败: {$e->getMessage()}");
+        }
+
+        Log::info("站内通知已推送: {$title}");
     }
 
     /**

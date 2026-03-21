@@ -7,6 +7,7 @@ namespace app\controller\admin;
 
 use app\model\AlertRule;
 use app\model\Device;
+use app\model\MetricDefinition;
 use app\model\NotificationChannel;
 use app\service\AlertService;
 use support\Request;
@@ -39,15 +40,17 @@ class AlertRuleController
 
     public function create(Request $request)
     {
-        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location', 'metric_fields'])->toArray();
         $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
+        $metricDefinitions = MetricDefinition::ordered()->get(['metric_key', 'label'])->toArray();
 
         return view('admin/alert-rule/form', [
-            'rule'      => null,
-            'devices'   => $devices,
-            'channels'  => $channels,
-            'nav'       => 'alert-rules',
-            'adminUser' => $request->adminUser,
+            'rule'              => null,
+            'devices'           => $devices,
+            'channels'          => $channels,
+            'metricDefinitions' => $metricDefinitions,
+            'nav'               => 'alert-rules',
+            'adminUser'         => $request->adminUser,
         ]);
     }
 
@@ -56,16 +59,18 @@ class AlertRuleController
         $data = $request->post();
 
         if (empty($data['name']) || empty($data['device_id']) || empty($data['telemetry_key']) || empty($data['condition'])) {
-            $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+            $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location', 'metric_fields'])->toArray();
             $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
+            $metricDefinitions = MetricDefinition::ordered()->get(['metric_key', 'label'])->toArray();
             return view('admin/alert-rule/form', [
-                'rule'      => null,
-                'devices'   => $devices,
-                'channels'  => $channels,
-                'error'     => '请填写必填字段',
-                'old'       => $data,
-                'nav'       => 'alert-rules',
-                'adminUser' => $request->adminUser,
+                'rule'              => null,
+                'devices'           => $devices,
+                'channels'          => $channels,
+                'metricDefinitions' => $metricDefinitions,
+                'error'             => '请填写必填字段',
+                'old'               => $data,
+                'nav'               => 'alert-rules',
+                'adminUser'         => $request->adminUser,
             ]);
         }
 
@@ -86,15 +91,17 @@ class AlertRuleController
             return redirect('/admin/alert-rules');
         }
 
-        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location'])->toArray();
+        $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location', 'metric_fields'])->toArray();
         $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
+        $metricDefinitions = MetricDefinition::ordered()->get(['metric_key', 'label'])->toArray();
 
         return view('admin/alert-rule/form', [
-            'rule'      => $rule,
-            'devices'   => $devices,
-            'channels'  => $channels,
-            'nav'       => 'alert-rules',
-            'adminUser' => $request->adminUser,
+            'rule'              => $rule,
+            'devices'           => $devices,
+            'channels'          => $channels,
+            'metricDefinitions' => $metricDefinitions,
+            'nav'               => 'alert-rules',
+            'adminUser'         => $request->adminUser,
         ]);
     }
 

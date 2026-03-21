@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { NavBar, Form, Input, Button, Picker, Stepper, Switch, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getAlertRule, createAlertRule, updateAlertRule } from '@/api/alertRule';
 import { getDevices, type Device } from '@/api/device';
 import { getNotificationChannels, type NotificationChannel } from '@/api/notificationChannel';
+import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
 
 const CONDITIONS = [
   { label: '大于 (>)', value: 'gt' },
@@ -34,15 +35,31 @@ export default function AlertRuleFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [devicePickerVisible, setDevicePickerVisible] = useState(false);
   const [condPickerVisible, setCondPickerVisible] = useState(false);
+  const [metricPickerVisible, setMetricPickerVisible] = useState(false);
+  const { definitions, fetchDefinitions } = useMetricDefinitionStore();
 
   useEffect(() => {
+    fetchDefinitions();
     getDevices({ per_page: 200 }).then(({ data: res }) => {
       if (res.code === 0) setDevices(res.data.items);
     });
     getNotificationChannels().then(({ data: res }) => {
       if (res.code === 0) setChannels(res.data);
     });
-  }, []);
+  }, [fetchDefinitions]);
+
+  // Build metric options based on selected device
+  const metricOptions = useMemo(() => {
+    const selectedDevice = devices.find((d) => d.id === deviceId);
+    const mf = selectedDevice?.metric_fields;
+    if (Array.isArray(mf) && mf.length > 0) {
+      return mf.map((f) => ({ label: `${f.label} (${f.key})`, value: f.key }));
+    }
+    // Fallback to global definitions
+    return definitions.map((d) => ({ label: `${d.label} (${d.metric_key})`, value: d.metric_key }));
+  }, [deviceId, devices, definitions]);
+
+  const selectedMetricLabel = metricOptions.find((o) => o.value === telemetryKey)?.label || telemetryKey || '选择指标';
 
   useEffect(() => {
     if (!id) return;
@@ -119,13 +136,22 @@ export default function AlertRuleFormPage() {
           columns={[devices.map((d) => ({ label: d.name, value: d.id }))]}
           visible={devicePickerVisible}
           onClose={() => setDevicePickerVisible(false)}
-          onConfirm={(v) => { if (v[0]) setDeviceId(v[0] as number); }}
+          onConfirm={(v) => { if (v[0]) { setDeviceId(v[0] as number); setTelemetryKey(''); } }}
           value={deviceId ? [deviceId] : []}
         />
 
-        <Form.Item label="遥测指标">
-          <Input value={telemetryKey} onChange={setTelemetryKey} placeholder="如 temperature" />
+        <Form.Item label="遥测指标" onClick={() => setMetricPickerVisible(true)}>
+          <span style={{ color: telemetryKey ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>
+            {selectedMetricLabel}
+          </span>
         </Form.Item>
+        <Picker
+          columns={[metricOptions]}
+          visible={metricPickerVisible}
+          onClose={() => setMetricPickerVisible(false)}
+          onConfirm={(v) => { if (v[0]) setTelemetryKey(v[0] as string); }}
+          value={telemetryKey ? [telemetryKey] : []}
+        />
 
         <Form.Item label="条件" onClick={() => setCondPickerVisible(true)}>
           <span style={{ color: 'var(--color-text)' }}>{selectedCondLabel}</span>

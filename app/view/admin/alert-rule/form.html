@@ -17,7 +17,7 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">关联设备</label>
                 <div class="layui-input-block">
-                    <select name="device_id" lay-verify="required">
+                    <select name="device_id" lay-verify="required" lay-filter="device-select" id="device-select">
                         <option value="">请选择设备</option>
                         {volist name="devices" id="device"}
                         <option value="{{$device['id']}}" {{($rule['device_id'] ?? ($old['device_id'] ?? '')) == $device['id'] ? 'selected' : ''}}>{{$device['name']}} ({{$device['location'] ?? ''}})</option>
@@ -28,7 +28,9 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">遥测指标</label>
                 <div class="layui-input-block">
-                    <input type="text" name="telemetry_key" value="{{$rule['telemetry_key'] ?? ($old['telemetry_key'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 temperature, humidity">
+                    <select name="telemetry_key" lay-verify="required" id="metric-select">
+                        <option value="">请先选择设备</option>
+                    </select>
                 </div>
             </div>
             <div class="layui-form-item">
@@ -101,4 +103,51 @@
         </form>
     </div>
 </div>
+{/block}
+
+{block name="script"}
+<script>
+// 设备指标数据：deviceId → [{key, label}]
+var deviceMetrics = {};
+{volist name="devices" id="dev"}
+{php}
+    $mf = $dev['metric_fields'];
+    if (is_string($mf)) $mf = json_decode($mf, true);
+{/php}
+{if $mf !== null && is_array($mf)}
+deviceMetrics[{{$dev['id']}}] = {php}echo json_encode(array_map(function($f){ return ['key'=>$f['key'],'label'=>$f['label']??$f['key']]; }, $mf));{/php};
+{/if}
+{/volist}
+
+// 全局指标定义（设备无自定义指标时使用）
+var globalMetrics = {php}echo json_encode(array_map(function($d){ return ['key'=>$d['metric_key'],'label'=>$d['label']]; }, $metricDefinitions));{/php};
+
+var currentTelemetryKey = '{php}echo $rule["telemetry_key"] ?? ($old["telemetry_key"] ?? "");{/php}';
+
+function updateMetricSelect(deviceId) {
+    var sel = document.getElementById('metric-select');
+    var metrics = deviceMetrics[deviceId] || globalMetrics;
+    sel.innerHTML = '<option value="">请选择指标</option>';
+    metrics.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.key;
+        opt.textContent = m.label + ' (' + m.key + ')';
+        if (m.key === currentTelemetryKey) opt.selected = true;
+        sel.appendChild(opt);
+    });
+    layui.form.render('select');
+}
+
+layui.use('form', function(){
+    var form = layui.form;
+    // 设备选择变更时更新指标下拉
+    form.on('select(device-select)', function(data) {
+        currentTelemetryKey = ''; // 切换设备时清空已选指标
+        updateMetricSelect(data.value);
+    });
+    // 初始化：如果有已选设备，加载其指标
+    var initDeviceId = document.getElementById('device-select').value;
+    if (initDeviceId) updateMetricSelect(initDeviceId);
+});
+</script>
 {/block}

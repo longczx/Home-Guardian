@@ -28,6 +28,11 @@ class RefreshToken extends Model
      */
     const UPDATED_AT = null;
 
+    public function getDates()
+    {
+        return array_filter(parent::getDates());
+    }
+
     protected $fillable = [
         'user_id',
         'token_hash',

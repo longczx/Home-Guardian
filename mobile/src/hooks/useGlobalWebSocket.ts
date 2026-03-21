@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { Toast } from 'antd-mobile';
 import { useAuthStore } from '@/stores/authStore';
 import { useWSStore } from '@/stores/wsStore';
 import { useDeviceStore } from '@/stores/deviceStore';
@@ -49,6 +50,13 @@ export function useGlobalWebSocket() {
             }
           }
           if (msg.type === 'alert') {
+            alertIncrement();
+          }
+          if (msg.type === 'notification') {
+            const d = msg.data as { title?: string; content?: string } | undefined;
+            if (d?.title) {
+              Toast.show({ content: d.title, duration: 3000 });
+            }
             alertIncrement();
           }
         } catch { /* ignore */ }

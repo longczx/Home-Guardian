@@ -15,11 +15,11 @@
             <tbody>
                 {volist name="locations" id="loc"}
                 <tr>
-                    <td><strong>{{$loc->location}}</strong></td>
-                    <td>{{$loc->device_count}}</td>
+                    <td><strong>{{$loc.location}}</strong></td>
+                    <td>{{$loc.device_count}}</td>
                     <td>
-                        <span class="layui-badge layui-bg-green">{{$loc->online_count}}</span>
-                        / {{$loc->device_count}}
+                        <span class="layui-badge layui-bg-green">{{$loc.online_count}}</span>
+                        / {{$loc.device_count}}
                     </td>
                 </tr>
                 {/volist}

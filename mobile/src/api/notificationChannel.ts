@@ -3,7 +3,7 @@ import request from './request';
 export interface NotificationChannel {
   id: number;
   name: string;
-  type: 'email' | 'webhook' | 'telegram' | 'wechat_work' | 'dingtalk';
+  type: 'email' | 'webhook' | 'telegram' | 'wechat_work' | 'dingtalk' | 'in_app';
   config: Record<string, unknown>;
   is_enabled: boolean;
   created_at: string;

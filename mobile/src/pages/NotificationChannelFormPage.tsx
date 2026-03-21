@@ -14,6 +14,7 @@ const CHANNEL_TYPES = [
   { label: 'Telegram', value: 'telegram' },
   { label: '企业微信', value: 'wechat_work' },
   { label: '钉钉', value: 'dingtalk' },
+  { label: '站内通知', value: 'in_app' },
 ];
 
 const typeLabels: Record<string, string> = {
@@ -22,6 +23,7 @@ const typeLabels: Record<string, string> = {
   telegram: 'Telegram',
   wechat_work: '企业微信',
   dingtalk: '钉钉',
+  in_app: '站内通知',
 };
 
 interface ConfigFields {

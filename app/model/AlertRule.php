@@ -25,6 +25,11 @@ class AlertRule extends Model
      */
     const UPDATED_AT = null;
 
+    public function getDates()
+    {
+        return array_filter(parent::getDates());
+    }
+
     protected $fillable = [
         'name',
         'description',

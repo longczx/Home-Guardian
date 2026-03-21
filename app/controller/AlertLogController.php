@@ -83,14 +83,22 @@ class AlertLogController
         $alertLog = AlertLog::with([
             'rule:id,name,condition,threshold_value',
             'device:id,device_uid,name,location',
-            'acknowledgedByUser:id,username',
         ])->find($id);
 
         if (!$alertLog) {
             return api_error('告警记录不存在', 404, 3002);
         }
 
-        return api_success($alertLog);
+        $data = $alertLog->toArray();
+        // 手动加载确认人（避免 acknowledged_by=NULL 时 BelongsTo eager load 触发 null offset 错误）
+        if ($alertLog->acknowledged_by) {
+            $user = \app\model\User::find($alertLog->acknowledged_by, ['id', 'username']);
+            $data['acknowledged_by_user'] = $user ? $user->toArray() : null;
+        } else {
+            $data['acknowledged_by_user'] = null;
+        }
+
+        return api_success($data);
     }
 
     #[OA\Patch(
