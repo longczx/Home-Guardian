@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useGlobalWebSocket } from '@/hooks/useGlobalWebSocket';
 import PageLoading from '@/components/PageLoading';
 
 const MainLayout = lazy(() => import('@/layouts/MainLayout'));
@@ -25,6 +26,7 @@ const AboutPage = lazy(() => import('@/pages/AboutPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.accessToken);
+  useGlobalWebSocket();
   if (!token) {
     return <Navigate to="/mobile/login" replace />;
   }

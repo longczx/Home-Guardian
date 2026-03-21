@@ -8,7 +8,6 @@ import {
   UserOutline,
 } from 'antd-mobile-icons';
 import { useAlertStore } from '@/stores/alertStore';
-import { useGlobalWebSocket } from '@/hooks/useGlobalWebSocket';
 
 const tabs = [
   { key: '/mobile', title: '首页', icon: <AppOutline /> },
@@ -22,8 +21,6 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const unreadCount = useAlertStore((s) => s.unreadCount);
-
-  useGlobalWebSocket();
 
   const activeKey = tabs.find((t) => location.pathname === t.key)?.key ?? '/mobile';
 
