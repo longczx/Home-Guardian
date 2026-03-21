@@ -49,10 +49,11 @@
                 <li class="layui-nav-item {{$nav === 'dashboard' ? 'layui-this' : ''}}">
                     <a href="/admin/dashboard"><i class="layui-icon layui-icon-home"></i> 仪表盘</a>
                 </li>
-                <li class="layui-nav-item {{in_array($nav, ['devices','telemetry']) ? 'layui-nav-itemed' : ''}}">
+                <li class="layui-nav-item {{in_array($nav, ['devices','telemetry','metric-definitions']) ? 'layui-nav-itemed' : ''}}">
                     <a href="javascript:;"><i class="layui-icon layui-icon-wifi"></i> 设备管理</a>
                     <dl class="layui-nav-child">
                         <dd class="{{$nav === 'devices' ? 'layui-this' : ''}}"><a href="/admin/devices">设备列表</a></dd>
+                        <dd class="{{$nav === 'metric-definitions' ? 'layui-this' : ''}}"><a href="/admin/metric-definitions">指标定义</a></dd>
                         <dd class="{{$nav === 'telemetry' ? 'layui-this' : ''}}"><a href="/admin/telemetry">遥测数据</a></dd>
                     </dl>
                 </li>

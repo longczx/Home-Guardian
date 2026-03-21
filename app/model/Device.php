@@ -41,6 +41,7 @@ class Device extends Model
         'mqtt_password_hash',
         'last_seen',
         'is_online',
+        'metric_fields',
     ];
 
     /**
@@ -56,10 +57,11 @@ class Device extends Model
      * 属性类型转换
      */
     protected $casts = [
-        'is_online'  => 'boolean',
-        'last_seen'  => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'is_online'     => 'boolean',
+        'last_seen'     => 'datetime',
+        'created_at'    => 'datetime',
+        'updated_at'    => 'datetime',
+        'metric_fields' => 'array',
     ];
 
     /* ============================

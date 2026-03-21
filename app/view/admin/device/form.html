@@ -44,6 +44,29 @@
                     <input type="text" name="firmware_version" value="{{$device['firmware_version'] ?? ($old['firmware_version'] ?? '')}}" class="layui-input">
                 </div>
             </div>
+            <!-- 指标配置 -->
+            <div class="layui-form-item">
+                <label class="layui-form-label">指标配置</label>
+                <div class="layui-input-block">
+                    <input type="hidden" name="metric_fields" id="metric_fields_input" value="">
+                    <div style="margin-bottom:10px;">
+                        <select id="metric_def_select" lay-ignore style="display:inline-block;width:200px;height:38px;border:1px solid #e6e6e6;border-radius:2px;padding:0 10px;">
+                            <option value="">从全局定义选择...</option>
+                            {volist name="metricDefinitions" id="md"}
+                            <option value="{{:htmlentities(json_encode($md, JSON_UNESCAPED_UNICODE))}}">{{$md['label']}} ({{$md['metric_key']}})</option>
+                            {/volist}
+                        </select>
+                        <button type="button" class="layui-btn layui-btn-sm" onclick="addFromDefinition()">添加</button>
+                        <button type="button" class="layui-btn layui-btn-sm layui-btn-normal" onclick="addEmptyRow()">自定义指标</button>
+                    </div>
+                    <table class="layui-table" id="metric_fields_table" style="margin-top:0;">
+                        <colgroup><col><col><col width="80"><col width="100"><col width="60"></colgroup>
+                        <thead><tr><th>Key</th><th>名称</th><th>单位</th><th>图标</th><th>操作</th></tr></thead>
+                        <tbody id="metric_fields_body"></tbody>
+                    </table>
+                    <div class="layui-form-mid layui-word-aux">不配置则使用全局指标定义</div>
+                </div>
+            </div>
             {if !$device}
             <div class="layui-form-item">
                 <label class="layui-form-label">MQTT 密码</label>
@@ -61,4 +84,82 @@
         </form>
     </div>
 </div>
+{/block}
+
+{block name="script"}
+<script>
+var metricFields = [];
+var ICON_OPTIONS = [
+    {v:'🌡',l:'温度'},{v:'💧',l:'湿度'},{v:'🌀',l:'气压'},{v:'☁️',l:'CO₂'},
+    {v:'☀️',l:'光照'},{v:'🌫',l:'PM2.5'},{v:'🔋',l:'电量'},{v:'⚡',l:'电力'},
+    {v:'💨',l:'风速'},{v:'🔊',l:'噪音'},{v:'📊',l:'通用'},{v:'🔥',l:'火焰'},
+];
+
+// 初始化：加载已有的 metric_fields
+{php}
+    $mf = $device['metric_fields'] ?? ($old['metric_fields'] ?? null);
+    if (is_string($mf)) $mf = json_decode($mf, true);
+    if (!is_array($mf)) $mf = null;
+{/php}
+{if $mf !== null}
+metricFields = {php}echo json_encode($mf);{/php};
+{/if}
+
+function buildIconSelect(idx, current) {
+    var opts = ICON_OPTIONS.map(function(o) {
+        var sel = (o.v === current) ? ' selected' : '';
+        return '<option value="' + o.v + '"' + sel + '>' + o.v + ' ' + o.l + '</option>';
+    });
+    // 如果当前值不在预设列表中，加到最前面
+    if (current && !ICON_OPTIONS.some(function(o){ return o.v === current; })) {
+        opts.unshift('<option value="' + current + '" selected>' + current + '</option>');
+    }
+    return '<select lay-ignore style="width:90px;height:36px;border:1px solid #e6e6e6;border-radius:2px;font-size:14px;" onchange="metricFields[' + idx + '].icon=this.value;syncInput()">' + opts.join('') + '</select>';
+}
+
+function renderTable() {
+    var tbody = document.getElementById('metric_fields_body');
+    tbody.innerHTML = '';
+    metricFields.forEach(function(f, i) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><input class="layui-input" value="' + (f.key||'') + '" onchange="metricFields['+i+'].key=this.value;syncInput()"></td>' +
+            '<td><input class="layui-input" value="' + (f.label||'') + '" onchange="metricFields['+i+'].label=this.value;syncInput()"></td>' +
+            '<td><input class="layui-input" value="' + (f.unit||'') + '" onchange="metricFields['+i+'].unit=this.value;syncInput()"></td>' +
+            '<td>' + buildIconSelect(i, f.icon||'📊') + '</td>' +
+            '<td><button type="button" class="layui-btn layui-btn-xs layui-btn-danger" onclick="removeRow('+i+')">删除</button></td>';
+        tbody.appendChild(tr);
+    });
+    syncInput();
+}
+
+function syncInput() {
+    document.getElementById('metric_fields_input').value = metricFields.length > 0 ? JSON.stringify(metricFields) : '';
+}
+
+function addFromDefinition() {
+    var sel = document.getElementById('metric_def_select');
+    if (!sel.value) return;
+    var def = JSON.parse(sel.value);
+    if (metricFields.some(function(f){ return f.key === def.metric_key; })) {
+        layui.layer.msg('该指标已添加');
+        return;
+    }
+    metricFields.push({ key: def.metric_key, label: def.label, unit: def.unit, icon: def.icon });
+    sel.value = '';
+    renderTable();
+}
+
+function addEmptyRow() {
+    metricFields.push({ key: '', label: '', unit: '', icon: '📊' });
+    renderTable();
+}
+
+function removeRow(i) {
+    metricFields.splice(i, 1);
+    renderTable();
+}
+
+renderTable();
+</script>
 {/block}

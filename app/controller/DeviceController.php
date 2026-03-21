@@ -358,6 +358,20 @@ class DeviceController
             return api_error('参数验证失败', 422, 1000, $errors);
         }
 
+        // metric_fields 校验：如果提供了则必须是数组
+        if (isset($data['metric_fields']) && !is_null($data['metric_fields'])) {
+            if (is_string($data['metric_fields'])) {
+                $decoded = json_decode($data['metric_fields'], true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    return api_error('metric_fields 必须是有效的 JSON 数组', 422, 1000);
+                }
+                $data['metric_fields'] = $decoded;
+            }
+            if (!is_array($data['metric_fields'])) {
+                return api_error('metric_fields 必须是数组', 422, 1000);
+            }
+        }
+
         return $data;
     }
 }

@@ -40,6 +40,11 @@ class DeviceService
             unset($data['mqtt_password']); // 不要存明文
         }
 
+        // metric_fields JSON 字符串转数组
+        if (isset($data['metric_fields']) && is_string($data['metric_fields'])) {
+            $data['metric_fields'] = json_decode($data['metric_fields'], true);
+        }
+
         return Device::create($data);
     }
 
@@ -63,6 +68,11 @@ class DeviceService
         if (!empty($data['mqtt_password'])) {
             $data['mqtt_password_hash'] = password_hash($data['mqtt_password'], PASSWORD_BCRYPT);
             unset($data['mqtt_password']);
+        }
+
+        // metric_fields JSON 字符串转数组
+        if (isset($data['metric_fields']) && is_string($data['metric_fields'])) {
+            $data['metric_fields'] = json_decode($data['metric_fields'], true);
         }
 
         $device->update($data);

@@ -1,0 +1,74 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$definition ? '编辑指标定义' : '添加指标定义'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        <form class="layui-form" method="post" action="{{$definition ? '/admin/metric-definitions/'.$definition['id'].'/update' : '/admin/metric-definitions/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">metric_key</label>
+                <div class="layui-input-block">
+                    <input type="text" name="metric_key" value="{{$definition['metric_key'] ?? ($old['metric_key'] ?? '')}}" class="layui-input" {{$definition ? 'disabled' : 'required lay-verify="required"'}} placeholder="如 temperature, humidity">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="label" value="{{$definition['label'] ?? ($old['label'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 温度、湿度">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">单位</label>
+                <div class="layui-input-block">
+                    <input type="text" name="unit" value="{{$definition['unit'] ?? ($old['unit'] ?? '')}}" class="layui-input" placeholder="如 °C, %, hPa">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">图标</label>
+                <div class="layui-input-block">
+                    {php}$currentIcon = $definition['icon'] ?? ($old['icon'] ?? '📊');{/php}
+                    <select name="icon" lay-ignore style="width:200px;height:38px;border:1px solid #e6e6e6;border-radius:2px;font-size:15px;">
+                        {php}
+                        $iconOptions = [
+                            ['v'=>'🌡','l'=>'温度'],['v'=>'💧','l'=>'湿度'],['v'=>'🌀','l'=>'气压'],['v'=>'☁️','l'=>'CO₂'],
+                            ['v'=>'☀️','l'=>'光照'],['v'=>'🌫','l'=>'PM2.5'],['v'=>'🔋','l'=>'电量'],['v'=>'⚡','l'=>'电力'],
+                            ['v'=>'💨','l'=>'风速'],['v'=>'🔊','l'=>'噪音'],['v'=>'📊','l'=>'通用'],['v'=>'🔥','l'=>'火焰'],
+                        ];
+                        $found = false;
+                        foreach ($iconOptions as $opt) {
+                            $sel = ($opt['v'] === $currentIcon) ? 'selected' : '';
+                            if ($sel) $found = true;
+                            echo '<option value="'.$opt['v'].'" '.$sel.'>'.$opt['v'].' '.$opt['l'].'</option>';
+                        }
+                        if (!$found && $currentIcon) {
+                            echo '<option value="'.$currentIcon.'" selected>'.$currentIcon.'</option>';
+                        }
+                        {/php}
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" value="{{$definition['description'] ?? ($old['description'] ?? '')}}" class="layui-input" placeholder="指标描述（可选）">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">排序</label>
+                <div class="layui-input-block">
+                    <input type="number" name="sort_order" value="{{$definition['sort_order'] ?? ($old['sort_order'] ?? 0)}}" class="layui-input" placeholder="越小越靠前">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/metric-definitions" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

@@ -98,6 +98,14 @@ Route::group('/admin', function () {
     // 系统管理
     Route::get('/system', [app\controller\admin\SystemController::class, 'index']);
 
+    // 指标定义
+    Route::get('/metric-definitions', [app\controller\admin\MetricDefinitionController::class, 'index']);
+    Route::get('/metric-definitions/create', [app\controller\admin\MetricDefinitionController::class, 'create']);
+    Route::post('/metric-definitions/store', [app\controller\admin\MetricDefinitionController::class, 'store']);
+    Route::get('/metric-definitions/{id:\d+}/edit', [app\controller\admin\MetricDefinitionController::class, 'edit']);
+    Route::post('/metric-definitions/{id:\d+}/update', [app\controller\admin\MetricDefinitionController::class, 'update']);
+    Route::post('/metric-definitions/{id:\d+}/delete', [app\controller\admin\MetricDefinitionController::class, 'delete']);
+
     // 位置管理
     Route::get('/locations', [app\controller\admin\LocationController::class, 'index']);
     Route::post('/locations/store', [app\controller\admin\LocationController::class, 'store']);
@@ -160,6 +168,18 @@ Route::group('/api', function () {
     Route::post('/auth/logout-all', [app\controller\AuthController::class, 'logoutAll']);
     Route::post('/auth/change-password', [app\controller\AuthController::class, 'changePassword'])
         ->middleware([AuditLogMiddleware::class]);
+
+    /* ---------- 指标定义 ---------- */
+    Route::get('/metric-definitions', [app\controller\MetricDefinitionController::class, 'index'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::get('/metric-definitions/{id:\d+}', [app\controller\MetricDefinitionController::class, 'show'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::post('/metric-definitions', [app\controller\MetricDefinitionController::class, 'store'])
+        ->middleware([new PermissionMiddleware('devices.create'), AuditLogMiddleware::class]);
+    Route::put('/metric-definitions/{id:\d+}', [app\controller\MetricDefinitionController::class, 'update'])
+        ->middleware([new PermissionMiddleware('devices.edit'), AuditLogMiddleware::class]);
+    Route::delete('/metric-definitions/{id:\d+}', [app\controller\MetricDefinitionController::class, 'destroy'])
+        ->middleware([new PermissionMiddleware('devices.delete'), AuditLogMiddleware::class]);
 
     /* ---------- 设备管理 ---------- */
     Route::get('/devices', [app\controller\DeviceController::class, 'index'])

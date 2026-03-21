@@ -6,6 +6,7 @@
 namespace app\controller\admin;
 
 use app\model\Device;
+use app\model\MetricDefinition;
 use app\service\DeviceService;
 use support\Request;
 
@@ -46,10 +47,13 @@ class DeviceController
 
     public function create(Request $request)
     {
+        $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
+
         return view('admin/device/form', [
-            'device'    => null,
-            'nav'       => 'devices',
-            'adminUser' => $request->adminUser,
+            'device'            => null,
+            'metricDefinitions' => $metricDefinitions,
+            'nav'               => 'devices',
+            'adminUser'         => $request->adminUser,
         ]);
     }
 
@@ -58,12 +62,14 @@ class DeviceController
         $data = $request->post();
 
         if (empty($data['device_uid']) || empty($data['name']) || empty($data['type'])) {
+            $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
             return view('admin/device/form', [
-                'device'    => null,
-                'error'     => 'device_uid、名称和类型不能为空',
-                'old'       => $data,
-                'nav'       => 'devices',
-                'adminUser' => $request->adminUser,
+                'device'            => null,
+                'metricDefinitions' => $metricDefinitions,
+                'error'             => 'device_uid、名称和类型不能为空',
+                'old'               => $data,
+                'nav'               => 'devices',
+                'adminUser'         => $request->adminUser,
             ]);
         }
 
@@ -78,10 +84,13 @@ class DeviceController
             return redirect('/admin/devices');
         }
 
+        $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
+
         return view('admin/device/form', [
-            'device'    => $device,
-            'nav'       => 'devices',
-            'adminUser' => $request->adminUser,
+            'device'            => $device,
+            'metricDefinitions' => $metricDefinitions,
+            'nav'               => 'devices',
+            'adminUser'         => $request->adminUser,
         ]);
     }
 

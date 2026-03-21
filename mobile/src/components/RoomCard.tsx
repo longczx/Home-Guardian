@@ -1,34 +1,18 @@
 import { Card } from 'antd-mobile';
 import type { LatestMetric } from '@/api/telemetry';
+import type { MetricMeta } from '@/utils/metricLookup';
 
 interface RoomCardProps {
   location: string;
   deviceCount: number;
   onlineCount: number;
   metrics?: LatestMetric[];
+  metricLookup?: (key: string) => MetricMeta;
   onClick?: () => void;
 }
 
-const METRIC_ICONS: Record<string, string> = {
-  temperature: '🌡',
-  humidity: '💧',
-  pressure: '🌀',
-  co2: '☁️',
-  light: '☀️',
-  pm25: '🌫',
-};
-
-const METRIC_UNITS: Record<string, string> = {
-  temperature: '°C',
-  humidity: '%',
-  pressure: 'hPa',
-  co2: 'ppm',
-  light: 'lux',
-  pm25: 'μg/m³',
-};
-
-export default function RoomCard({ location, deviceCount, onlineCount, metrics = [], onClick }: RoomCardProps) {
-  const envMetrics = metrics.filter((m) => METRIC_ICONS[m.metric_key]);
+export default function RoomCard({ location, deviceCount, onlineCount, metrics = [], metricLookup, onClick }: RoomCardProps) {
+  const lookup = metricLookup || ((key: string) => ({ label: key, unit: '', icon: '📊' }));
 
   return (
     <Card
@@ -48,19 +32,22 @@ export default function RoomCard({ location, deviceCount, onlineCount, metrics =
           {onlineCount}/{deviceCount} 在线
         </div>
       </div>
-      {envMetrics.length > 0 && (
+      {metrics.length > 0 && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          {envMetrics.slice(0, 4).map((m) => (
-            <div key={m.metric_key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 14 }}>{METRIC_ICONS[m.metric_key]}</span>
-              <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>
-                {typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                {METRIC_UNITS[m.metric_key] || ''}
-              </span>
-            </div>
-          ))}
+          {metrics.slice(0, 4).map((m) => {
+            const meta = lookup(m.metric_key);
+            return (
+              <div key={m.metric_key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 14 }}>{meta.icon}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>
+                  {typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                  {meta.unit}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

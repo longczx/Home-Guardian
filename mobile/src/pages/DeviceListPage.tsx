@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { SearchBar, Tabs, PullToRefresh } from 'antd-mobile';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useDeviceStore } from '@/stores/deviceStore';
+import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
+import { buildMetricLookup } from '@/utils/metricLookup';
 import DeviceCard from '@/components/DeviceCard';
 import EmptyState from '@/components/EmptyState';
 
@@ -9,11 +11,17 @@ export default function DeviceListPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const { devices, metricsMap, fetchDevices } = useDeviceStore();
+  const { definitions, fetchDefinitions } = useMetricDefinitionStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const locationFilter = searchParams.get('location');
 
-  useEffect(() => { fetchDevices(); }, [fetchDevices]);
+  useEffect(() => { fetchDevices(); fetchDefinitions(); }, [fetchDevices, fetchDefinitions]);
+
+  const metricLookup = useMemo(
+    () => buildMetricLookup(null, definitions),
+    [definitions],
+  );
 
   const filtered = useMemo(() => {
     let list = devices;
@@ -77,7 +85,7 @@ export default function DeviceListPage() {
                   <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>({devs.length})</span>
                 </div>
                 {devs.map((d) => (
-                  <DeviceCard key={d.id} device={d} metrics={metricsMap[d.id]} />
+                  <DeviceCard key={d.id} device={d} metrics={metricsMap[d.id]} metricLookup={metricLookup} />
                 ))}
               </div>
             ))

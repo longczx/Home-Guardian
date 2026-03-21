@@ -12,6 +12,8 @@ import {
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useAlertStore } from '@/stores/alertStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
+import { buildMetricLookup } from '@/utils/metricLookup';
 import StatCard from '@/components/StatCard';
 import RoomCard from '@/components/RoomCard';
 import { getAlertLogs, type AlertLog } from '@/api/telemetry';
@@ -23,10 +25,17 @@ export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const { devices, metricsMap, fetchDevices } = useDeviceStore();
   const unreadCount = useAlertStore((s) => s.unreadCount);
+  const { definitions, fetchDefinitions } = useMetricDefinitionStore();
   const [recentAlerts, setRecentAlerts] = useState<AlertLog[]>([]);
+
+  const metricLookup = useMemo(
+    () => buildMetricLookup(null, definitions),
+    [definitions],
+  );
 
   const fetchAll = useCallback(async () => {
     await fetchDevices();
+    fetchDefinitions();
     try {
       const { data: res } = await getAlertLogs({ per_page: 5 });
       if (res.code === 0) setRecentAlerts(res.data.items);
@@ -123,6 +132,7 @@ export default function HomePage() {
                   deviceCount={data.devices.length}
                   onlineCount={data.devices.filter((d) => d.is_online).length}
                   metrics={data.metrics}
+                  metricLookup={metricLookup}
                   onClick={() => navigate(`/mobile/devices?location=${encodeURIComponent(loc)}`)}
                 />
               ))}

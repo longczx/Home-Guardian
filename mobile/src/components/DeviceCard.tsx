@@ -4,18 +4,17 @@ import StatusDot from './StatusDot';
 import DeviceIcon from './DeviceIcon';
 import type { Device } from '@/api/device';
 import type { LatestMetric } from '@/api/telemetry';
-
-const METRIC_UNITS: Record<string, string> = {
-  temperature: '°C', humidity: '%', pressure: 'hPa', co2: 'ppm', light: 'lux',
-};
+import type { MetricMeta } from '@/utils/metricLookup';
 
 interface DeviceCardProps {
   device: Device;
   metrics?: LatestMetric[];
+  metricLookup?: (key: string) => MetricMeta;
 }
 
-export default function DeviceCard({ device, metrics = [] }: DeviceCardProps) {
+export default function DeviceCard({ device, metrics = [], metricLookup }: DeviceCardProps) {
   const navigate = useNavigate();
+  const lookup = metricLookup || ((key: string) => ({ label: key, unit: '', icon: '📊' }));
 
   const topMetrics = metrics.slice(0, 3);
 
@@ -52,14 +51,17 @@ export default function DeviceCard({ device, metrics = [] }: DeviceCardProps) {
         </div>
         {topMetrics.length > 0 && (
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            {topMetrics.map((m) => (
-              <div key={m.metric_key} style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-                {typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}
-                <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 2 }}>
-                  {METRIC_UNITS[m.metric_key] || ''}
-                </span>
-              </div>
-            ))}
+            {topMetrics.map((m) => {
+              const meta = lookup(m.metric_key);
+              return (
+                <div key={m.metric_key} style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                  {typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}
+                  <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 2 }}>
+                    {meta.unit}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

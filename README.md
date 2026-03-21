@@ -26,6 +26,7 @@
 *   **实时通信:** 采用 [EMQX](https://www.emqx.io/) 作为 MQTT Broker 处理设备通信，通过 WebSocket 向前端实时推送数据。
 *   **智能告警:** 高度可定制的告警引擎，当环境数据触发预设规则时，可通过邮件、Webhook、Telegram、企业微信、钉钉等多种渠道发送通知。
 *   **时序数据存储:** 使用 **PostgreSQL + TimescaleDB** 存储海量传感器数据，并提供高效的查询性能。
+*   **动态指标管理:** 全局指标定义 + 设备级指标配置，灵活定义遥测指标的名称、单位、图标等元数据，前端自动适配展示。
 *   **双端界面:**
     *   **后台管理面板** — Webman + LayUI 服务端渲染，session 认证，供管理员进行系统配置和设备管理。
     *   **移动端前端** — React 19 + Ant Design Mobile + PWA，JWT 认证，面向普通用户查看环境数据和控制设备。
@@ -73,12 +74,15 @@ Home-Guardian/
 │   ├── exception/           # 异常处理器
 │   └── view/admin/          # 后台模板 (LayUI)
 ├── config/                  # Webman 配置文件
-├── database/migrations/     # SQL 迁移文件
+├── database/migrations/     # SQL 基础迁移 (Docker 首次建库自动执行)
+├── database/php-migrations/ # PHP 增量迁移 (webman migrate:run)
+├── simulator/               # IoT 设备模拟器 (Python + MQTT)
 ├── mobile/                  # 移动端 React 项目
 │   ├── src/
 │   │   ├── api/             # Axios + JWT 自动刷新
-│   │   ├── stores/          # Zustand 状态管理
+│   ├── stores/          # Zustand 状态管理
 │   │   ├── hooks/           # WebSocket Hook
+│   │   ├── utils/            # 工具函数 (指标查找等)
 │   │   ├── pages/           # 页面组件
 │   │   └── components/      # 通用组件
 │   ├── package.json
@@ -127,12 +131,17 @@ Home-Guardian/
     ```
     > 生产环境显式指定 `-f docker-compose.yml`，跳过 override 文件，启用 Nginx 反代。
 
-5.  **检查服务状态:**
+5.  **执行增量迁移:**
+    ```bash
+    docker exec -it home-guardian-app php webman migrate:run
+    ```
+
+6.  **检查服务状态:**
     *   **移动端:** 访问 `http://localhost/mobile/`
     *   **后台管理:** 访问 `http://localhost/admin/login`
     *   **EMQX 管理后台:** 访问 `http://localhost:18083` (默认 `admin` / `public`)
 
-6.  **创建管理员账号:**
+7.  **创建管理员账号:**
     ```bash
     docker exec -it home-guardian-app php create_admin.php
     ```
@@ -182,6 +191,78 @@ Home-Guardian/
 | Nginx | 不启动 | 启动 |
 | 启动命令 | `docker compose up` | `docker compose -f docker-compose.yml up -d` |
 
+## 数据库迁移
+
+项目采用**两阶段迁移**策略：
+
+| 阶段 | 目录 | 方式 | 说明 |
+|:---|:---|:---|:---|
+| 基础表结构 (00-17) | `database/migrations/` | 纯 SQL，Docker 首次建库自动执行 | PostgreSQL `docker-entrypoint-initdb.d` 机制 |
+| 增量迁移 (18+) | `database/php-migrations/` | PHP 迁移类，[leekung/webman-migrations](https://packagist.org/packages/leekung/webman-migrations) 管理 | 支持版本追踪、回滚 |
+
+### 首次部署（全新数据库）
+
+Docker 首次启动时自动执行 `database/migrations/` 中的 SQL 完成基础建表，然后执行增量迁移：
+
+```bash
+docker compose up -d
+docker exec -it home-guardian-app php webman migrate:run
+```
+
+### 已有数据库（版本升级）
+
+只需一条命令，工具会自动跳过已执行的迁移，仅执行新增的：
+
+```bash
+docker exec -it home-guardian-app php webman migrate:run
+```
+
+### 常用迁移命令
+
+```bash
+# 查看迁移状态（哪些已执行、哪些待执行）
+php webman migrate:status
+
+# 执行所有待执行的迁移
+php webman migrate:run
+
+# 回滚上一批迁移
+php webman migrate:rollback
+
+# 创建新的迁移文件
+php webman migrate:create AddXxxToYyy
+
+# 重置并重新执行所有迁移（⚠️ 会清空数据）
+php webman migrate:fresh
+```
+
+### 创建新迁移
+
+迁移文件位于 `database/php-migrations/`，使用 Laravel 风格的 Schema Builder：
+
+```php
+<?php
+use Illuminate\Database\Schema\Blueprint;
+use Eloquent\Migrations\Migrations\Migration;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $this->schema()->create('example', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestampsTz();
+        });
+    }
+
+    public function down(): void
+    {
+        $this->schema()->dropIfExists('example');
+    }
+};
+```
+
 ## API 文档
 
 项目内置 Swagger UI 在线 API 文档，基于 [swagger-php](https://github.com/zircote/swagger-php) 注解自动生成 OpenAPI 3.0 规范。
@@ -218,6 +299,7 @@ vendor/bin/openapi app/ -o public/openapi.yaml
 | 认证 | 5 | 登录、注销、Token 刷新、个人信息 |
 | 设备管理 | 6 | CRUD + 发送控制指令 |
 | 设备属性 | 3 | 扩展属性读写 |
+| 指标定义 | 5 | 全局遥测指标元数据 CRUD |
 | 遥测数据 | 3 | 原始数据、最新值、聚合图表 |
 | 告警规则 | 5 | CRUD |
 | 告警日志 | 4 | 查询、确认、解决 |
@@ -282,20 +364,51 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 // SUBSCRIBE: home/downstream/esp32-livingroom-01/command/set
 ```
 
+## 设备模拟器
+
+项目内置 Python 编写的 IoT 设备模拟器（`simulator/`），通过 MQTT 协议模拟真实设备上报遥测数据，完整走通 EMQX → Webman MQTT 进程 → 数据库 的数据链路。
+
+### 手动模式（默认）
+
+编辑 `simulator.py` 中的 `DEVICES` 列表，填入已在 Admin 后台创建的设备 UID 和 MQTT 密码：
+
+```bash
+cd simulator
+pip install -r requirements.txt
+python simulator.py
+```
+
+### API 自动发现模式
+
+自动从 REST API 获取所有设备及其 `metric_fields` 配置，按指标定义动态生成遥测数据：
+
+```bash
+# 设置环境变量
+export API_BASE_URL=http://127.0.0.1:8787/api
+export API_USERNAME=admin
+export API_PASSWORD=admin123
+export DEFAULT_MQTT_PASSWORD=pass123
+
+python simulator.py --api
+```
+
+模拟器会为每个设备的每个指标生成正弦波 + 随机噪声的逼真数据，每台设备独立线程，支持 LWT 遗嘱消息、下行指令响应等完整 MQTT 特性。
+
 ## 项目蓝图
 
 - [x] 核心技术选型与架构设计
-- [x] 数据库结构设计 (18个迁移文件)
+- [x] 数据库结构设计 (18 SQL + 增量 PHP 迁移)
 - [x] MQTT 主题命名规范定义
 - [x] 告警系统实现逻辑设计
 - [x] 权限系统设计 (RBAC + 位置作用域)
 - [x] 认证系统设计 (JWT 双 Token + session)
 - [x] Docker Compose 环境搭建
-- [x] Web API 接口开发 (15 REST Controller, 45+ Endpoints)
+- [x] Web API 接口开发 (16 REST Controller, 50+ Endpoints)
 - [x] WebSocket 实时推送服务
 - [x] 后台管理面板 (LayUI 服务端渲染)
 - [x] 移动端前端 (React 19 + Ant Design Mobile + PWA)
 - [x] API 在线文档 (Swagger UI + swagger-php 注解)
+- [x] 全局指标定义 + 设备指标配置 + 模拟数据生成
 - [ ] **下一步: 设备端 (ESP32/ESP8266) 固件开发**
 
 ## 贡献

@@ -1,4 +1,5 @@
 import request from './request';
+import type { MetricField } from '@/utils/metricLookup';
 
 export interface Device {
   id: number;
@@ -9,6 +10,7 @@ export interface Device {
   firmware_version: string | null;
   is_online: boolean;
   last_seen: string | null;
+  metric_fields: MetricField[] | null;
 }
 
 export interface DeviceAttribute {

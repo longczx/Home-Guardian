@@ -1,26 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh, Dialog, Input, List } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getDevice, sendCommand, getDeviceAttributes, setDeviceAttributes, type Device, type DeviceAttribute } from '@/api/device';
 import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
 import { useWSSubscription } from '@/hooks/useWSSubscription';
+import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
+import { buildMetricLookup } from '@/utils/metricLookup';
 import StatusTag from '@/components/StatusTag';
 import DeviceIcon from '@/components/DeviceIcon';
 import MetricCard from '@/components/MetricCard';
 import PageLoading from '@/components/PageLoading';
-
-const METRIC_LABELS: Record<string, string> = {
-  temperature: '温度', humidity: '湿度', pressure: '气压',
-  co2: 'CO₂', light: '光照', pm25: 'PM2.5',
-};
-const METRIC_UNITS: Record<string, string> = {
-  temperature: '°C', humidity: '%', pressure: 'hPa',
-  co2: 'ppm', light: 'lux', pm25: 'μg/m³',
-};
-const METRIC_ICONS: Record<string, string> = {
-  temperature: '🌡', humidity: '💧', pressure: '🌀',
-  co2: '☁️', light: '☀️', pm25: '🌫',
-};
 
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +20,8 @@ export default function DeviceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [switchOn, setSwitchOn] = useState(false);
   const [brightness, setBrightness] = useState(50);
+
+  const { definitions, fetchDefinitions } = useMetricDefinitionStore();
 
   const deviceId = id ? parseInt(id) : 0;
 
@@ -50,7 +41,13 @@ export default function DeviceDetailPage() {
     }
   }, [deviceId]);
 
+  useEffect(() => { fetchDefinitions(); }, [fetchDefinitions]);
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const metricLookup = useMemo(
+    () => buildMetricLookup(device?.metric_fields, definitions),
+    [device?.metric_fields, definitions],
+  );
 
   // Real-time telemetry update
   const handleWS = useCallback((msg: { type: string; data: unknown }) => {
@@ -187,16 +184,19 @@ export default function DeviceDetailPage() {
                 实时数据
               </div>
               <Grid columns={2} gap={10} style={{ marginBottom: 12 }}>
-                {metrics.map((m) => (
-                  <Grid.Item key={m.metric_key}>
-                    <MetricCard
-                      icon={<span>{METRIC_ICONS[m.metric_key] || '📊'}</span>}
-                      label={METRIC_LABELS[m.metric_key] || m.metric_key}
-                      value={getMetricValue(m)}
-                      unit={METRIC_UNITS[m.metric_key]}
-                    />
-                  </Grid.Item>
-                ))}
+                {metrics.map((m) => {
+                  const meta = metricLookup(m.metric_key);
+                  return (
+                    <Grid.Item key={m.metric_key}>
+                      <MetricCard
+                        icon={<span>{meta.icon}</span>}
+                        label={meta.label}
+                        value={getMetricValue(m)}
+                        unit={meta.unit}
+                      />
+                    </Grid.Item>
+                  );
+                })}
               </Grid>
             </>
           )}

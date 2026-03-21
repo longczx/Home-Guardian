@@ -1,0 +1,40 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        指标定义
+        <a href="/admin/metric-definitions/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加指标
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col width="120"><col><col width="80"><col width="60"><col width="80"><col width="150"></colgroup>
+            <thead>
+                <tr><th>ID</th><th>metric_key</th><th>名称</th><th>单位</th><th>图标</th><th>排序</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {volist name="definitionList" id="def"}
+                <tr>
+                    <td>{{$def['id']}}</td>
+                    <td><code>{{$def['metric_key']}}</code></td>
+                    <td>{{$def['label']}}</td>
+                    <td>{{$def['unit']}}</td>
+                    <td>{{$def['icon']}}</td>
+                    <td>{{$def['sort_order']}}</td>
+                    <td>
+                        <a href="/admin/metric-definitions/{{$def['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/metric-definitions/{{$def['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="definitionList"}
+                <tr><td colspan="7" style="text-align:center;color:#999;">暂无指标定义</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+    </div>
+</div>
+{/block}

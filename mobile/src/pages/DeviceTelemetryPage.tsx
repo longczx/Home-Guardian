@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { NavBar, Selector } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import { getDevice, type Device } from '@/api/device';
 import { getLatestTelemetry, getAggregatedTelemetry, type LatestMetric, type AggregatedPoint } from '@/api/telemetry';
+import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
+import { buildMetricLookup } from '@/utils/metricLookup';
 
 const RANGES = [
   { label: '1小时', value: '1h' },
@@ -32,6 +34,14 @@ export default function DeviceTelemetryPage() {
   const [chartData, setChartData] = useState<AggregatedPoint[]>([]);
 
   const deviceId = id ? parseInt(id) : 0;
+  const { definitions, fetchDefinitions } = useMetricDefinitionStore();
+
+  useEffect(() => { fetchDefinitions(); }, [fetchDefinitions]);
+
+  const metricLookup = useMemo(
+    () => buildMetricLookup(device?.metric_fields, definitions),
+    [device?.metric_fields, definitions],
+  );
 
   useEffect(() => {
     if (!deviceId) return;
@@ -91,7 +101,7 @@ export default function DeviceTelemetryPage() {
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>遥测指标</div>
             <Selector
-              options={metricKeys.map((k) => ({ label: k, value: k }))}
+              options={metricKeys.map((k) => ({ label: metricLookup(k).label, value: k }))}
               value={[selectedKey]}
               onChange={(v) => { if (v.length) setSelectedKey(v[0]); }}
             />

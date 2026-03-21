@@ -26,7 +26,8 @@
     "symfony/var-dumper": "^8.0",
     "topthink/think-template": "^3.0",
     "webman/redis": "^2.1",
-    "zircote/swagger-php": "^5.0"
+    "zircote/swagger-php": "^5.0",
+    "leekung/webman-migrations": "*"
   },
   "suggest": {
     "ext-event": "For better performance."
