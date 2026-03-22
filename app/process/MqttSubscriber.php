@@ -312,6 +312,22 @@ class MqttSubscriber
             ], JSON_UNESCAPED_UNICODE);
 
             $this->redisPub->publish('ws:broadcast', $wsMessage);
+
+            // 网关离线时，批量将其下所有传感器也标记为离线
+            if (!$isOnline && $device->type === 'gateway') {
+                $sensors = Device::where('gateway_uid', $deviceUid)->get(['id', 'device_uid', 'location']);
+                foreach ($sensors as $sensor) {
+                    DeviceService::updateOnlineStatus($sensor->device_uid, false);
+                    $sensorMsg = json_encode([
+                        'type'            => 'device_status',
+                        'device_id'       => $sensor->id,
+                        'device_uid'      => $sensor->device_uid,
+                        'device_location' => $sensor->location,
+                        'is_online'       => false,
+                    ], JSON_UNESCAPED_UNICODE);
+                    $this->redisPub->publish('ws:broadcast', $sensorMsg);
+                }
+            }
         }
     }
 

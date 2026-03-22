@@ -38,6 +38,17 @@
                     <input type="text" name="location" value="{{$device['location'] ?? ($old['location'] ?? '')}}" class="layui-input" placeholder="如 客厅、卧室">
                 </div>
             </div>
+            <div class="layui-form-item" id="gateway-field" style="display:none;">
+                <label class="layui-form-label">所属网关</label>
+                <div class="layui-input-block">
+                    <select name="gateway_uid" id="gateway-select">
+                        <option value="">无（独立设备）</option>
+                        {volist name="gateways" id="gw"}
+                        <option value="{{$gw['device_uid']}}" {{($device['gateway_uid'] ?? ($old['gateway_uid'] ?? '')) === $gw['device_uid'] ? 'selected' : ''}}>{{$gw['name']}} ({{$gw['device_uid']}})</option>
+                        {/volist}
+                    </select>
+                </div>
+            </div>
             <div class="layui-form-item">
                 <label class="layui-form-label">固件版本</label>
                 <div class="layui-input-block">
@@ -79,6 +90,13 @@
                 <div class="layui-input-block">
                     <button class="layui-btn" lay-submit>保存</button>
                     <a href="/admin/devices" class="layui-btn layui-btn-primary">取消</a>
+                    {if $device}
+                    {if $device['type'] === 'gateway'}
+                    <a href="/admin/devices/{{$device['id']}}/firmware-config" class="layui-btn layui-btn-warm" style="margin-left:10px;">
+                        <i class="layui-icon layui-icon-download-circle"></i> 生成固件配置
+                    </a>
+                    {/if}
+                    {/if}
                 </div>
             </div>
         </form>
@@ -161,5 +179,22 @@ function removeRow(i) {
 }
 
 renderTable();
+
+// 根据设备类型显示/隐藏"所属网关"字段
+function toggleGatewayField() {
+    var typeSelect = document.querySelector('select[name="type"]');
+    var gwField = document.getElementById('gateway-field');
+    if (typeSelect && gwField) {
+        gwField.style.display = (typeSelect.value === 'gateway') ? 'none' : '';
+    }
+}
+// 初始化
+toggleGatewayField();
+// 监听类型变化（LayUI select 需要用 form.on）
+layui.use('form', function(){
+    layui.form.on('select()', function(data){
+        if (data.elem.name === 'type') toggleGatewayField();
+    });
+});
 </script>
 {/block}

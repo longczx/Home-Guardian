@@ -42,6 +42,7 @@ Route::group('/admin', function () {
     Route::get('/devices/{id:\d+}/edit', [app\controller\admin\DeviceController::class, 'edit']);
     Route::post('/devices/{id:\d+}/update', [app\controller\admin\DeviceController::class, 'update']);
     Route::post('/devices/{id:\d+}/delete', [app\controller\admin\DeviceController::class, 'delete']);
+    Route::get('/devices/{id:\d+}/firmware-config', [app\controller\admin\DeviceController::class, 'firmwareConfig']);
 
     // 用户管理
     Route::get('/users', [app\controller\admin\UserController::class, 'index']);

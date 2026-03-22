@@ -36,10 +36,10 @@
 ## 系统架构
 
 ```
-设备 (ESP32) ──MQTT──► EMQX ──► Webman MQTT进程 ──► Redis Queue ──► PostgreSQL
-                                       │
-                                       ├──► Redis Pub/Sub ──► Webman WS Worker ──► 移动端 (实时数据)
-                                       └──► Alert Stream  ──► 告警引擎 ──► 通知推送
+传感器 ──GPIO──► ESP32 网关 ──MQTT──► EMQX ──► Webman MQTT进程 ──► Redis Queue ──► PostgreSQL
+                                                     │
+                                                     ├──► Redis Pub/Sub ──► Webman WS Worker ──► 移动端 (实时数据)
+                                                     └──► Alert Stream  ──► 告警引擎 ──► 通知推送
 
 移动端 (React) ──HTTP──► Nginx:80 ──► /api/*    ──► Webman HTTP :8787 (REST API)
                                    ├── /ws      ──► Webman WS   :8788 (WebSocket)
@@ -58,6 +58,7 @@
 | **缓存数据库** | Redis 7 | 热数据、设备状态、任务队列、Pub/Sub |
 | **后台管理** | LayUI 2.9 + ThinkPHP Template | 服务端渲染后台面板，session 认证 |
 | **移动端** | React 19 + Ant Design Mobile + ECharts | PWA 移动端，JWT 认证 |
+| **设备固件** | ESP32 / Arduino + PlatformIO | IoT 设备端，MQTT 通信，模块化传感器架构 |
 
 ## 项目结构
 
@@ -77,6 +78,10 @@ Home-Guardian/
 ├── database/migrations/     # SQL 基础迁移 (Docker 首次建库自动执行)
 ├── database/php-migrations/ # PHP 增量迁移 (webman migrate:run)
 ├── simulator/               # IoT 设备模拟器 (Python + MQTT)
+├── firmware/                # ESP32 设备固件 (Arduino + PlatformIO)
+│   ├── include/             # 头文件 (config, 传感器接口, MQTT, WiFi)
+│   ├── src/                 # 源文件 (main, 传感器实现, 指令处理)
+│   └── platformio.ini       # PlatformIO 构建配置
 ├── mobile/                  # 移动端 React 项目
 │   ├── src/
 │   │   ├── api/             # Axios + JWT 自动刷新
@@ -102,6 +107,7 @@ Home-Guardian/
 **前提条件:**
 *   [Docker](https://www.docker.com/get-started) + [Docker Compose](https://docs.docker.com/compose/install/)
 *   [Node.js](https://nodejs.org/) >= 18（移动端开发时需要）
+*   [PlatformIO](https://platformio.org/)（ESP32 固件开发时需要）
 
 ### 生产部署
 
@@ -364,6 +370,83 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 // SUBSCRIBE: home/downstream/esp32-livingroom-01/command/set
 ```
 
+## ESP32 设备固件
+
+项目内置 ESP32 固件（`firmware/`），基于 Arduino 框架 + PlatformIO 构建。采用**网关 + 传感器**架构：ESP32 作为通信网关，代其下挂载的传感器设备独立上报遥测数据和状态。
+
+### 网关 + 传感器模型
+
+```
+                    Admin 后台
+                    ┌─────────────────────────────┐
+                    │ 网关: gw-001 (type=gateway)  │
+                    │   ├─ sensor-temp-01 (DHT11)  │
+                    │   └─ sensor-sound-01 (Sound) │
+                    └─────────────────────────────┘
+
+ESP32 (物理板)                    EMQX Broker                 Home Guardian
+┌──────────────┐                 ┌───────────┐               ┌────────────┐
+│ gw-001       │───MQTT 认证────►│           │               │            │
+│  ├ DHT11     │  sensor-temp-01 │           │──telemetry──►│ 独立设备   │
+│  └ Sound     │  sensor-sound-01│           │──state─────►│ 独立在线   │
+│              │  gw-001 (LWT)   │           │──离线─────►│ 批量下线   │
+└──────────────┘                 └───────────┘               └────────────┘
+```
+
+- **网关设备**：在 Admin 中 type=gateway，拥有 MQTT 凭证，固件烧录在 ESP32 上
+- **传感器设备**：在 Admin 中 type=sensor，设置所属网关，各有独立 device_uid、在线状态、告警规则
+- **网关离线**（LWT 触发）→ 其下所有传感器自动批量标记离线
+- **单个传感器故障**（如 DHT11 接线松）→ 仅该传感器离线，其他不受影响
+
+### 支持的传感器模块
+
+| 模块 | 传感器 | 上报指标 | 引脚 |
+|:---|:---|:---|:---|
+| DHT11 | 温湿度传感器 | `temperature`, `humidity` | GPIO4 |
+| Sound | 声敏传感器（模拟输出） | `noise_db` | GPIO34 (ADC1) |
+
+添加新传感器只需实现 `ISensor` 接口（`begin` + `read` + `uid`）并在 `main.cpp` 中注册。
+
+### 快速开始
+
+1. **Admin 创建设备:**
+    - 创建网关设备：type=gateway，设置 MQTT 密码
+    - 创建传感器设备：type=sensor，选择所属网关，配置 metric_fields
+
+2. **生成固件配置:**
+    Admin → 编辑网关设备 → 点击「生成固件配置」→ 填入 WiFi 和 MQTT 密码 → 复制 `config.h`
+
+3. **烧录:**
+    ```bash
+    cd firmware
+    pip install platformio       # 首次安装
+    # 粘贴 config.h 到 include/config.h
+    pio run -t upload            # 编译烧录
+    pio device monitor           # 查看串口日志
+    ```
+
+4. **验证:**
+    设备上电 → 网关和所有传感器在 Admin 显示在线 → 仪表盘和移动端实时显示遥测数据
+
+### 内置指令
+
+| 指令 | 说明 |
+|:---|:---|
+| `ping` | 连通性测试，返回 ok |
+| `get_info` | 返回固件版本、网关 UID、运行时长、可用内存、WiFi RSSI、传感器数量 |
+| `reboot` | 远程重启 ESP32 |
+
+### 接线参考
+
+```
+ESP32-WROOM-32          DHT11           声敏传感器
+┌─────────────┐    ┌──────────┐     ┌──────────┐
+│         3V3 ├────┤ VCC      │     │ VCC      ├── 3V3
+│         GND ├────┤ GND      │     │ GND      ├── GND
+│       GPIO4 ├────┤ DATA     │     │ AO       ├── GPIO34
+└─────────────┘    └──────────┘     └──────────┘
+```
+
 ## 设备模拟器
 
 项目内置 Python 编写的 IoT 设备模拟器（`simulator/`），通过 MQTT 协议模拟真实设备上报遥测数据，完整走通 EMQX → Webman MQTT 进程 → 数据库 的数据链路。
@@ -409,7 +492,8 @@ python simulator.py --api
 - [x] 移动端前端 (React 19 + Ant Design Mobile + PWA)
 - [x] API 在线文档 (Swagger UI + swagger-php 注解)
 - [x] 全局指标定义 + 设备指标配置 + 模拟数据生成
-- [ ] **下一步: 设备端 (ESP32/ESP8266) 固件开发**
+- [x] ESP32 设备固件 (Arduino + PlatformIO，模块化传感器架构)
+- [ ] **下一步: 更多传感器/执行器模块 + OTA 远程升级**
 
 ## 贡献
 

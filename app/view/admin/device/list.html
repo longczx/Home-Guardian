@@ -27,31 +27,72 @@
             </div>
         </form>
 
-        <table class="layui-table" lay-skin="line">
-            <colgroup>
-                <col width="60">
-                <col>
-                <col>
-                <col width="80">
-                <col width="100">
-                <col width="80">
-                <col width="160">
-                <col width="150">
-            </colgroup>
-            <thead>
+        <!-- 网关分组展示 -->
+        {volist name="gateways" id="group"}
+        <div style="margin-bottom:20px;border:1px solid #eee;border-radius:6px;overflow:hidden;">
+            <!-- 网关行 -->
+            <div style="background:#f7f7f7;padding:10px 16px;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:16px;">🖧</span>
+                <strong>{{$group['gateway']['name']}}</strong>
+                <code style="font-size:12px;color:#888;">{{$group['gateway']['device_uid']}}</code>
+                <span style="margin-left:4px;">
+                    {if $group['gateway']['is_online']}
+                    <span class="layui-badge layui-bg-green">在线</span>
+                    {else/}
+                    <span class="layui-badge layui-bg-gray">离线</span>
+                    {/if}
+                </span>
+                <span style="color:#999;font-size:12px;margin-left:4px;">{{$group['gateway']['location'] ?? ''}}</span>
+                <span style="flex:1;"></span>
+                <a href="/admin/devices/{{$group['gateway']['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                <a href="/admin/devices/{{$group['gateway']['id']}}/firmware-config" class="layui-btn layui-btn-xs layui-btn-warm">固件配置</a>
+            </div>
+            <!-- 传感器列表 -->
+            {if !empty($group['sensors'])}
+            <table class="layui-table" lay-skin="line" style="margin:0;">
+                <colgroup><col width="30"><col><col><col width="80"><col width="100"><col width="80"><col width="150"><col width="120"></colgroup>
+                <thead><tr><th></th><th>设备UID</th><th>名称</th><th>类型</th><th>位置</th><th>在线</th><th>最后上线</th><th>操作</th></tr></thead>
+                <tbody>
+                {volist name="group['sensors']" id="sensor"}
                 <tr>
-                    <th>ID</th>
-                    <th>设备UID</th>
-                    <th>名称</th>
-                    <th>类型</th>
-                    <th>位置</th>
-                    <th>在线</th>
-                    <th>最后上线</th>
-                    <th>操作</th>
+                    <td style="color:#ccc;text-align:center;">└</td>
+                    <td><code>{{$sensor['device_uid']}}</code></td>
+                    <td>{{$sensor['name']}}</td>
+                    <td>{{$sensor['type']}}</td>
+                    <td>{{$sensor['location'] ?? '-'}}</td>
+                    <td>
+                        {if $sensor['is_online']}
+                        <span class="layui-badge layui-bg-green">在线</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">离线</span>
+                        {/if}
+                    </td>
+                    <td>{{$sensor['last_seen'] ?? '-'}}</td>
+                    <td>
+                        <a href="/admin/devices/{{$sensor['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/devices/{{$sensor['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                {volist name="deviceList" id="device"}
+                {/volist}
+                </tbody>
+            </table>
+            {else/}
+            <div style="padding:12px 16px;color:#999;font-size:13px;">暂无挂载的传感器</div>
+            {/if}
+        </div>
+        {/volist}
+
+        <!-- 独立设备（未绑定网关） -->
+        {if !empty($standalone)}
+        <div style="margin-bottom:20px;">
+            <div style="font-size:14px;font-weight:600;color:#666;margin-bottom:8px;">独立设备（未绑定网关）</div>
+            <table class="layui-table" lay-skin="line" style="margin:0;">
+                <colgroup><col width="60"><col><col><col width="80"><col width="100"><col width="80"><col width="150"><col width="120"></colgroup>
+                <thead><tr><th>ID</th><th>设备UID</th><th>名称</th><th>类型</th><th>位置</th><th>在线</th><th>最后上线</th><th>操作</th></tr></thead>
+                <tbody>
+                {volist name="standalone" id="device"}
                 <tr>
                     <td>{{$device['id']}}</td>
                     <td><code>{{$device['device_uid']}}</code></td>
@@ -68,43 +109,20 @@
                     <td>{{$device['last_seen'] ?? '-'}}</td>
                     <td>
                         <a href="/admin/devices/{{$device['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
-                        <form method="post" action="/admin/devices/{{$device['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除该设备？')">
+                        <form method="post" action="/admin/devices/{{$device['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
                             <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
                         </form>
                     </td>
                 </tr>
                 {/volist}
-                {empty name="devices"}
-                <tr><td colspan="8" style="text-align:center;color:#999;">暂无设备</td></tr>
-                {/empty}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
+        {/if}
 
-        {if $devices instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $devices->lastPage() > 1}
-        <div id="pager"></div>
+        {if empty($gateways) && empty($standalone)}
+        <div style="text-align:center;color:#999;padding:40px 0;">暂无设备</div>
         {/if}
     </div>
 </div>
-{/block}
-
-{block name="script"}
-<script>
-{if $devices instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $devices->lastPage() > 1}
-layui.use('laypage', function(){
-    layui.laypage.render({
-        elem: 'pager',
-        count: {{$devices->total()}},
-        curr: {{$devices->currentPage()}},
-        limit: {{$devices->perPage()}},
-        jump: function(obj, first){
-            if(!first){
-                var url = new URL(window.location);
-                url.searchParams.set('page', obj.curr);
-                window.location = url;
-            }
-        }
-    });
-});
-{/if}
-</script>
 {/block}

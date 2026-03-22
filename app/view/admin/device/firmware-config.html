@@ -1,0 +1,172 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">生成固件配置 — 网关 {{$device['name']}} ({{$device['device_uid']}})</div>
+    <div class="layui-card-body" style="padding: 20px;">
+
+        {if empty($sensors)}
+        <div class="layui-bg-orange" style="padding:12px;border-radius:4px;margin-bottom:15px;">
+            该网关下尚未挂载任何传感器设备。请先创建传感器设备并将"所属网关"设为此设备。
+        </div>
+        {/if}
+
+        <div class="layui-row layui-col-space20">
+            <!-- 左侧：配置输入 -->
+            <div class="layui-col-md6">
+                <form class="layui-form">
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">WiFi SSID</label>
+                        <div class="layui-input-block">
+                            <input type="text" id="cfg_wifi_ssid" class="layui-input" placeholder="WiFi 名称" oninput="generateConfig()">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">WiFi 密码</label>
+                        <div class="layui-input-block">
+                            <input type="text" id="cfg_wifi_pass" class="layui-input" placeholder="WiFi 密码" oninput="generateConfig()">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">MQTT 密码</label>
+                        <div class="layui-input-block">
+                            <input type="text" id="cfg_mqtt_pass" class="layui-input" placeholder="创建网关时设置的 MQTT 密码" oninput="generateConfig()">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">上报间隔(ms)</label>
+                        <div class="layui-input-block">
+                            <input type="number" id="cfg_interval" class="layui-input" value="5000" oninput="generateConfig()">
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 挂载的传感器列表 -->
+                <div style="margin-top:15px;">
+                    <div style="font-weight:bold;font-size:14px;margin-bottom:8px;">挂载的传感器 ({php}echo count($sensors);{/php})</div>
+                    <table class="layui-table" lay-skin="line" style="margin-top:0;">
+                        <thead><tr><th>UID</th><th>名称</th><th>推断模块</th></tr></thead>
+                        <tbody>
+                        {volist name="sensors" id="s"}
+                        {php}
+                            $sMf = $s['metric_fields'];
+                            if (is_string($sMf)) $sMf = json_decode($sMf, true);
+                            $sKeys = is_array($sMf) ? array_column($sMf, 'key') : [];
+                            $module = '未知';
+                            if (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $module = 'DHT11';
+                            elseif (in_array('noise_db', $sKeys) || in_array('noise', $sKeys)) $module = 'Sound';
+                        {/php}
+                        <tr>
+                            <td><code>{{$s['device_uid']}}</code></td>
+                            <td>{{$s['name']}}</td>
+                            <td>{{$module}}</td>
+                        </tr>
+                        {/volist}
+                        {empty name="sensors"}
+                        <tr><td colspan="3" style="text-align:center;color:#999;">暂无传感器</td></tr>
+                        {/empty}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top:10px;padding:10px;background:#f8f8f8;border-radius:4px;font-size:13px;color:#666;">
+                    <b>使用方法：</b><br>
+                    1. 填写 WiFi 和 MQTT 密码<br>
+                    2. 复制右侧生成的 config.h<br>
+                    3. 粘贴到 <code>firmware/include/config.h</code><br>
+                    4. 执行 <code>pio run -t upload</code> 烧录到 ESP32
+                </div>
+            </div>
+
+            <!-- 右侧：生成的 config.h -->
+            <div class="layui-col-md6">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:bold;font-size:14px;">config.h</span>
+                    <button class="layui-btn layui-btn-sm layui-btn-normal" onclick="copyConfig()">
+                        <i class="layui-icon layui-icon-file"></i> 复制
+                    </button>
+                </div>
+                <pre id="config_output" style="background:#2d2d2d;color:#f8f8f2;padding:16px;border-radius:6px;font-size:13px;line-height:1.6;overflow-x:auto;max-height:600px;white-space:pre;font-family:Consolas,monospace;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+var gatewayUid = '{{$device["device_uid"]}}';
+var mqttHost   = '{{$mqttHost}}';
+var mqttPort   = '{{$mqttPort}}';
+
+// 传感器列表（从后端传入）
+var sensors = [];
+{volist name="sensors" id="s"}
+{php}
+    $sMf = $s['metric_fields'];
+    if (is_string($sMf)) $sMf = json_decode($sMf, true);
+    $sKeys = is_array($sMf) ? array_column($sMf, 'key') : [];
+    $sModule = 'unknown';
+    if (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $sModule = 'dht11';
+    elseif (in_array('noise_db', $sKeys) || in_array('noise', $sKeys)) $sModule = 'sound';
+{/php}
+sensors.push({uid: '{{$s["device_uid"]}}', module: '{{$sModule}}'});
+{/volist}
+
+function generateConfig() {
+    var ssid     = document.getElementById('cfg_wifi_ssid').value || 'YourWiFi';
+    var wifiPass = document.getElementById('cfg_wifi_pass').value || 'YourPassword';
+    var mqttPass = document.getElementById('cfg_mqtt_pass').value || 'password_from_admin';
+    var interval = document.getElementById('cfg_interval').value || '5000';
+
+    // 推断传感器开关和 UID
+    var dht11Enabled = 0, soundEnabled = 0;
+    var dht11Uid = 'sensor-temp-01', soundUid = 'sensor-sound-01';
+    sensors.forEach(function(s) {
+        if (s.module === 'dht11') { dht11Enabled = 1; dht11Uid = s.uid; }
+        if (s.module === 'sound') { soundEnabled = 1; soundUid = s.uid; }
+    });
+
+    var config = '#ifndef CONFIG_H\n'
+        + '#define CONFIG_H\n'
+        + '\n'
+        + '// ─── WiFi ─────────────────────────────────────\n'
+        + '#define WIFI_SSID              "' + ssid + '"\n'
+        + '#define WIFI_PASSWORD          "' + wifiPass + '"\n'
+        + '\n'
+        + '// ─── MQTT Broker ──────────────────────────────\n'
+        + '#define MQTT_HOST              "' + mqttHost + '"\n'
+        + '#define MQTT_PORT              ' + mqttPort + '\n'
+        + '\n'
+        + '// ─── 网关标识（用于 MQTT 认证）────────────────\n'
+        + '#define GATEWAY_UID            "' + gatewayUid + '"\n'
+        + '#define MQTT_PASSWORD          "' + mqttPass + '"\n'
+        + '\n'
+        + '// ─── 上报间隔 ─────────────────────────────────\n'
+        + '#define TELEMETRY_INTERVAL_MS  ' + interval + '\n'
+        + '\n'
+        + '// ─── 传感器模块 ───────────────────────────────\n'
+        + '#define SENSOR_DHT11_ENABLED   ' + dht11Enabled + '\n'
+        + '#define SENSOR_DHT11_UID       "' + dht11Uid + '"\n'
+        + '#define DHT11_PIN              4\n'
+        + '\n'
+        + '#define SENSOR_SOUND_ENABLED   ' + soundEnabled + '\n'
+        + '#define SENSOR_SOUND_UID       "' + soundUid + '"\n'
+        + '#define SOUND_SENSOR_PIN       34\n'
+        + '\n'
+        + '#define FIRMWARE_VERSION       "1.0.0"\n'
+        + '\n'
+        + '#endif // CONFIG_H\n';
+
+    document.getElementById('config_output').textContent = config;
+}
+
+function copyConfig() {
+    var text = document.getElementById('config_output').textContent;
+    navigator.clipboard.writeText(text).then(function() {
+        layui.layer.msg('已复制到剪贴板');
+    });
+}
+
+generateConfig();
+</script>
+{/block}

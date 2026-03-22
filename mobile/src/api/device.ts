@@ -11,6 +11,7 @@ export interface Device {
   is_online: boolean;
   last_seen: string | null;
   metric_fields: MetricField[] | null;
+  gateway_uid: string | null;
 }
 
 export interface DeviceAttribute {

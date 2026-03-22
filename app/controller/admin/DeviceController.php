@@ -32,26 +32,50 @@ class DeviceController
             });
         }
 
-        $perPage = min((int)($request->get('per_page', 20)), 100);
-        $devices = $query->orderBy('id', 'desc')->paginate($perPage);
+        $perPage = min((int)($request->get('per_page', 100)), 200);
+        $devices = $query->orderBy('type', 'desc')->orderBy('gateway_uid')->orderBy('name')->paginate($perPage);
         $deviceList = array_map(fn($d) => $d->toArray(), $devices->items());
 
+        // 按网关分组：网关 → 其下传感器
+        $gateways = [];
+        $standalone = [];
+        $gatewayMap = []; // gateway_uid => index in $gateways
+
+        foreach ($deviceList as $d) {
+            if ($d['type'] === 'gateway') {
+                $gatewayMap[$d['device_uid']] = count($gateways);
+                $gateways[] = ['gateway' => $d, 'sensors' => []];
+            }
+        }
+        foreach ($deviceList as $d) {
+            if ($d['type'] === 'gateway') continue;
+            $gwUid = $d['gateway_uid'] ?? null;
+            if ($gwUid && isset($gatewayMap[$gwUid])) {
+                $gateways[$gatewayMap[$gwUid]]['sensors'][] = $d;
+            } else {
+                $standalone[] = $d;
+            }
+        }
+
         return view('admin/device/list', [
-            'deviceList' => $deviceList,
-            'devices'   => $devices,
-            'filters'   => $request->get(),
-            'nav'       => 'devices',
-            'adminUser' => $request->adminUser,
+            'gateways'   => $gateways,
+            'standalone'  => $standalone,
+            'devices'    => $devices,
+            'filters'    => $request->get(),
+            'nav'        => 'devices',
+            'adminUser'  => $request->adminUser,
         ]);
     }
 
     public function create(Request $request)
     {
         $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
+        $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
 
         return view('admin/device/form', [
             'device'            => null,
             'metricDefinitions' => $metricDefinitions,
+            'gateways'          => $gateways,
             'nav'               => 'devices',
             'adminUser'         => $request->adminUser,
         ]);
@@ -63,9 +87,11 @@ class DeviceController
 
         if (empty($data['device_uid']) || empty($data['name']) || empty($data['type'])) {
             $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
+            $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
             return view('admin/device/form', [
                 'device'            => null,
                 'metricDefinitions' => $metricDefinitions,
+                'gateways'          => $gateways,
                 'error'             => 'device_uid、名称和类型不能为空',
                 'old'               => $data,
                 'nav'               => 'devices',
@@ -85,10 +111,12 @@ class DeviceController
         }
 
         $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
+        $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
 
         return view('admin/device/form', [
             'device'            => $device,
             'metricDefinitions' => $metricDefinitions,
+            'gateways'          => $gateways,
             'nav'               => 'devices',
             'adminUser'         => $request->adminUser,
         ]);
@@ -115,5 +143,30 @@ class DeviceController
             DeviceService::delete($id);
         }
         return redirect('/admin/devices');
+    }
+
+    public function firmwareConfig(Request $request, int $id)
+    {
+        $device = Device::find($id);
+        if (!$device) {
+            return redirect('/admin/devices');
+        }
+
+        // 查询挂载在此网关下的传感器
+        $sensors = [];
+        if ($device->type === 'gateway') {
+            $sensors = Device::where('gateway_uid', $device->device_uid)
+                ->get(['id', 'device_uid', 'name', 'type', 'metric_fields'])
+                ->toArray();
+        }
+
+        return view('admin/device/firmware-config', [
+            'device'    => $device,
+            'sensors'   => $sensors,
+            'mqttHost'  => getenv('MQTT_HOST') ?: '192.168.1.100',
+            'mqttPort'  => getenv('MQTT_PORT') ?: '1883',
+            'nav'       => 'devices',
+            'adminUser' => $request->adminUser,
+        ]);
     }
 }

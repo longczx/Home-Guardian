@@ -190,8 +190,22 @@ class DeviceService
 
         // 根据操作类型检查主题权限
         if ($action === 'publish') {
-            // 设备只能发布到自己的 upstream 主题
-            return str_starts_with($topic, "home/upstream/{$uid}/");
+            // 设备可以发布到自己的 upstream 主题
+            if (str_starts_with($topic, "home/upstream/{$uid}/")) {
+                return true;
+            }
+
+            // 网关可以代其下传感器发布
+            if ($device->type === 'gateway') {
+                $sensorUids = Device::where('gateway_uid', $uid)->pluck('device_uid')->toArray();
+                foreach ($sensorUids as $sensorUid) {
+                    if (str_starts_with($topic, "home/upstream/{$sensorUid}/")) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         if ($action === 'subscribe') {

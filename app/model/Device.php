@@ -42,6 +42,7 @@ class Device extends Model
         'last_seen',
         'is_online',
         'metric_fields',
+        'gateway_uid',
     ];
 
     /**
@@ -100,6 +101,22 @@ class Device extends Model
         return $this->hasMany(AlertLog::class, 'device_id');
     }
 
+    /**
+     * 所属网关（传感器通过 gateway_uid 关联到网关设备）
+     */
+    public function gateway()
+    {
+        return $this->belongsTo(self::class, 'gateway_uid', 'device_uid');
+    }
+
+    /**
+     * 挂载在此网关下的传感器设备
+     */
+    public function sensors(): HasMany
+    {
+        return $this->hasMany(self::class, 'gateway_uid', 'device_uid');
+    }
+
     /* ============================
      * 查询作用域
      * ============================ */
@@ -137,6 +154,14 @@ class Device extends Model
     public function scopeOnline($query)
     {
         return $query->where('is_online', true);
+    }
+
+    /**
+     * 按所属网关筛选
+     */
+    public function scopeOfGateway($query, string $gatewayUid)
+    {
+        return $query->where('gateway_uid', $gatewayUid);
     }
 
     /**
