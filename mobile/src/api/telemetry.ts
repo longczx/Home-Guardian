@@ -56,11 +56,27 @@ export function getAggregatedTelemetry(
   });
 }
 
+export interface GroupedAlert {
+  rule_id: number;
+  device_id: number;
+  status: string;
+  rule_name: string;
+  device_name: string;
+  device_location: string;
+  alert_count: number;
+  latest_triggered_at: string;
+  earliest_triggered_at: string;
+}
+
 export function getAlertLogs(params?: Record<string, string | number>) {
   return request.get<{
     code: number;
     data: { items: AlertLog[]; total: number; current_page: number; last_page: number };
   }>('/alert-logs', { params });
+}
+
+export function getGroupedAlertLogs(params?: Record<string, string | number>) {
+  return request.get<{ code: number; data: GroupedAlert[] }>('/alert-logs/grouped', { params });
 }
 
 export function getAlertLog(id: number) {
@@ -69,6 +85,14 @@ export function getAlertLog(id: number) {
 
 export function acknowledgeAlert(id: number) {
   return request.patch(`/alert-logs/${id}/acknowledge`);
+}
+
+export function batchAcknowledgeAlerts(ruleId: number, deviceId: number) {
+  return request.patch('/alert-logs/batch-acknowledge', { rule_id: ruleId, device_id: deviceId });
+}
+
+export function batchResolveAlerts(ruleId: number, deviceId: number) {
+  return request.patch('/alert-logs/batch-resolve', { rule_id: ruleId, device_id: deviceId });
 }
 
 export function resolveAlert(id: number) {

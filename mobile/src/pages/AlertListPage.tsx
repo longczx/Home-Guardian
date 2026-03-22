@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CapsuleTabs, SwipeAction, InfiniteScroll, Tag, PullToRefresh, Toast } from 'antd-mobile';
+import { CapsuleTabs, Tag, PullToRefresh, Toast, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { RightOutline } from 'antd-mobile-icons';
-import { getAlertLogs, acknowledgeAlert, resolveAlert, type AlertLog } from '@/api/telemetry';
+import { getGroupedAlertLogs, getAlertLogs, batchAcknowledgeAlerts, batchResolveAlerts, type GroupedAlert, type AlertLog } from '@/api/telemetry';
 import { useAlertStore } from '@/stores/alertStore';
 import RelativeTime from '@/components/RelativeTime';
 import EmptyState from '@/components/EmptyState';
@@ -16,79 +16,68 @@ const statusConfig: Record<string, { color: 'danger' | 'warning' | 'success' | '
 export default function AlertListPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('all');
-  const [alerts, setAlerts] = useState<AlertLog[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const decrement = useAlertStore((s) => s.decrement);
+  const [groups, setGroups] = useState<GroupedAlert[]>([]);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandedAlerts, setExpandedAlerts] = useState<AlertLog[]>([]);
+  const fetchUnreadCount = useAlertStore((s) => s.fetchUnreadCount);
 
-  const fetchAlerts = useCallback(async (p: number, status?: string) => {
-    const params: Record<string, string | number> = { page: p, per_page: 20 };
+  const fetchGroups = useCallback(async (status?: string) => {
+    const params: Record<string, string | number> = {};
     if (status && status !== 'all') params.status = status;
     try {
-      const { data: res } = await getAlertLogs(params);
-      if (res.code === 0) {
-        if (p === 1) setAlerts(res.data.items);
-        else setAlerts((prev) => [...prev, ...res.data.items]);
-        setHasMore(res.data.current_page < res.data.last_page);
-      }
-    } catch {
-      setHasMore(false);
-    }
+      const { data: res } = await getGroupedAlertLogs(params);
+      if (res.code === 0) setGroups(res.data);
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
-    setPage(1);
-    setAlerts([]);
-    setHasMore(true);
-    fetchAlerts(1, tab);
-  }, [tab, fetchAlerts]);
+    setExpandedKey(null);
+    fetchGroups(tab);
+  }, [tab, fetchGroups]);
 
-  const loadMore = async () => {
-    const next = page + 1;
-    setPage(next);
-    await fetchAlerts(next, tab);
-  };
+  const groupKey = (g: GroupedAlert) => `${g.rule_id}-${g.device_id}-${g.status}`;
 
-  const handleAcknowledge = async (id: number) => {
+  const handleExpand = async (g: GroupedAlert) => {
+    const key = groupKey(g);
+    if (expandedKey === key) {
+      setExpandedKey(null);
+      return;
+    }
+    setExpandedKey(key);
     try {
-      await acknowledgeAlert(id);
-      Toast.show({ content: '已确认', icon: 'success' });
-      setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'acknowledged' } : a)));
-      decrement();
-    } catch {
-      Toast.show({ content: '操作失败', icon: 'fail' });
-    }
+      const { data: res } = await getAlertLogs({ rule_id: g.rule_id, device_id: g.device_id, status: g.status, per_page: 50 });
+      if (res.code === 0) setExpandedAlerts(res.data.items);
+    } catch { setExpandedAlerts([]); }
   };
 
-  const handleResolve = async (id: number) => {
-    try {
-      await resolveAlert(id);
-      Toast.show({ content: '已解决', icon: 'success' });
-      setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'resolved' } : a)));
-    } catch {
-      Toast.show({ content: '操作失败', icon: 'fail' });
-    }
+  const handleBatchAck = (g: GroupedAlert) => {
+    Dialog.confirm({
+      title: '批量确认',
+      content: `确定将「${g.rule_name}」在「${g.device_name}」的 ${g.alert_count} 条告警全部标记为已确认？`,
+      onConfirm: async () => {
+        try {
+          await batchAcknowledgeAlerts(g.rule_id, g.device_id);
+          Toast.show({ content: '批量确认成功', icon: 'success' });
+          fetchGroups(tab);
+          fetchUnreadCount();
+        } catch { Toast.show({ content: '操作失败', icon: 'fail' }); }
+      },
+    });
   };
 
-  const getActions = (alert: AlertLog) => {
-    const actions = [];
-    if (alert.status === 'triggered') {
-      actions.push({
-        key: 'ack',
-        text: '确认',
-        color: 'warning' as const,
-        onClick: () => handleAcknowledge(alert.id),
-      });
-    }
-    if (alert.status !== 'resolved') {
-      actions.push({
-        key: 'resolve',
-        text: '解决',
-        color: 'success' as const,
-        onClick: () => handleResolve(alert.id),
-      });
-    }
-    return actions;
+  const handleBatchResolve = (g: GroupedAlert) => {
+    Dialog.confirm({
+      title: '批量解决',
+      content: `确定将「${g.rule_name}」在「${g.device_name}」的 ${g.alert_count} 条告警全部标记为已解决？`,
+      onConfirm: async () => {
+        try {
+          await batchResolveAlerts(g.rule_id, g.device_id);
+          Toast.show({ content: '批量解决成功', icon: 'success' });
+          fetchGroups(tab);
+          fetchUnreadCount();
+        } catch { Toast.show({ content: '操作失败', icon: 'fail' }); }
+      },
+    });
   };
 
   return (
@@ -111,54 +100,110 @@ export default function AlertListPage() {
         </CapsuleTabs>
       </div>
 
-      <PullToRefresh onRefresh={() => fetchAlerts(1, tab)}>
+      <PullToRefresh onRefresh={() => fetchGroups(tab)}>
         <div style={{ padding: '8px 16px' }}>
-          {alerts.length === 0 && !hasMore ? (
+          {groups.length === 0 ? (
             <EmptyState title="暂无告警" />
           ) : (
-            alerts.map((alert) => (
-              <SwipeAction key={alert.id} rightActions={getActions(alert)}>
-                <div
-                  onClick={() => navigate(`/mobile/alerts/${alert.id}`)}
-                  style={{
-                    background: 'var(--color-bg-card)',
-                    borderRadius: 'var(--card-radius)',
-                    padding: '14px 16px',
-                    marginBottom: 8,
-                    boxShadow: 'var(--card-shadow)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{
-                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                    background: alert.status === 'triggered' ? 'var(--color-danger)' : alert.status === 'acknowledged' ? 'var(--color-warning)' : 'var(--color-success)',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {alert.rule?.name || '未知规则'}
-                      </span>
-                      <Tag color={statusConfig[alert.status]?.color || 'default'} fill="outline" style={{ flexShrink: 0 }}>
-                        {statusConfig[alert.status]?.label || alert.status}
-                      </Tag>
+            groups.map((g) => {
+              const key = groupKey(g);
+              const isExpanded = expandedKey === key;
+              return (
+                <div key={key} style={{ marginBottom: 10 }}>
+                  {/* Group card */}
+                  <div
+                    style={{
+                      background: 'var(--color-bg-card)',
+                      borderRadius: 'var(--card-radius)',
+                      boxShadow: 'var(--card-shadow)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      onClick={() => handleExpand(g)}
+                      style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
+                    >
+                      <div style={{
+                        width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                        background: g.status === 'triggered' ? 'var(--color-danger)' : g.status === 'acknowledged' ? 'var(--color-warning)' : 'var(--color-success)',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {g.rule_name}
+                          </span>
+                          <Tag color={statusConfig[g.status]?.color || 'default'} fill="outline" style={{ flexShrink: 0 }}>
+                            {statusConfig[g.status]?.label || g.status}
+                          </Tag>
+                          <span style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600, flexShrink: 0 }}>
+                            ×{g.alert_count}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                          {g.device_name} · {g.device_location}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <RelativeTime date={g.latest_triggered_at} />
+                        <div style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
+                          <RightOutline fontSize={12} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                      {alert.device?.name} · {alert.device?.location}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <RelativeTime date={alert.triggered_at} />
-                    <div style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}><RightOutline fontSize={12} /></div>
+
+                    {/* Batch actions */}
+                    {g.status !== 'resolved' && (
+                      <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8 }}>
+                        {g.status === 'triggered' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleBatchAck(g); }}
+                            style={{
+                              flex: 1, padding: '6px 0', border: '1px solid var(--color-warning)', borderRadius: 6,
+                              background: 'transparent', color: 'var(--color-warning)', fontSize: 13, cursor: 'pointer',
+                            }}
+                          >
+                            全部确认 ({g.alert_count})
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleBatchResolve(g); }}
+                          style={{
+                            flex: 1, padding: '6px 0', border: '1px solid var(--color-success)', borderRadius: 6,
+                            background: 'transparent', color: 'var(--color-success)', fontSize: 13, cursor: 'pointer',
+                          }}
+                        >
+                          全部解决 ({g.alert_count})
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Expanded detail list */}
+                    {isExpanded && (
+                      <div style={{ borderTop: '1px solid var(--color-border)' }}>
+                        {expandedAlerts.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => navigate(`/mobile/alerts/${a.id}`)}
+                            style={{
+                              padding: '10px 16px', borderBottom: '1px solid var(--color-border)',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
+                            }}
+                          >
+                            <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>#{a.id}</span>
+                            <RelativeTime date={a.triggered_at} />
+                          </div>
+                        ))}
+                        {expandedAlerts.length === 0 && (
+                          <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>加载中...</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </SwipeAction>
-            ))
+              );
+            })
           )}
         </div>
-        <InfiniteScroll loadMore={loadMore} hasMore={hasMore} />
       </PullToRefresh>
     </div>
   );

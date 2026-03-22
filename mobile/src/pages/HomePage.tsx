@@ -16,7 +16,7 @@ import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
 import { buildMetricLookup } from '@/utils/metricLookup';
 import StatCard from '@/components/StatCard';
 import RoomCard from '@/components/RoomCard';
-import { getAlertLogs, type AlertLog } from '@/api/telemetry';
+import { getGroupedAlertLogs, type GroupedAlert } from '@/api/telemetry';
 import { useState, useCallback } from 'react';
 import RelativeTime from '@/components/RelativeTime';
 
@@ -26,7 +26,7 @@ export default function HomePage() {
   const { devices, metricsMap, fetchDevices } = useDeviceStore();
   const unreadCount = useAlertStore((s) => s.unreadCount);
   const { definitions, fetchDefinitions } = useMetricDefinitionStore();
-  const [recentAlerts, setRecentAlerts] = useState<AlertLog[]>([]);
+  const [recentAlerts, setRecentAlerts] = useState<GroupedAlert[]>([]);
 
   const metricLookup = useMemo(
     () => buildMetricLookup(null, definitions),
@@ -37,8 +37,8 @@ export default function HomePage() {
     await fetchDevices();
     fetchDefinitions();
     try {
-      const { data: res } = await getAlertLogs({ per_page: 5 });
-      if (res.code === 0) setRecentAlerts(res.data.items);
+      const { data: res } = await getGroupedAlertLogs({});
+      if (res.code === 0) setRecentAlerts(res.data.slice(0, 8));
     } catch { /* ignore */ }
   }, [fetchDevices]);
 
@@ -154,8 +154,8 @@ export default function HomePage() {
               <div style={{ background: 'var(--color-bg-card)', borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', overflow: 'hidden' }}>
                 {recentAlerts.map((a) => (
                   <div
-                    key={a.id}
-                    onClick={() => navigate(`/mobile/alerts/${a.id}`)}
+                    key={`${a.rule_id}-${a.device_id}-${a.status}`}
+                    onClick={() => navigate('/mobile/alerts')}
                     style={{
                       padding: '12px 16px',
                       borderBottom: '1px solid var(--color-border)',
@@ -168,14 +168,17 @@ export default function HomePage() {
                       background: statusColors[a.status] || 'var(--color-text-tertiary)',
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.rule?.name || '未知规则'}
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {a.rule_name}
+                        {a.alert_count > 1 && (
+                          <span style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 600 }}>×{a.alert_count}</span>
+                        )}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                        {a.device?.name} · {a.device?.location}
+                        {a.device_name} · {a.device_location}
                       </div>
                     </div>
-                    <RelativeTime date={a.triggered_at} />
+                    <RelativeTime date={a.latest_triggered_at} />
                   </div>
                 ))}
               </div>

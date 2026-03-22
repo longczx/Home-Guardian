@@ -14,6 +14,7 @@ use app\model\Automation;
 use app\service\JwtService;
 use support\Request;
 use support\Redis;
+use support\Db;
 
 class DashboardController
 {
@@ -27,12 +28,25 @@ class DashboardController
             'automation_total'=> Automation::where('is_enabled', true)->count(),
         ];
 
-        // 最近告警（转为数组供 volist 使用）
-        $recentAlerts = AlertLog::with(['rule:id,name', 'device:id,name,location'])
-            ->orderBy('triggered_at', 'desc')
+        // 最近告警（聚合展示）
+        $recentAlerts = Db::table('alert_logs')
+            ->join('alert_rules', 'alert_logs.rule_id', '=', 'alert_rules.id')
+            ->join('devices', 'alert_logs.device_id', '=', 'devices.id')
+            ->select(
+                'alert_logs.rule_id',
+                'alert_logs.device_id',
+                'alert_logs.status',
+                'alert_rules.name as rule_name',
+                'devices.name as device_name',
+                'devices.location as device_location',
+                Db::raw('count(*) as alert_count'),
+                Db::raw('max(alert_logs.triggered_at) as latest_triggered_at')
+            )
+            ->groupBy('alert_logs.rule_id', 'alert_logs.device_id', 'alert_logs.status',
+                       'alert_rules.name', 'devices.name', 'devices.location')
+            ->orderBy('latest_triggered_at', 'desc')
             ->limit(10)
             ->get()
-            ->map(fn($a) => $a->toArray())
             ->toArray();
 
         // 所有设备（用于实时状态面板）

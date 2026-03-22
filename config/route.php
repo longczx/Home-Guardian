@@ -71,6 +71,8 @@ Route::group('/admin', function () {
     Route::get('/alert-logs', [app\controller\admin\AlertLogController::class, 'index']);
     Route::post('/alert-logs/{id:\d+}/acknowledge', [app\controller\admin\AlertLogController::class, 'acknowledge']);
     Route::post('/alert-logs/{id:\d+}/resolve', [app\controller\admin\AlertLogController::class, 'resolve']);
+    Route::post('/alert-logs/batch-acknowledge', [app\controller\admin\AlertLogController::class, 'batchAcknowledge']);
+    Route::post('/alert-logs/batch-resolve', [app\controller\admin\AlertLogController::class, 'batchResolve']);
 
     // 自动化
     Route::get('/automations', [app\controller\admin\AutomationController::class, 'index']);
@@ -254,11 +256,17 @@ Route::group('/api', function () {
     /* ---------- 告警日志 ---------- */
     Route::get('/alert-logs', [app\controller\AlertLogController::class, 'index'])
         ->middleware([new PermissionMiddleware('alerts.view')]);
+    Route::get('/alert-logs/grouped', [app\controller\AlertLogController::class, 'grouped'])
+        ->middleware([new PermissionMiddleware('alerts.view')]);
     Route::get('/alert-logs/{id:\d+}', [app\controller\AlertLogController::class, 'show'])
         ->middleware([new PermissionMiddleware('alerts.view')]);
     Route::patch('/alert-logs/{id:\d+}/acknowledge', [app\controller\AlertLogController::class, 'acknowledge'])
         ->middleware([new PermissionMiddleware('alerts.edit')]);
     Route::patch('/alert-logs/{id:\d+}/resolve', [app\controller\AlertLogController::class, 'resolve'])
+        ->middleware([new PermissionMiddleware('alerts.edit')]);
+    Route::patch('/alert-logs/batch-acknowledge', [app\controller\AlertLogController::class, 'batchAcknowledge'])
+        ->middleware([new PermissionMiddleware('alerts.edit')]);
+    Route::patch('/alert-logs/batch-resolve', [app\controller\AlertLogController::class, 'batchResolve'])
         ->middleware([new PermissionMiddleware('alerts.edit')]);
 
     /* ---------- 仪表盘 ---------- */

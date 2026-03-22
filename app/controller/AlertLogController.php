@@ -14,6 +14,7 @@ use app\model\AlertLog;
 use app\service\AlertService;
 use app\service\AuditService;
 use support\Request;
+use support\Db;
 use OpenApi\Attributes as OA;
 
 #[OA\Tag(name: '告警日志', description: '告警记录查询、确认、解决')]
@@ -151,5 +152,98 @@ class AlertLogController
         ]);
 
         return api_success($alertLog, '告警已解决');
+    }
+
+    /**
+     * 聚合告警列表
+     *
+     * GET /api/alert-logs/grouped?status=triggered
+     *
+     * 按 rule_id + device_id + status 分组，返回每组的计数、最新/最早触发时间。
+     */
+    public function grouped(Request $request)
+    {
+        $query = Db::table('alert_logs')
+            ->join('alert_rules', 'alert_logs.rule_id', '=', 'alert_rules.id')
+            ->join('devices', 'alert_logs.device_id', '=', 'devices.id')
+            ->select(
+                'alert_logs.rule_id',
+                'alert_logs.device_id',
+                'alert_logs.status',
+                'alert_rules.name as rule_name',
+                'devices.name as device_name',
+                'devices.location as device_location',
+                Db::raw('count(*) as alert_count'),
+                Db::raw('max(alert_logs.triggered_at) as latest_triggered_at'),
+                Db::raw('min(alert_logs.triggered_at) as earliest_triggered_at')
+            )
+            ->groupBy('alert_logs.rule_id', 'alert_logs.device_id', 'alert_logs.status',
+                       'alert_rules.name', 'devices.name', 'devices.location');
+
+        if ($status = $request->get('status')) {
+            $query->where('alert_logs.status', $status);
+        }
+
+        // 位置作用域
+        $locations = $request->user->locations ?? [];
+        if (!empty($locations)) {
+            $query->whereIn('devices.location', $locations);
+        }
+
+        $data = $query->orderBy('latest_triggered_at', 'desc')->get();
+
+        return api_success($data);
+    }
+
+    /**
+     * 批量确认同规则同设备的告警
+     *
+     * PATCH /api/alert-logs/batch-acknowledge
+     * Body: { "rule_id": 1, "device_id": 2 }
+     */
+    public function batchAcknowledge(Request $request)
+    {
+        $ruleId   = (int)$request->post('rule_id');
+        $deviceId = (int)$request->post('device_id');
+
+        if (!$ruleId || !$deviceId) {
+            return api_error('rule_id 和 device_id 必填', 422, 1000);
+        }
+
+        $count = AlertLog::where('rule_id', $ruleId)
+            ->where('device_id', $deviceId)
+            ->where('status', AlertLog::STATUS_TRIGGERED)
+            ->update([
+                'status'          => AlertLog::STATUS_ACKNOWLEDGED,
+                'acknowledged_by' => $request->userId(),
+                'acknowledged_at' => now(),
+            ]);
+
+        return api_success(['updated' => $count], "已批量确认 {$count} 条告警");
+    }
+
+    /**
+     * 批量解决同规则同设备的告警
+     *
+     * PATCH /api/alert-logs/batch-resolve
+     * Body: { "rule_id": 1, "device_id": 2 }
+     */
+    public function batchResolve(Request $request)
+    {
+        $ruleId   = (int)$request->post('rule_id');
+        $deviceId = (int)$request->post('device_id');
+
+        if (!$ruleId || !$deviceId) {
+            return api_error('rule_id 和 device_id 必填', 422, 1000);
+        }
+
+        $count = AlertLog::where('rule_id', $ruleId)
+            ->where('device_id', $deviceId)
+            ->whereIn('status', [AlertLog::STATUS_TRIGGERED, AlertLog::STATUS_ACKNOWLEDGED])
+            ->update([
+                'status' => AlertLog::STATUS_RESOLVED,
+            ]);
+
+        return api_success(['updated' => $count], "已批量解决 {$count} 条告警");
     }
 }

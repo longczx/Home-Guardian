@@ -1,7 +1,7 @@
 {extend name="admin/layout" /}
 {block name="content"}
 <div class="layui-card">
-    <div class="layui-card-header">告警日志</div>
+    <div class="layui-card-header">告警日志（聚合展示）</div>
     <div class="layui-card-body">
         <form class="layui-form" method="get" style="margin-bottom:15px;">
             <div class="layui-inline">
@@ -19,65 +19,47 @@
         </form>
 
         <table class="layui-table" lay-skin="line">
-            <colgroup><col width="60"><col><col><col width="100"><col width="170"><col width="180"></colgroup>
+            <colgroup><col><col><col width="80"><col width="80"><col width="170"><col width="240"></colgroup>
             <thead>
-                <tr><th>ID</th><th>规则</th><th>设备</th><th>状态</th><th>触发时间</th><th>操作</th></tr>
+                <tr><th>规则</th><th>设备</th><th>状态</th><th>数量</th><th>最近触发</th><th>操作</th></tr>
             </thead>
             <tbody>
-                {volist name="logList" id="log"}
+                {volist name="groups" id="g"}
                 <tr>
-                    <td>{{$log['id']}}</td>
-                    <td>{{$log['rule']['name'] ?? '-'}}</td>
-                    <td>{{$log['device']['name'] ?? '-'}} ({{$log['device']['location'] ?? ''}})</td>
+                    <td>{{$g->rule_name}}</td>
+                    <td>{{$g->device_name}} ({{$g->device_location}})</td>
                     <td>
-                        {switch name="log.status"}
+                        {switch name="g->status"}
                             {case value="triggered"}<span class="layui-badge">触发</span>{/case}
                             {case value="acknowledged"}<span class="layui-badge layui-bg-orange">已确认</span>{/case}
                             {case value="resolved"}<span class="layui-badge layui-bg-green">已解决</span>{/case}
                         {/switch}
                     </td>
-                    <td>{{$log['triggered_at']}}</td>
+                    <td><strong>{{$g->alert_count}}</strong></td>
+                    <td>{{$g->latest_triggered_at}}</td>
                     <td>
-                        {if $log['status'] === 'triggered'}
-                        <form method="post" action="/admin/alert-logs/{{$log['id']}}/acknowledge" style="display:inline;">
-                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-warm">确认</button>
+                        {if $g->status === 'triggered'}
+                        <form method="post" action="/admin/alert-logs/batch-acknowledge" style="display:inline;">
+                            <input type="hidden" name="rule_id" value="{{$g->rule_id}}">
+                            <input type="hidden" name="device_id" value="{{$g->device_id}}">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-warm" onclick="return confirm('确定批量确认 {{$g->alert_count}} 条告警？')">全部确认</button>
                         </form>
                         {/if}
-                        {if $log['status'] !== 'resolved'}
-                        <form method="post" action="/admin/alert-logs/{{$log['id']}}/resolve" style="display:inline;">
-                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-normal">解决</button>
+                        {if $g->status !== 'resolved'}
+                        <form method="post" action="/admin/alert-logs/batch-resolve" style="display:inline;">
+                            <input type="hidden" name="rule_id" value="{{$g->rule_id}}">
+                            <input type="hidden" name="device_id" value="{{$g->device_id}}">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-normal" onclick="return confirm('确定批量解决 {{$g->alert_count}} 条告警？')">全部解决</button>
                         </form>
                         {/if}
                     </td>
                 </tr>
                 {/volist}
-                {empty name="logs"}
+                {empty name="groups"}
                 <tr><td colspan="6" style="text-align:center;color:#999;">暂无告警日志</td></tr>
                 {/empty}
             </tbody>
         </table>
-
-        {if $logs instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $logs->lastPage() > 1}
-        <div id="pager"></div>
-        {/if}
     </div>
 </div>
-{/block}
-
-{block name="script"}
-<script>
-{if $logs instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $logs->lastPage() > 1}
-layui.use('laypage', function(){
-    layui.laypage.render({
-        elem: 'pager',
-        count: {{$logs->total()}},
-        curr: {{$logs->currentPage()}},
-        limit: {{$logs->perPage()}},
-        jump: function(obj, first){
-            if(!first){ var url = new URL(window.location); url.searchParams.set('page', obj.curr); window.location = url; }
-        }
-    });
-});
-{/if}
-</script>
 {/block}
