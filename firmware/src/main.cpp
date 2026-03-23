@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include "config.h"
 #include "watchdog.h"
 #include "wifi_manager.h"
