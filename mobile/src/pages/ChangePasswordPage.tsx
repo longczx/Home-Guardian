@@ -45,14 +45,23 @@ export default function ChangePasswordPage() {
         修改密码
       </NavBar>
 
-      <div className="page-hero" style={{ marginTop: 8 }}>
-        <div className="page-hero__eyebrow">security</div>
-        <div className="page-hero__title">修改密码</div>
-        <div className="page-hero__subtitle">更新当前账号密码，继续沿用现有接口与校验逻辑。</div>
+      <div className="screen-header" style={{ marginTop: 8 }}>
+        <div>
+          <div className="screen-header__title">修改密码</div>
+          <div className="screen-header__subtitle">更新当前账号密码，并保持现有校验和接口流程。</div>
+        </div>
+      </div>
+
+      <div className="detail-hero-panel detail-hero-panel--form">
+        <div className="detail-hero-panel__main">
+          <div className="detail-hero-panel__eyebrow">security</div>
+          <div className="detail-hero-panel__title">账号安全</div>
+          <div className="detail-hero-panel__subtitle">新密码至少 6 位，并通过确认密码保证输入一致。</div>
+        </div>
       </div>
 
       <div className="form-shell">
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">密码信息</div>
           <div className="form-card__subtitle">新密码至少 6 位，两次输入必须保持一致。</div>
           <Form layout="vertical" style={{ '--border-top': 'none' } as React.CSSProperties}>

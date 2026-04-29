@@ -22,6 +22,7 @@ import {
   loadNotificationChannelFormPage,
   loadNotificationChannelPage,
   loadProfilePage,
+  loadThemeCenterPage,
   loadTelemetryViewPage,
 } from '@/router/routeLoaders';
 
@@ -43,6 +44,7 @@ const CommandHistoryPage = lazy(loadCommandHistoryPage);
 const NotificationChannelPage = lazy(loadNotificationChannelPage);
 const NotificationChannelFormPage = lazy(loadNotificationChannelFormPage);
 const ProfilePage = lazy(loadProfilePage);
+const ThemeCenterPage = lazy(loadThemeCenterPage);
 const ChangePasswordPage = lazy(loadChangePasswordPage);
 const AboutPage = lazy(loadAboutPage);
 
@@ -79,6 +81,7 @@ export default function App() {
             <Route path="/mobile/notification-channels" element={<NotificationChannelPage />} />
             <Route path="/mobile/notification-channels/create" element={<NotificationChannelFormPage />} />
             <Route path="/mobile/notification-channels/:id/edit" element={<NotificationChannelFormPage />} />
+            <Route path="/mobile/profile/theme" element={<ThemeCenterPage />} />
             <Route path="/mobile/profile/password" element={<ChangePasswordPage />} />
             <Route path="/mobile/profile/about" element={<AboutPage />} />
           </Route>

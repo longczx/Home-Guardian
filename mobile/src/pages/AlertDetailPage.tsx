@@ -68,25 +68,40 @@ export default function AlertDetailPage() {
       </NavBar>
 
       <div>
-        <div className="page-hero" style={{ marginTop: 8, marginBottom: 16 }}>
-          <div className="page-hero__eyebrow">alert detail</div>
-          <div className="page-hero__title">{alert.rule?.name || '告警详情'}</div>
-          <div className="page-hero__subtitle">查看告警的触发上下文、状态流转时间和后续处理动作。</div>
-          <div className="page-hero__meta">
+        <div className="screen-header" style={{ marginTop: 8 }}>
+          <div>
+            <div className="screen-header__title">{alert.rule?.name || '告警详情'}</div>
+            <div className="screen-header__subtitle">查看异常上下文、状态流转和可执行处理动作。</div>
+          </div>
+        </div>
+
+        <div className="surface-card detail-summary-card">
+          <div className="surface-card__eyebrow">alert detail</div>
+          <div className="surface-card__title">告警事件</div>
+          <div className="surface-card__meta">
             <span className="soft-chip">状态 {alert.status}</span>
             <span className="soft-chip">设备 {alert.device?.name || '未知设备'}</span>
+            <span className="soft-chip">触发时间 {new Date(alert.triggered_at).toLocaleTimeString()}</span>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: 16, marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-text)' }}>{alert.rule?.name || '未知规则'}</span>
-            <StatusTag status={alert.status} />
+        <div className="alert-detail-highlight-card">
+          <div className="alert-detail-highlight-card__icon">!</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)' }}>{alert.rule?.name || '未知规则'}</span>
+              <StatusTag status={alert.status} />
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+              {alert.device?.name || '未知设备'} · {alert.device?.location || '未知位置'}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <RelativeTime date={alert.triggered_at} />
+            </div>
           </div>
-          <RelativeTime date={alert.triggered_at} />
         </div>
 
-        <div className="glass-card" style={{ padding: 16, marginBottom: 16 }}>
+        <div className="surface-card detail-section-card" style={{ marginBottom: 16 }}>
           {infoItems.map((item) => (
             <div key={item.label} className="detail-row" style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
               <span className="detail-row__label">{item.label}</span>
@@ -95,7 +110,7 @@ export default function AlertDetailPage() {
           ))}
         </div>
 
-        <div className="soft-actions">
+        <div className="soft-actions soft-actions--stacked">
           {alert.status === 'triggered' && (
             <Button block color="warning" onClick={handleAck} style={{ borderRadius: 18, flex: 1 }}>
               确认告警

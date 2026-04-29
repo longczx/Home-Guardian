@@ -6,6 +6,7 @@ import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
 import { useWSSubscription } from '@/hooks/useWSSubscription';
 import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
 import { buildMetricLookup } from '@/utils/metricLookup';
+import { normalizeBackendTimestamp } from '@/utils/dateTime';
 import StatusTag from '@/components/StatusTag';
 import DeviceIcon from '@/components/DeviceIcon';
 import MetricCard from '@/components/MetricCard';
@@ -55,16 +56,16 @@ export default function DeviceDetailPage() {
     const msgDeviceId = msg.device_id as number;
     if (msgDeviceId !== deviceId) return;
     const data = msg.data as Record<string, unknown> | undefined;
-    const ts = (msg.ts as string) || new Date().toISOString();
+    const ts = normalizeBackendTimestamp(msg.ts);
     if (!data || typeof data !== 'object') return;
     setMetrics((prev) => {
       const updated = [...prev];
       for (const [key, value] of Object.entries(data)) {
         const idx = updated.findIndex((m) => m.metric_key === key);
         if (idx >= 0) {
-          updated[idx] = { ...updated[idx], value, ts };
+          updated[idx] = { ...updated[idx], value, ts: ts ?? updated[idx].ts };
         } else {
-          updated.push({ metric_key: key, value, ts });
+          updated.push({ metric_key: key, value, ts: ts ?? new Date().toISOString() });
         }
       }
       return updated;
@@ -144,30 +145,46 @@ export default function DeviceDetailPage() {
 
       <PullToRefresh onRefresh={fetchData}>
         <div>
-          <div className="page-hero" style={{ marginTop: 8 }}>
-            <div className="page-hero__eyebrow">device detail</div>
-            <div className="page-hero__title">{device.name}</div>
-            <div className="page-hero__subtitle">查看设备状态、实时指标、属性和控制能力。</div>
-            <div className="page-hero__meta">
-              <span className="soft-chip">{device.location || '未分配位置'}</span>
-              <span className="soft-chip">{device.type}</span>
-              <span className="soft-chip">{device.is_online ? '在线' : '离线'}</span>
+          <div className="screen-header" style={{ marginTop: 8 }}>
+            <div>
+              <div className="screen-header__title">{device.name}</div>
+              <div className="screen-header__subtitle">{device.location || '未分配位置'} · {device.type}</div>
             </div>
-            <div className="sub-hero-grid sub-hero-grid--two">
-              <div className="sub-hero-tile">
-                <div className="sub-hero-tile__label">设备 UID</div>
-                <div className="sub-hero-tile__value" style={{ fontSize: 16 }}>{device.device_uid}</div>
-                <div className="sub-hero-tile__meta">唯一标识</div>
+            <button
+              className="ghost-icon-button"
+              onClick={() => navigate(`/mobile/device/${device.id}/telemetry`)}
+              onMouseEnter={() => preloadTelemetryRoutes()}
+              onTouchStart={() => preloadTelemetryRoutes()}
+            >
+              图表
+            </button>
+          </div>
+
+          <div className="detail-hero-panel detail-hero-panel--room">
+            <div className="detail-hero-panel__main">
+              <div className="detail-hero-panel__eyebrow">room context</div>
+              <div className="detail-hero-panel__title">{device.location || '设备空间'}</div>
+              <div className="detail-hero-panel__subtitle">从房间语义看设备状态、在线情况和控制动作。</div>
+              <div className="page-hero__meta">
+                <span className="soft-chip">{device.type}</span>
+                <span className="soft-chip">{device.is_online ? '在线' : '离线'}</span>
+                <span className="soft-chip">固件 {device.firmware_version || '未知'}</span>
               </div>
-              <div className="sub-hero-tile">
-                <div className="sub-hero-tile__label">最后状态</div>
-                <div className="sub-hero-tile__value">{device.is_online ? '正常连接' : '等待上报'}</div>
-                <div className="sub-hero-tile__meta">{device.last_seen || '暂无上报时间'}</div>
+            </div>
+            <div className="detail-hero-panel__aside">
+              <div className="detail-kpi-card">
+                <span>设备 UID</span>
+                <strong>{device.device_uid}</strong>
+              </div>
+              <div className="detail-kpi-card">
+                <span>最后状态</span>
+                <strong>{device.is_online ? '正常连接' : '等待上报'}</strong>
+                <small>{device.last_seen || '暂无上报时间'}</small>
               </div>
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: 16, marginTop: 16, marginBottom: 12 }}>
+          <div className="surface-card detail-section-card" style={{ padding: 16, marginTop: 16, marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 12,
@@ -213,7 +230,7 @@ export default function DeviceDetailPage() {
                   查看图表
                 </span>
               </div>
-              <div className="metric-grid" style={{ marginBottom: 12 }}>
+              <div className="metric-grid metric-grid--spacious" style={{ marginBottom: 12 }}>
                 {metrics.map((m) => {
                   const meta = metricLookup(m.metric_key);
                   return (
@@ -230,7 +247,7 @@ export default function DeviceDetailPage() {
             </>
           )}
 
-          <div className="glass-card" style={{ padding: 16, marginBottom: 12 }}>
+          <div className="surface-card detail-section-card" style={{ padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 12 }}>
               设备属性
             </div>
@@ -265,7 +282,7 @@ export default function DeviceDetailPage() {
           </div>
 
           {device.type === 'actuator' && (
-            <div className="glass-card" style={{ padding: 16 }}>
+            <div className="surface-card detail-section-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
                 设备控制
               </div>

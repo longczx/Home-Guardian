@@ -11,7 +11,7 @@ interface StatCardProps {
 export default function StatCard({ icon, label, value, color = 'var(--color-primary)', onClick }: StatCardProps) {
   return (
     <div
-      className="glass-card glass-card--interactive"
+      className="surface-card surface-card--interactive stat-card"
       onClick={onClick}
       style={{
         cursor: onClick ? 'pointer' : 'default',

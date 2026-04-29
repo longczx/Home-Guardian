@@ -5,6 +5,7 @@ import { getDevices, type Device } from '@/api/device';
 import { getLatestTelemetry, getAggregatedTelemetry, type LatestMetric, type AggregatedPoint } from '@/api/telemetry';
 import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
 import { buildMetricLookup } from '@/utils/metricLookup';
+import { APP_TIME_ZONE_LABEL, formatTelemetryAxisLabel, getTelemetryRange, getTelemetrySourceLabel } from '@/utils/dateTime';
 import TelemetryChart from '@/components/TelemetryChart';
 import TelemetryPageSkeleton from '@/components/TelemetryPageSkeleton';
 
@@ -14,15 +15,6 @@ const RANGES = [
   { label: '7天', value: '7d' },
   { label: '30天', value: '30d' },
 ];
-
-function getRangeDate(range: string): [string, string] {
-  const now = new Date();
-  const end = now.toISOString();
-  const msMap: Record<string, number> = {
-    '1h': 3600000, '24h': 86400000, '7d': 604800000, '30d': 2592000000,
-  };
-  return [new Date(now.getTime() - (msMap[range] || 86400000)).toISOString(), end];
-}
 
 export default function TelemetryView() {
   const navigate = useNavigate();
@@ -75,7 +67,7 @@ export default function TelemetryView() {
 
   useEffect(() => {
     if (!selectedDevice || !metricKey) return;
-    const [start, end] = getRangeDate(range);
+    const [start, end] = getTelemetryRange(range);
     setIsChartLoading(true);
     getAggregatedTelemetry(selectedDevice, metricKey, start, end)
       .then(({ data: res }) => {
@@ -98,10 +90,7 @@ export default function TelemetryView() {
     xAxis: {
       type: 'category' as const,
       data: chartData.map((p) => {
-        const d = new Date(p.bucket);
-        return range === '7d' || range === '30d'
-          ? `${d.getMonth() + 1}/${d.getDate()}`
-          : `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return formatTelemetryAxisLabel(p.bucket, range);
       }),
       axisLabel: { fontSize: 10, color: 'var(--color-text-tertiary)' },
     },
@@ -139,18 +128,35 @@ export default function TelemetryView() {
       </NavBar>
 
       <div>
-        <div className="page-hero" style={{ marginTop: 8 }}>
-          <div className="page-hero__eyebrow">telemetry</div>
-          <div className="page-hero__title">全局数据图表</div>
-          <div className="page-hero__subtitle">切换设备、指标和时间区间，统一查看历史趋势。</div>
-          <div className="page-hero__meta">
-            <span className="soft-chip">设备 {devices.length}</span>
-            <span className="soft-chip">当前 {selectedDeviceName}</span>
+        <div className="screen-header" style={{ marginTop: 8 }}>
+          <div>
+            <div className="screen-header__title">数据图表</div>
+            <div className="screen-header__subtitle">跨设备查看同一指标在不同房间中的变化。</div>
+          </div>
+        </div>
+
+        <div className="detail-hero-panel detail-hero-panel--metric">
+          <div className="detail-hero-panel__main">
+            <div className="detail-hero-panel__eyebrow">whole home telemetry</div>
+            <div className="detail-hero-panel__title">全屋趋势分析</div>
+            <div className="detail-hero-panel__subtitle">切换设备、指标和时间区间，统一查看历史趋势。</div>
+            <div className="page-hero__meta">
+              <span className="soft-chip">设备 {devices.length}</span>
+              <span className="soft-chip">当前 {selectedDeviceName}</span>
+              <span className="soft-chip">数据源 {getTelemetrySourceLabel(range)}</span>
+              <span className="soft-chip">时区 {APP_TIME_ZONE_LABEL}</span>
+            </div>
+          </div>
+          <div className="detail-hero-panel__aside">
+            <div className="detail-kpi-card">
+              <span>当前设备</span>
+              <strong>{selectedDeviceName}</strong>
+            </div>
           </div>
         </div>
 
         <div className="selector-group" style={{ marginTop: 16 }}>
-          <div className="glass-card selector-field">
+          <div className="surface-card selector-field selector-field--layered">
             <div className="selector-field__label">选择设备</div>
             <div onClick={() => setPickerVisible(true)} className="selector-field__value">
               {selectedDeviceName}
@@ -165,7 +171,7 @@ export default function TelemetryView() {
           />
 
           {metricKeys.length > 0 && (
-            <div className="glass-card selector-field">
+            <div className="surface-card selector-field selector-field--layered">
               <div className="selector-field__label">遥测指标</div>
             <Selector
               options={metricKeys.map((k) => ({ label: metricLookup(k).label, value: k }))}
@@ -175,7 +181,7 @@ export default function TelemetryView() {
             </div>
           )}
 
-          <div className="glass-card selector-field">
+          <div className="surface-card selector-field selector-field--layered">
             <div className="selector-field__label">时间范围</div>
             <Selector
               options={RANGES}
@@ -185,11 +191,11 @@ export default function TelemetryView() {
           </div>
         </div>
 
-        <div className="glass-card chart-panel" style={{ marginTop: 16 }}>
+        <div className="surface-card chart-panel chart-panel--elevated" style={{ marginTop: 16 }}>
           <div className="chart-panel__header">
             <div>
               <div className="chart-panel__title">{metricKey ? metricLookup(metricKey).label : '暂无指标'}</div>
-              <div className="chart-panel__subtitle">设备聚合曲线</div>
+              <div className="chart-panel__subtitle">设备聚合曲线，时间按 UTC+08 解析显示。</div>
             </div>
           </div>
           {isChartLoading ? (

@@ -122,18 +122,27 @@ export default function AutomationFormPage() {
         {isEdit ? '编辑自动化' : '创建自动化'}
       </NavBar>
 
-      <div className="page-hero" style={{ marginTop: 8 }}>
-        <div className="page-hero__eyebrow">automation form</div>
-        <div className="page-hero__title">{isEdit ? '编辑自动化' : '创建自动化'}</div>
-        <div className="page-hero__subtitle">配置触发条件和执行动作，继续复用现有 API 结构。</div>
-        <div className="page-hero__meta">
-          <span className="soft-chip">设备 {devices.length}</span>
-          <span className="soft-chip">类型 {triggerType === 'telemetry' ? '遥测触发' : '定时触发'}</span>
+      <div className="screen-header" style={{ marginTop: 8 }}>
+        <div>
+          <div className="screen-header__title">{isEdit ? '编辑自动化' : '创建自动化'}</div>
+          <div className="screen-header__subtitle">按房间和设备上下文，配置触发条件与执行动作。</div>
+        </div>
+      </div>
+
+      <div className="detail-hero-panel detail-hero-panel--form">
+        <div className="detail-hero-panel__main">
+          <div className="detail-hero-panel__eyebrow">automation editor</div>
+          <div className="detail-hero-panel__title">自动化流程</div>
+          <div className="detail-hero-panel__subtitle">配置触发条件和执行动作，继续复用现有 API 结构。</div>
+          <div className="page-hero__meta">
+            <span className="soft-chip">设备 {devices.length}</span>
+            <span className="soft-chip">类型 {triggerType === 'telemetry' ? '遥测触发' : '定时触发'}</span>
+          </div>
         </div>
       </div>
 
       <div className="form-shell">
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">基本信息</div>
           <div className="form-card__subtitle">设置名称、触发类型和启用状态。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -156,7 +165,7 @@ export default function AutomationFormPage() {
           value={[triggerType]}
         />
 
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">触发条件</div>
           <div className="form-card__subtitle">根据设备遥测或 cron 计划来触发自动化。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -190,7 +199,7 @@ export default function AutomationFormPage() {
               value={trigDeviceId ? [trigDeviceId] : []}
             />
 
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">执行动作</div>
           <div className="form-card__subtitle">选择动作类型，并在需要时指定目标设备和指令。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>

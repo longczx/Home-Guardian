@@ -122,18 +122,27 @@ export default function AlertRuleFormPage() {
         {isEdit ? '编辑规则' : '创建规则'}
       </NavBar>
 
-      <div className="page-hero" style={{ marginTop: 8 }}>
-        <div className="page-hero__eyebrow">alert rule</div>
-        <div className="page-hero__title">{isEdit ? '编辑告警规则' : '创建告警规则'}</div>
-        <div className="page-hero__subtitle">定义设备、指标、阈值和通知渠道，保留当前全部字段与提交流程。</div>
-        <div className="page-hero__meta">
-          <span className="soft-chip">设备 {devices.length}</span>
-          <span className="soft-chip">渠道 {channels.length}</span>
+      <div className="screen-header" style={{ marginTop: 8 }}>
+        <div>
+          <div className="screen-header__title">{isEdit ? '编辑规则' : '创建规则'}</div>
+          <div className="screen-header__subtitle">围绕设备、房间和通知路径编排告警规则。</div>
+        </div>
+      </div>
+
+      <div className="detail-hero-panel detail-hero-panel--form">
+        <div className="detail-hero-panel__main">
+          <div className="detail-hero-panel__eyebrow">alert orchestration</div>
+          <div className="detail-hero-panel__title">规则配置</div>
+          <div className="detail-hero-panel__subtitle">定义设备、指标、阈值和通知渠道，保留当前全部字段与提交流程。</div>
+          <div className="page-hero__meta">
+            <span className="soft-chip">设备 {devices.length}</span>
+            <span className="soft-chip">渠道 {channels.length}</span>
+          </div>
         </div>
       </div>
 
       <div className="form-shell">
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">基础设置</div>
           <div className="form-card__subtitle">先确定规则名称、关联设备和目标遥测指标。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -164,7 +173,7 @@ export default function AlertRuleFormPage() {
           value={telemetryKey ? [telemetryKey] : []}
         />
 
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">触发条件</div>
           <div className="form-card__subtitle">配置判定逻辑和触发持续时间。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -196,7 +205,7 @@ export default function AlertRuleFormPage() {
         />
 
         {channels.length > 0 && (
-          <div className="glass-card form-card">
+          <div className="surface-card form-card form-card--layered">
             <div className="form-card__title">通知渠道</div>
             <div className="form-card__subtitle">可多选，触发后会同时下发到选中的渠道。</div>
             <div className="channel-list">

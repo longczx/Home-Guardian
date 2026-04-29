@@ -159,18 +159,27 @@ export default function NotificationChannelFormPage() {
         {isEdit ? '编辑通知渠道' : '创建通知渠道'}
       </NavBar>
 
-      <div className="page-hero" style={{ marginTop: 8 }}>
-        <div className="page-hero__eyebrow">channel form</div>
-        <div className="page-hero__title">{isEdit ? '编辑通知渠道' : '创建通知渠道'}</div>
-        <div className="page-hero__subtitle">按不同渠道类型展示配置字段，提交流程保持不变。</div>
-        <div className="page-hero__meta">
-          <span className="soft-chip">类型 {typeLabels[type] || type}</span>
-          <span className="soft-chip">状态 {enabled ? '启用' : '停用'}</span>
+      <div className="screen-header" style={{ marginTop: 8 }}>
+        <div>
+          <div className="screen-header__title">{isEdit ? '编辑通知渠道' : '创建通知渠道'}</div>
+          <div className="screen-header__subtitle">把消息通路也纳入同一套层级清晰的配置结构。</div>
+        </div>
+      </div>
+
+      <div className="detail-hero-panel detail-hero-panel--form">
+        <div className="detail-hero-panel__main">
+          <div className="detail-hero-panel__eyebrow">notification channel</div>
+          <div className="detail-hero-panel__title">渠道配置</div>
+          <div className="detail-hero-panel__subtitle">按不同渠道类型展示配置字段，提交流程保持不变。</div>
+          <div className="page-hero__meta">
+            <span className="soft-chip">类型 {typeLabels[type] || type}</span>
+            <span className="soft-chip">状态 {enabled ? '启用' : '停用'}</span>
+          </div>
         </div>
       </div>
 
       <div className="form-shell">
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">基本信息</div>
           <div className="form-card__subtitle">先选择渠道类型，再补充该渠道所需配置。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -198,7 +207,7 @@ export default function NotificationChannelFormPage() {
           value={[type]}
         />
 
-        <div className="glass-card form-card">
+        <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">渠道配置</div>
           <div className="form-card__subtitle">根据当前类型展示对应参数。</div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
@@ -206,10 +215,19 @@ export default function NotificationChannelFormPage() {
           </Form>
         </div>
 
-        <div className="submit-wrap">
-          <Button block color="primary" loading={submitting} onClick={handleSubmit}>
-            {isEdit ? '保存修改' : '创建渠道'}
-          </Button>
+        <div className="surface-card form-cta-card">
+          <div>
+            <div className="form-card__title" style={{ marginBottom: 4 }}>{isEdit ? '保存当前配置' : '创建并启用渠道'}</div>
+            <div className="form-card__subtitle" style={{ marginBottom: 0 }}>底部操作和列表页保持同一节奏，先确认，再执行主动作。</div>
+          </div>
+          <div className="form-cta-card__actions">
+            <Button fill="outline" onClick={() => navigate(-1)}>
+              取消
+            </Button>
+            <Button color="primary" loading={submitting} onClick={handleSubmit}>
+              {isEdit ? '保存修改' : '创建渠道'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
