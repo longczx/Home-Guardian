@@ -29,8 +29,8 @@ export default function MainLayout() {
       <div className="app-shell__content">
         <Outlet />
       </div>
-      <div className="floating-tabbar">
-        <div className="floating-tabbar__inner">
+      <div className="bottom-dock">
+        <div className="bottom-dock__inner">
           <TabBar activeKey={activeKey} onChange={(key) => navigate(key)}>
             {tabs.map((tab) => (
               <TabBar.Item

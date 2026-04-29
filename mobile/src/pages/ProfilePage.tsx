@@ -16,7 +16,7 @@ export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const logoutStore = useAuthStore((s) => s.logout);
-  const { theme, setTheme } = useTheme();
+  const { theme, paletteId, setTheme } = useTheme();
 
   const handleLogout = () => {
     Dialog.confirm({
@@ -48,34 +48,31 @@ export default function ProfilePage() {
 
   return (
     <div className="mobile-page mobile-page--tight">
-      <div className="page-hero">
-        <div className="page-hero__eyebrow">profile</div>
-        <div style={{
-          width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 28, color: '#fff', fontWeight: 700, marginBottom: 12,
-        }}>
-          {user?.username?.[0]?.toUpperCase() || 'U'}
+      <div className="profile-head-card">
+        <div className="profile-head-card__avatar">{user?.username?.[0]?.toUpperCase() || 'U'}</div>
+        <div>
+          <div className="profile-head-card__title">{user?.username || '用户'}</div>
+          <div className="profile-head-card__subtitle">{user?.roles?.join(', ') || '普通用户'}</div>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{user?.username}</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
-          {user?.roles?.join(', ') || '用户'}
-        </div>
-        <div className="page-hero__meta">
-          <span className="soft-chip">主题 {currentThemeLabel}</span>
-          <span className="soft-chip">通知渠道可配置</span>
+        <div className="profile-head-card__meta">
+          <span>主题 {currentThemeLabel}</span>
+          <span>色板 {paletteId === 'custom' ? '自定义' : '预设'}</span>
         </div>
       </div>
 
       <div className="section-row">
-        <span className="section-title">账号与设置</span>
+        <span className="section-title">设置中心</span>
       </div>
 
-      <div className="glass-card" style={{ padding: '4px 0' }}>
+      <div className="surface-card" style={{ padding: '4px 0' }}>
         <div className="inline-list">
           <button className="inline-list__item" onClick={handleThemeChange}>
             <span className="inline-list__meta"><SetOutline />主题</span>
             <span className="inline-list__tail">{currentThemeLabel}</span>
+          </button>
+          <button className="inline-list__item" onClick={() => navigate('/mobile/profile/theme')}>
+            <span className="inline-list__meta"><span style={{ fontSize: 18 }}>🎨</span>色系与外观</span>
+            <span className="inline-list__tail"><RightOutline /></span>
           </button>
           <button className="inline-list__item" onClick={() => navigate('/mobile/profile/password')}>
             <span className="inline-list__meta"><LockOutline />修改密码</span>
@@ -101,8 +98,8 @@ export default function ProfilePage() {
             color: 'var(--color-danger)',
             fontSize: 16,
             fontWeight: 700,
-            background: 'var(--color-bg-card)',
-            borderRadius: 'var(--card-radius)',
+            background: '#fff',
+            borderRadius: '24px',
             cursor: 'pointer',
             boxShadow: 'var(--card-shadow)',
           }}

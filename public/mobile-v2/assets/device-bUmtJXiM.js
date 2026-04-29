@@ -1,0 +1,1 @@
+import{r as t}from"./request-t3Qo4iZT.js";function r(e){return t.get("/devices",{params:e})}function n(e){return t.get(`/devices/${e}`)}function c(e){return t.get(`/devices/${e}/attributes`)}function u(e,s){return t.put(`/devices/${e}/attributes`,s)}function a(e,s){return t.post(`/devices/${e}/command`,s)}export{n as a,c as b,u as c,r as g,a as s};

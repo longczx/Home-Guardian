@@ -84,13 +84,20 @@ export default function NotificationChannelPage() {
         通知渠道
       </NavBar>
 
-      <div className="page-hero" style={{ marginTop: 8, marginBottom: 16 }}>
-        <div className="page-hero__eyebrow">channels</div>
-        <div className="page-hero__title">通知渠道</div>
-        <div className="page-hero__subtitle">统一管理消息下发渠道，支持启停、测试、编辑和删除。</div>
-        <div className="page-hero__meta">
+      <div className="screen-header" style={{ marginTop: 8 }}>
+        <div>
+          <div className="screen-header__title">通知渠道</div>
+          <div className="screen-header__subtitle">把所有消息通道集中到同一套分层列表里管理。</div>
+        </div>
+      </div>
+
+      <div className="surface-card detail-summary-card">
+        <div className="surface-card__eyebrow">channels</div>
+        <div className="surface-card__title">消息通路</div>
+        <div className="surface-card__meta">
           <span className="soft-chip">渠道 {channels.length}</span>
           <span className="soft-chip">启用 {channels.filter((item) => item.is_enabled).length}</span>
+          <span className="soft-chip">支持测试发送</span>
         </div>
       </div>
 
@@ -99,12 +106,7 @@ export default function NotificationChannelPage() {
       ) : (
         <div className="list-stack">
           {channels.map((channel) => (
-            <div
-              key={channel.id}
-              className="glass-card"
-              onClick={() => navigate(`/mobile/notification-channels/${channel.id}/edit`)}
-              style={{ padding: 16, cursor: 'pointer' }}
-            >
+            <div key={channel.id} className="channel-list-card" onClick={() => navigate(`/mobile/notification-channels/${channel.id}/edit`)}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

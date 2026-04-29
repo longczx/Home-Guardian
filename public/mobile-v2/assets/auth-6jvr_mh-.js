@@ -1,0 +1,1 @@
+import{r as o}from"./request-t3Qo4iZT.js";function u(t){return o.post("/auth/login",t)}function a(){return o.post("/auth/logout-all")}function n(t){return o.put("/auth/password",t)}export{a,n as c,u as l};

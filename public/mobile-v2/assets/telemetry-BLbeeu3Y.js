@@ -1,0 +1,1 @@
+import{r as t}from"./request-t3Qo4iZT.js";function m(e,r,s){return t.get(`/devices/${e}/telemetry/${r}`,{params:s})}function n(e){return t.get(`/devices/${e}/telemetry/latest`)}function c(e){return t.get(`/devices/${e}/telemetry/metrics`)}export{c as a,m as b,n as g};

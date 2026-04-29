@@ -83,26 +83,24 @@ export default function AlertListPage() {
 
   return (
     <div className="mobile-page mobile-page--tight">
-      <div className="page-hero">
-        <div className="page-hero__eyebrow">alerts</div>
-        <div className="page-hero__title">告警中心</div>
-        <div className="page-hero__subtitle">按状态查看、展开明细、批量确认和解决，保留当前全部操作能力。</div>
-        <div className="page-hero__meta">
+      <div className="screen-header">
+        <div>
+          <div className="screen-header__title">告警</div>
+          <div className="screen-header__subtitle">把最紧急的异常放在前面，确认和处理动作保持就近。</div>
+        </div>
+        <button className="ghost-icon-button" onClick={() => navigate('/mobile/alert-rules')}>规则</button>
+      </div>
+
+      <div className="surface-card alert-summary-card">
+        <div className="surface-card__eyebrow">alert summary</div>
+        <div className="surface-card__title">异常提醒与处理</div>
+        <div className="surface-card__meta">
           <span className="soft-chip">当前分组 {groups.length}</span>
           <span className="soft-chip">状态 {statusConfig[tab]?.label || '全部'}</span>
         </div>
       </div>
 
-      <div className="section-row">
-        <span className="section-title">筛选</span>
-        <span
-          onClick={() => navigate('/mobile/alert-rules')}
-          className="section-link"
-        >
-          规则管理
-        </span>
-      </div>
-      <div className="glass-card glass-card--soft" style={{ padding: '12px 12px 6px' }}>
+      <div className="surface-card" style={{ padding: '12px 12px 6px', marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>告警状态</span>
           <span
@@ -128,7 +126,7 @@ export default function AlertListPage() {
               return (
                 <div key={key} style={{ marginBottom: 10 }}>
                   <div
-                    className="glass-card"
+                    className={`alert-card ${g.status === 'triggered' ? 'alert-card--danger' : g.status === 'acknowledged' ? 'alert-card--warning' : 'alert-card--resolved'}`}
                     style={{
                       overflow: 'hidden',
                     }}
@@ -137,10 +135,10 @@ export default function AlertListPage() {
                       onClick={() => handleExpand(g)}
                       style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
                     >
-                      <div style={{
-                        width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                        background: g.status === 'triggered' ? 'var(--color-danger)' : g.status === 'acknowledged' ? 'var(--color-warning)' : 'var(--color-success)',
-                      }} />
+                      <div className="alert-card__badge" style={{
+                        background: g.status === 'triggered' ? 'rgba(241, 91, 108, 0.16)' : g.status === 'acknowledged' ? 'rgba(245, 166, 35, 0.16)' : 'rgba(69, 184, 122, 0.16)',
+                        color: g.status === 'triggered' ? 'var(--color-danger)' : g.status === 'acknowledged' ? 'var(--color-warning)' : 'var(--color-success)',
+                      }}>!</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

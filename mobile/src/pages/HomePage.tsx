@@ -8,6 +8,7 @@ import {
   HistogramOutline,
   SetOutline,
   FileOutline,
+  RightOutline,
 } from 'antd-mobile-icons';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useAlertStore } from '@/stores/alertStore';
@@ -75,26 +76,87 @@ export default function HomePage() {
     resolved: 'var(--color-success)',
   };
 
+  const featuredMetrics = useMemo(() => {
+    const allMetrics = Object.values(metricsMap).flat();
+    const findMetric = (keywords: string[]) => allMetrics.find((item) => {
+      const label = metricLookup(item.metric_key).label.toLowerCase();
+      const key = item.metric_key.toLowerCase();
+      return keywords.some((word) => label.includes(word) || key.includes(word));
+    });
+
+    return {
+      temperature: findMetric(['温度', 'temp']),
+      humidity: findMetric(['湿度', 'humidity']),
+      air: findMetric(['空气', 'aqi', 'pm2.5', 'pm25', 'co2']),
+    };
+  }, [metricLookup, metricsMap]);
+
+  const primaryRoom = Array.from(rooms.entries())[0];
+  const quickScenes = [
+    { label: '回家模式', icon: '🏠', action: () => navigate('/mobile/automations') },
+    { label: '离家模式', icon: '🚪', action: () => navigate('/mobile/automations') },
+    { label: '睡眠模式', icon: '🌙', action: () => navigate('/mobile/automations') },
+    { label: '观影模式', icon: '🎬', action: () => navigate('/mobile/automations') },
+  ];
+
   return (
     <div className="mobile-page">
       <PullToRefresh onRefresh={fetchAll}>
         <div>
           <NavBar backIcon={false} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)', padding: 0 }}>
-            Home Guardian
+            我的家
           </NavBar>
 
-          <div className="page-hero" style={{ marginTop: 8 }}>
-            <div className="page-hero__eyebrow">smart living</div>
-            <div className="page-hero__title">你好，{user?.username || '访客'}</div>
-            <div className="page-hero__subtitle">把家庭环境、设备状态和自动化流程收拢到一个移动控制台里。</div>
-            <div className="page-hero__meta">
-              <span className="soft-chip">在线设备 {onlineCount}/{devices.length}</span>
-              <span className="soft-chip">待处理告警 {unreadCount}</span>
-              <span className="soft-chip">房间 {rooms.size}</span>
+          <div className="screen-header" style={{ marginTop: 8 }}>
+            <div>
+              <div className="screen-header__title">{user?.username ? `${user.username} 的家` : '我的家'}</div>
+              <div className="screen-header__subtitle">把环境、设备和自动化收进一个更轻盈的控制中心。</div>
+            </div>
+            <button className="ghost-icon-button" onClick={() => navigate('/mobile/profile')}>设置</button>
+          </div>
+
+          <div className="climate-hero">
+            <div>
+              <div className="climate-hero__temp">
+                {featuredMetrics.temperature ? (typeof featuredMetrics.temperature.value === 'number' ? featuredMetrics.temperature.value.toFixed(1) : String(featuredMetrics.temperature.value ?? '--')) : '26'}
+                <span>{featuredMetrics.temperature ? metricLookup(featuredMetrics.temperature.metric_key).unit || '°C' : '°C'}</span>
+              </div>
+              <div className="climate-hero__weather">多云</div>
+            </div>
+            <div className="climate-hero__stats">
+              <div>
+                <span>室内温度</span>
+                <strong>{featuredMetrics.temperature ? `${featuredMetrics.temperature.value}${metricLookup(featuredMetrics.temperature.metric_key).unit || ''}` : '--'}</strong>
+              </div>
+              <div>
+                <span>室内湿度</span>
+                <strong>{featuredMetrics.humidity ? `${featuredMetrics.humidity.value}${metricLookup(featuredMetrics.humidity.metric_key).unit || ''}` : '--'}</strong>
+              </div>
+              <div>
+                <span>空气质量</span>
+                <strong>{featuredMetrics.air ? `${featuredMetrics.air.value}${metricLookup(featuredMetrics.air.metric_key).unit || ''}` : '优'}</strong>
+              </div>
             </div>
           </div>
 
-          <div className="hero-stat-grid">
+          <div className="section-row">
+            <span className="section-title">常用场景</span>
+            <span className="section-link" onClick={() => navigate('/mobile/automations')}>查看自动化</span>
+          </div>
+          <div className="scene-grid">
+            {quickScenes.map((scene) => (
+              <button key={scene.label} className="scene-card" onClick={scene.action}>
+                <span className="scene-card__icon">{scene.icon}</span>
+                <span className="scene-card__label">{scene.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="section-row">
+            <span className="section-title">设备概览</span>
+            <span className="section-link" onClick={() => navigate('/mobile/devices')}>查看全部</span>
+          </div>
+          <div className="hero-stat-grid hero-stat-grid--compact">
             <StatCard icon={<AppstoreOutline />} label="设备总数" value={devices.length} />
             <StatCard icon={<UnorderedListOutline />} label="在线" value={onlineCount} color="var(--color-success)" />
             <StatCard
@@ -108,8 +170,9 @@ export default function HomePage() {
 
           <div className="section-row">
             <span className="section-title">快捷入口</span>
+            <span className="section-link" onClick={() => navigate('/mobile/telemetry')}>数据图表</span>
           </div>
-          <div className="glass-card glass-card--soft" style={{ padding: '12px' }}>
+          <div className="surface-card" style={{ padding: '12px' }}>
             <div className="shortcut-grid">
               {shortcuts.map((s) => (
                 <div
@@ -126,50 +189,49 @@ export default function HomePage() {
             </div>
           </div>
 
-          {rooms.size > 0 && (
+          {primaryRoom && (
             <>
               <div className="section-row">
-                <span className="section-title">房间概览</span>
-                <span className="section-link" onClick={() => navigate('/mobile/devices')}>查看设备</span>
+                <span className="section-title">房间</span>
+                <span className="section-link" onClick={() => navigate('/mobile/devices')}>全部房间</span>
               </div>
-              {Array.from(rooms.entries()).map(([loc, data]) => (
-                <RoomCard
-                  key={loc}
-                  location={loc}
-                  deviceCount={data.devices.length}
-                  onlineCount={data.devices.filter((d) => d.is_online).length}
-                  metrics={data.metrics}
-                  metricLookup={metricLookup}
-                  onClick={() => navigate(`/mobile/devices?location=${encodeURIComponent(loc)}`)}
-                />
-              ))}
+              <RoomCard
+                location={primaryRoom[0]}
+                deviceCount={primaryRoom[1].devices.length}
+                onlineCount={primaryRoom[1].devices.filter((d) => d.is_online).length}
+                metrics={primaryRoom[1].metrics}
+                metricLookup={metricLookup}
+                onClick={() => navigate(`/mobile/devices?location=${encodeURIComponent(primaryRoom[0])}`)}
+              />
+              {rooms.size > 1 && (
+                <div className="room-chip-row">
+                  {Array.from(rooms.entries()).slice(1, 5).map(([loc, data]) => (
+                    <button key={loc} className="room-chip-card" onClick={() => navigate(`/mobile/devices?location=${encodeURIComponent(loc)}`)}>
+                      <span>{loc}</span>
+                      <small>{data.devices.length} 台设备</small>
+                    </button>
+                  ))}
+                </div>
+              )}
             </>
           )}
 
           {recentAlerts.length > 0 && (
             <>
               <div className="section-row">
-                <span className="section-title">最近告警</span>
+                <span className="section-title">告警信息</span>
                 <span className="section-link" onClick={() => navigate('/mobile/alerts')}>查看全部</span>
               </div>
-              <div className="glass-card glass-card--soft" style={{ overflow: 'hidden' }}>
+              <div className="alert-stack">
                 {recentAlerts.map((a) => (
                   <div
                     key={`${a.rule_id}-${a.device_id}-${a.status}`}
                     onClick={() => navigate('/mobile/alerts')}
-                    style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid var(--color-border)',
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                    }}
+                    className="alert-overview-card"
                   >
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: statusColors[a.status] || 'var(--color-text-tertiary)',
-                    }} />
+                    <div className="alert-overview-card__icon" style={{ color: statusColors[a.status] || 'var(--color-text-tertiary)' }}>!</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {a.rule_name}
                         {a.alert_count > 1 && (
                           <span style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 600 }}>×{a.alert_count}</span>
@@ -179,7 +241,10 @@ export default function HomePage() {
                         {a.device_name} · {a.device_location}
                       </div>
                     </div>
-                    <RelativeTime date={a.latest_triggered_at} />
+                    <div className="alert-overview-card__aside">
+                      <RelativeTime date={a.latest_triggered_at} />
+                      <RightOutline fontSize={14} />
+                    </div>
                   </div>
                 ))}
               </div>

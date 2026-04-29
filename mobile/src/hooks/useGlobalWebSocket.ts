@@ -4,14 +4,15 @@ import { useAuthStore } from '@/stores/authStore';
 import { useWSStore } from '@/stores/wsStore';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useAlertStore } from '@/stores/alertStore';
+import { normalizeBackendTimestamp } from '@/utils/dateTime';
 
 export function useGlobalWebSocket() {
   const token = useAuthStore((s) => s.accessToken);
 
   const dispatch = useCallback((msg: { type: string; data: unknown }) => useWSStore.getState().dispatch(msg), []);
   const setConnected = useCallback((v: boolean) => useWSStore.getState().setConnected(v), []);
-  const updateDeviceStatus = useCallback((uid: string, online: boolean) => useDeviceStore.getState().updateDeviceStatus(uid, online), []);
-  const updateMetric = useCallback((id: number, key: string, value: unknown, ts: string) => useDeviceStore.getState().updateMetric(id, key, value, ts), []);
+  const updateDeviceStatus = useCallback((uid: string, online: boolean, seenAt?: string) => useDeviceStore.getState().updateDeviceStatus(uid, online, seenAt), []);
+  const updateMetric = useCallback((id: number, key: string, value: unknown, ts?: string) => useDeviceStore.getState().updateMetric(id, key, value, ts), []);
   const alertIncrement = useCallback(() => useAlertStore.getState().increment(), []);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -21,13 +22,35 @@ export function useGlobalWebSocket() {
 
     let disposed = false;
 
+    const clearReconnect = () => {
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+        reconnectRef.current = undefined;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed || reconnectRef.current || navigator.onLine === false) {
+        return;
+      }
+      reconnectRef.current = setTimeout(() => {
+        reconnectRef.current = undefined;
+        connect();
+      }, 3000);
+    };
+
     const connect = () => {
-      if (disposed) return;
+      if (disposed || navigator.onLine === false) return;
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
       const ws = new WebSocket(`${protocol}//${host}/ws?token=${token}`);
 
       ws.onopen = () => {
+        clearReconnect();
         setConnected(true);
       };
 
@@ -37,12 +60,16 @@ export function useGlobalWebSocket() {
           dispatch(msg);
 
           if (msg.type === 'device_status') {
-            updateDeviceStatus(msg.device_uid as string, msg.is_online as boolean);
+            updateDeviceStatus(
+              msg.device_uid as string,
+              msg.is_online as boolean,
+              normalizeBackendTimestamp(msg.ts),
+            );
           }
           if (msg.type === 'telemetry') {
             const dId = msg.device_id as number;
             const data = msg.data as Record<string, unknown>;
-            const ts = (msg.ts as string) || new Date().toISOString();
+            const ts = normalizeBackendTimestamp(msg.ts);
             if (data && typeof data === 'object') {
               for (const [key, value] of Object.entries(data)) {
                 updateMetric(dId, key, value, ts);
@@ -64,13 +91,30 @@ export function useGlobalWebSocket() {
 
       ws.onclose = () => {
         setConnected(false);
-        if (!disposed) {
-          reconnectRef.current = setTimeout(connect, 3000);
-        }
+        wsRef.current = null;
+        scheduleReconnect();
       };
 
       ws.onerror = () => ws.close();
       wsRef.current = ws;
+    };
+
+    const handleOnline = () => {
+      clearReconnect();
+      connect();
+    };
+
+    const handleOffline = () => {
+      clearReconnect();
+      setConnected(false);
+      wsRef.current?.close();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !useWSStore.getState().connected) {
+        clearReconnect();
+        connect();
+      }
     };
 
     connect();
@@ -78,9 +122,16 @@ export function useGlobalWebSocket() {
     // Fetch initial unread count
     useAlertStore.getState().fetchUnreadCount();
 
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       disposed = true;
-      clearTimeout(reconnectRef.current);
+      clearReconnect();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       wsRef.current?.close();
     };
   }, [token, dispatch, setConnected, updateDeviceStatus, updateMetric, alertIncrement]);

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Switch, Toast, Button, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
-import { AddOutline } from 'antd-mobile-icons';
 import { getAutomations, updateAutomation, deleteAutomation, type Automation } from '@/api/automation';
 import AppTag from '@/components/AppTag';
 import ActionSummary from '@/components/ActionSummary';
@@ -18,6 +17,9 @@ export default function AutomationListPage() {
   const navigate = useNavigate();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const fetch = () => {
     setLoading(true);
@@ -52,37 +54,115 @@ export default function AutomationListPage() {
     });
   };
 
+  const visibleAutomations = automations.filter((item) => {
+    if (filter === 'enabled') return item.is_enabled;
+    if (filter === 'disabled') return !item.is_enabled;
+    return true;
+  });
+
+  const selectedAutomations = visibleAutomations.filter((item) => selectedIds.includes(item.id));
+
+  const resetSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+  };
+
+  const toggleSelection = (automationId: number) => {
+    setSelectedIds((prev) => (
+      prev.includes(automationId) ? prev.filter((id) => id !== automationId) : [...prev, automationId]
+    ));
+  };
+
+  const handleSelectAll = () => {
+    if (selectedAutomations.length === visibleAutomations.length) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(visibleAutomations.map((item) => item.id));
+  };
+
+  const handleBatchToggle = async (enabled: boolean) => {
+    const targets = selectedAutomations.filter((item) => item.is_enabled !== enabled);
+    if (targets.length === 0) return;
+
+    try {
+      await Promise.all(targets.map((item) => updateAutomation(item.id, { is_enabled: enabled })));
+      setAutomations((prev) => prev.map((item) => (
+        targets.some((target) => target.id === item.id) ? { ...item, is_enabled: enabled } : item
+      )));
+      Toast.show({ content: enabled ? '已批量启用' : '已批量停用', icon: 'success' });
+      resetSelection();
+    } catch {
+      Toast.show({ content: '批量操作失败', icon: 'fail' });
+    }
+  };
+
   if (loading) return <PageLoading />;
 
   return (
     <div className="mobile-page mobile-page--tight">
-      <div className="page-hero">
-        <div className="page-hero__eyebrow">automation</div>
-        <div className="page-hero__title">自动化编排</div>
-        <div className="page-hero__subtitle">保留创建、编辑、启停和删除能力，把规则展示改成更接近参考图的卡片布局。</div>
-        <div className="page-hero__meta">
+      <div className="screen-header">
+        <div>
+          <div className="screen-header__title">自动化</div>
+          <div className="screen-header__subtitle">按启用状态查看规则，把常用联动放到更靠前的位置。</div>
+        </div>
+        <button className="ghost-icon-button" onClick={() => navigate('/mobile/automations/create')}>新建</button>
+      </div>
+
+      <div className="surface-card automation-overview-card">
+        <div className="surface-card__eyebrow">automation summary</div>
+        <div className="surface-card__title">让家自动响应</div>
+        <div className="surface-card__meta">
           <span className="soft-chip">规则 {automations.length}</span>
           <span className="soft-chip">启用 {automations.filter((item) => item.is_enabled).length}</span>
+          <span className="soft-chip">最近触发 {automations.filter((item) => item.last_triggered_at).length}</span>
         </div>
       </div>
 
-      <div className="section-row">
-        <span className="section-title">自动化列表</span>
-        <span className="section-link" onClick={() => navigate('/mobile/automations/create')}>
-          <AddOutline fontSize={16} /> 新建
-        </span>
+      <div className="management-filter-bar">
+        <button className={`filter-pill${filter === 'all' ? ' filter-pill--active' : ''}`} onClick={() => setFilter('all')}>全部</button>
+        <button className={`filter-pill${filter === 'enabled' ? ' filter-pill--active' : ''}`} onClick={() => setFilter('enabled')}>启用中</button>
+        <button className={`filter-pill${filter === 'disabled' ? ' filter-pill--active' : ''}`} onClick={() => setFilter('disabled')}>已停用</button>
       </div>
 
-      {automations.length === 0 ? (
+      <div className="management-action-bar">
+        {selectionMode ? (
+          <>
+            <div className="management-action-bar__meta">已选择 {selectedAutomations.length} / {visibleAutomations.length} 条自动化</div>
+            <div className="management-action-bar__buttons">
+              <button className="soft-button" disabled={visibleAutomations.length === 0} onClick={handleSelectAll}>
+                {selectedAutomations.length === visibleAutomations.length ? '取消全选' : '全选'}
+              </button>
+              <button className="soft-button soft-button--accent" disabled={selectedAutomations.length === 0} onClick={() => handleBatchToggle(true)}>启用</button>
+              <button className="soft-button" disabled={selectedAutomations.length === 0} onClick={() => handleBatchToggle(false)}>停用</button>
+              <button className="soft-button soft-button--danger" onClick={resetSelection}>退出</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="management-action-bar__meta">当前筛选下共 {visibleAutomations.length} 条自动化</div>
+            <div className="management-action-bar__buttons">
+              <button className="soft-button" disabled={visibleAutomations.length === 0} onClick={() => setSelectionMode(true)}>选择</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {visibleAutomations.length === 0 ? (
         <EmptyState title="暂无自动化" description="创建自动化来自动控制设备" />
       ) : (
         <div className="list-stack">
-          {automations.map((item) => (
+          {visibleAutomations.map((item) => (
             <div
               key={item.id}
-              className="glass-card"
-              onClick={() => navigate(`/mobile/automations/${item.id}/edit`)}
-              style={{ padding: 16, cursor: 'pointer' }}
+              className={`automation-card${selectionMode && selectedIds.includes(item.id) ? ' selection-card--active' : ''}`}
+              onClick={() => {
+                if (selectionMode) {
+                  toggleSelection(item.id);
+                  return;
+                }
+                navigate(`/mobile/automations/${item.id}/edit`);
+              }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -96,9 +176,13 @@ export default function AutomationListPage() {
                     <ActionSummary actions={item.actions} />
                   </div>
                 </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Switch checked={item.is_enabled} onChange={(v) => handleToggle(item, v)} />
-                </div>
+                {selectionMode ? (
+                  <div className="selection-card__check" />
+                ) : (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Switch checked={item.is_enabled} onChange={(v) => handleToggle(item, v)} />
+                  </div>
+                )}
               </div>
 
               {item.last_triggered_at && (
@@ -107,7 +191,7 @@ export default function AutomationListPage() {
                 </div>
               )}
 
-              <div className="soft-actions" style={{ marginTop: 14 }}>
+              {!selectionMode && <div className="soft-actions" style={{ marginTop: 14 }}>
                 <button
                   className="soft-button soft-button--accent"
                   onClick={(e) => {
@@ -126,14 +210,14 @@ export default function AutomationListPage() {
                 >
                   删除
                 </button>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ padding: 16 }}>
-        <Button block color="primary" onClick={() => navigate('/mobile/automations/create')} style={{ borderRadius: 8 }}>
+      <div className="page-cta-bar">
+        <Button block color="primary" onClick={() => navigate('/mobile/automations/create')} style={{ borderRadius: 18 }}>
           创建自动化
         </Button>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { SearchBar, Tabs, PullToRefresh } from 'antd-mobile';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { RightOutline } from 'antd-mobile-icons';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useMetricDefinitionStore } from '@/stores/metricDefinitionStore';
 import { buildMetricLookup } from '@/utils/metricLookup';
@@ -62,31 +63,53 @@ export default function DeviceListPage() {
     return { gateways: Array.from(gatewayMap.values()), standalone };
   }, [filtered]);
 
+  const roomGroups = useMemo(() => {
+    const map = new Map<string, Device[]>();
+    filtered.forEach((device) => {
+      const room = device.location || '未分配';
+      if (!map.has(room)) {
+        map.set(room, []);
+      }
+      map.get(room)?.push(device);
+    });
+    return Array.from(map.entries());
+  }, [filtered]);
+
   return (
     <div className="mobile-page mobile-page--tight">
-      <div className="page-hero">
-        <div className="page-hero__eyebrow">devices</div>
-        <div className="page-hero__title">{locationFilter || '设备控制台'}</div>
-        <div className="page-hero__subtitle">按位置、在线状态和关键词快速定位设备，入口和控制能力保持不变。</div>
-        <div className="page-hero__meta">
-          <span className="soft-chip">设备 {devices.length}</span>
-          <span className="soft-chip">筛选结果 {filtered.length}</span>
+      <div className="screen-header">
+        <div>
+          <div className="screen-header__title">设备</div>
+          <div className="screen-header__subtitle">先看房间，再看设备明细和在线状态。</div>
         </div>
+        <button className="ghost-icon-button" onClick={() => navigate('/mobile/telemetry')}>图表</button>
       </div>
 
-      <div className="glass-card top-panel">
+      <div className="surface-card top-panel top-panel--flat">
         <SearchBar
-          placeholder="搜索设备名称、UID"
+          placeholder="搜索设备名称、UID、房间"
           value={search}
           onChange={setSearch}
           style={{ '--background': 'transparent' }}
         />
       </div>
 
+      {roomGroups.length > 0 && (
+        <div className="room-gallery">
+          {roomGroups.slice(0, 5).map(([room, roomDevices]) => (
+            <button key={room} className="room-gallery__item" onClick={() => navigate(`/mobile/devices?location=${encodeURIComponent(room)}`)}>
+              <div className="room-gallery__overlay" />
+              <strong>{room}</strong>
+              <span>{roomDevices.length} 个设备</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <Tabs
         activeKey={filter}
         onChange={setFilter}
-        style={{ '--title-font-size': '14px', position: 'sticky', top: 96, zIndex: 9, marginTop: 10 }}
+        style={{ '--title-font-size': '14px', position: 'sticky', top: 76, zIndex: 9, marginTop: 10 }}
       >
         <Tabs.Tab title="全部" key="all" />
         <Tabs.Tab title="在线" key="online" />
@@ -99,17 +122,20 @@ export default function DeviceListPage() {
             <EmptyState title="暂无设备" />
           ) : (
             <div className="list-stack">
+              {locationFilter && (
+                <div className="surface-card room-filter-banner">
+                  <div>
+                    <strong>{locationFilter}</strong>
+                    <span>当前房间筛选中，共 {filtered.length} 台设备</span>
+                  </div>
+                  <button onClick={() => navigate('/mobile/devices')}>查看全部</button>
+                </div>
+              )}
               {grouped.gateways.map(({ gateway, sensors }) => (
-                <div key={gateway.device_uid} className="glass-card" style={{ padding: 14 }}>
+                <div key={gateway.device_uid} className="surface-card gateway-stack-card" style={{ padding: 14 }}>
                   <div
                     onClick={() => navigate(`/mobile/device/${gateway.id}`)}
-                    style={{
-                      borderRadius: '20px',
-                      background: 'var(--color-fill)',
-                      padding: '14px 14px',
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                    }}
+                    className="gateway-stack-card__hero"
                   >
                     <span style={{ fontSize: 20 }}>🖧</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -121,7 +147,7 @@ export default function DeviceListPage() {
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>
                           {gateway.name}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.58)', padding: '3px 8px', borderRadius: 999 }}>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.78)', padding: '3px 8px', borderRadius: 999 }}>
                           网关
                         </span>
                       </div>
@@ -129,6 +155,7 @@ export default function DeviceListPage() {
                         {gateway.location || '未分配位置'} · {sensors.length} 个传感器
                       </div>
                     </div>
+                    <RightOutline fontSize={14} style={{ color: 'var(--color-text-tertiary)' }} />
                   </div>
                   <div style={{ paddingLeft: 18, paddingTop: 12 }}>
                     {sensors.map((d) => (
@@ -155,16 +182,6 @@ export default function DeviceListPage() {
         </div>
       </PullToRefresh>
 
-      {locationFilter && (
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <span
-            style={{ color: 'var(--color-primary)', fontSize: 14, cursor: 'pointer' }}
-            onClick={() => navigate('/mobile/devices')}
-          >
-            查看全部设备
-          </span>
-        </div>
-      )}
     </div>
   );
 }

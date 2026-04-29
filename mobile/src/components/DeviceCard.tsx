@@ -19,7 +19,7 @@ export default function DeviceCard({ device, metrics = [], metricLookup }: Devic
 
   return (
     <div
-      className="glass-card glass-card--interactive"
+      className="device-row-card"
       onClick={() => navigate(`/mobile/device/${device.id}`)}
       style={{
         marginBottom: 10,

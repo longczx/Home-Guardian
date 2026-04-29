@@ -10,7 +10,7 @@ interface MetricCardProps {
 
 export default function MetricCard({ icon, label, value, unit, trend }: MetricCardProps) {
   return (
-    <div className="glass-card glass-card--soft" style={{ padding: '14px 14px 16px' }}>
+    <div className="metric-tile-card" style={{ padding: '14px 14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         {icon && <span style={{ fontSize: 18, color: 'var(--color-primary-strong)' }}>{icon}</span>}
         <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>

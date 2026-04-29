@@ -16,6 +16,7 @@ export const loadCommandHistoryPage = () => import('@/pages/CommandHistoryPage')
 export const loadNotificationChannelPage = () => import('@/pages/NotificationChannelPage');
 export const loadNotificationChannelFormPage = () => import('@/pages/NotificationChannelFormPage');
 export const loadProfilePage = () => import('@/pages/ProfilePage');
+export const loadThemeCenterPage = () => import('@/pages/ThemeCenterPage');
 export const loadChangePasswordPage = () => import('@/pages/ChangePasswordPage');
 export const loadAboutPage = () => import('@/pages/AboutPage');
 
