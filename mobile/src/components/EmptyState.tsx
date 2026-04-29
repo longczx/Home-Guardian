@@ -7,11 +7,13 @@ interface EmptyStateProps {
 
 export default function EmptyState({ title = '暂无数据', description = '' }: EmptyStateProps) {
   return (
-    <ErrorBlock
-      status="empty"
-      title={title}
-      description={description}
-      style={{ '--image-height': '120px', padding: '48px 0' }}
-    />
+    <div className="glass-card glass-card--soft" style={{ padding: '18px 0' }}>
+      <ErrorBlock
+        status="empty"
+        title={title}
+        description={description}
+        style={{ '--image-height': '120px', padding: '32px 0' }}
+      />
+    </div>
   );
 }

@@ -40,30 +40,40 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
         修改密码
       </NavBar>
 
-      <Form
-        layout="horizontal"
-        style={{ '--border-top': 'none' } as React.CSSProperties}
-        footer={
-          <Button block color="primary" loading={loading} onClick={handleSubmit} style={{ borderRadius: 8 }}>
+      <div className="page-hero" style={{ marginTop: 8 }}>
+        <div className="page-hero__eyebrow">security</div>
+        <div className="page-hero__title">修改密码</div>
+        <div className="page-hero__subtitle">更新当前账号密码，继续沿用现有接口与校验逻辑。</div>
+      </div>
+
+      <div className="form-shell">
+        <div className="glass-card form-card">
+          <div className="form-card__title">密码信息</div>
+          <div className="form-card__subtitle">新密码至少 6 位，两次输入必须保持一致。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none' } as React.CSSProperties}>
+            <Form.Item label="当前密码">
+              <Input type="password" value={oldPwd} onChange={setOldPwd} placeholder="输入当前密码" autoComplete="current-password" />
+            </Form.Item>
+            <Form.Item label="新密码">
+              <Input type="password" value={newPwd} onChange={setNewPwd} placeholder="输入新密码" autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item label="确认密码">
+              <Input type="password" value={confirmPwd} onChange={setConfirmPwd} placeholder="再次输入新密码" autoComplete="new-password" />
+            </Form.Item>
+          </Form>
+        </div>
+
+        <div className="submit-wrap">
+          <Button block color="primary" loading={loading} onClick={handleSubmit}>
             确认修改
           </Button>
-        }
-      >
-        <Form.Item label="当前密码">
-          <Input type="password" value={oldPwd} onChange={setOldPwd} placeholder="输入当前密码" autoComplete="current-password" />
-        </Form.Item>
-        <Form.Item label="新密码">
-          <Input type="password" value={newPwd} onChange={setNewPwd} placeholder="输入新密码" autoComplete="new-password" />
-        </Form.Item>
-        <Form.Item label="确认密码">
-          <Input type="password" value={confirmPwd} onChange={setConfirmPwd} placeholder="再次输入新密码" autoComplete="new-password" />
-        </Form.Item>
-      </Form>
+        </div>
+      </div>
     </div>
   );
 }

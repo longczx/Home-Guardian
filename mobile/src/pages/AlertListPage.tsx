@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CapsuleTabs, Tag, PullToRefresh, Toast, Dialog } from 'antd-mobile';
+import { CapsuleTabs, PullToRefresh, Toast, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { RightOutline } from 'antd-mobile-icons';
 import { getGroupedAlertLogs, getAlertLogs, batchAcknowledgeAlerts, batchResolveAlerts, type GroupedAlert, type AlertLog } from '@/api/telemetry';
 import { useAlertStore } from '@/stores/alertStore';
+import AppTag from '@/components/AppTag';
 import RelativeTime from '@/components/RelativeTime';
 import EmptyState from '@/components/EmptyState';
 
@@ -81,16 +82,32 @@ export default function AlertListPage() {
   };
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
-      <div style={{ padding: '12px 16px 0', background: 'var(--navbar-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
+      <div className="page-hero">
+        <div className="page-hero__eyebrow">alerts</div>
+        <div className="page-hero__title">告警中心</div>
+        <div className="page-hero__subtitle">按状态查看、展开明细、批量确认和解决，保留当前全部操作能力。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">当前分组 {groups.length}</span>
+          <span className="soft-chip">状态 {statusConfig[tab]?.label || '全部'}</span>
+        </div>
+      </div>
+
+      <div className="section-row">
+        <span className="section-title">筛选</span>
+        <span
+          onClick={() => navigate('/mobile/alert-rules')}
+          className="section-link"
+        >
+          规则管理
+        </span>
+      </div>
+      <div className="glass-card glass-card--soft" style={{ padding: '12px 12px 6px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)' }}>告警</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>告警状态</span>
           <span
-            onClick={() => navigate('/mobile/alert-rules')}
-            style={{ fontSize: 14, color: 'var(--color-primary)', cursor: 'pointer' }}
-          >
-            规则管理
-          </span>
+            style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}
+          >{groups.length} 组</span>
         </div>
         <CapsuleTabs activeKey={tab} onChange={setTab}>
           <CapsuleTabs.Tab title="全部" key="all" />
@@ -101,7 +118,7 @@ export default function AlertListPage() {
       </div>
 
       <PullToRefresh onRefresh={() => fetchGroups(tab)}>
-        <div style={{ padding: '8px 16px' }}>
+        <div style={{ paddingTop: 14 }}>
           {groups.length === 0 ? (
             <EmptyState title="暂无告警" />
           ) : (
@@ -110,12 +127,9 @@ export default function AlertListPage() {
               const isExpanded = expandedKey === key;
               return (
                 <div key={key} style={{ marginBottom: 10 }}>
-                  {/* Group card */}
                   <div
+                    className="glass-card"
                     style={{
-                      background: 'var(--color-bg-card)',
-                      borderRadius: 'var(--card-radius)',
-                      boxShadow: 'var(--card-shadow)',
                       overflow: 'hidden',
                     }}
                   >
@@ -132,9 +146,9 @@ export default function AlertListPage() {
                           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {g.rule_name}
                           </span>
-                          <Tag color={statusConfig[g.status]?.color || 'default'} fill="outline" style={{ flexShrink: 0 }}>
+                          <AppTag tone={statusConfig[g.status]?.color || 'default'}>
                             {statusConfig[g.status]?.label || g.status}
-                          </Tag>
+                          </AppTag>
                           <span style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600, flexShrink: 0 }}>
                             ×{g.alert_count}
                           </span>
@@ -151,33 +165,27 @@ export default function AlertListPage() {
                       </div>
                     </div>
 
-                    {/* Batch actions */}
                     {g.status !== 'resolved' && (
-                      <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8 }}>
+                      <div style={{ padding: '0 16px 14px' }}>
+                        <div className="soft-actions">
                         {g.status === 'triggered' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleBatchAck(g); }}
-                            style={{
-                              flex: 1, padding: '6px 0', border: '1px solid var(--color-warning)', borderRadius: 6,
-                              background: 'transparent', color: 'var(--color-warning)', fontSize: 13, cursor: 'pointer',
-                            }}
+                            className="soft-button"
                           >
                             全部确认 ({g.alert_count})
                           </button>
                         )}
                         <button
                           onClick={(e) => { e.stopPropagation(); handleBatchResolve(g); }}
-                          style={{
-                            flex: 1, padding: '6px 0', border: '1px solid var(--color-success)', borderRadius: 6,
-                            background: 'transparent', color: 'var(--color-success)', fontSize: 13, cursor: 'pointer',
-                          }}
+                          className="soft-button soft-button--accent"
                         >
                           全部解决 ({g.alert_count})
                         </button>
+                        </div>
                       </div>
                     )}
 
-                    {/* Expanded detail list */}
                     {isExpanded && (
                       <div style={{ borderTop: '1px solid var(--color-border)' }}>
                         {expandedAlerts.map((a) => (

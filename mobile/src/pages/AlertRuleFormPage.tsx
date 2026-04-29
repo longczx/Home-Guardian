@@ -117,21 +117,38 @@ export default function AlertRuleFormPage() {
   const selectedCondLabel = CONDITIONS.find((c) => c.value === condition)?.label || condition;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
         {isEdit ? '编辑规则' : '创建规则'}
       </NavBar>
 
-      <Form layout="horizontal" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
-        <Form.Item label="规则名称">
-          <Input value={name} onChange={setName} placeholder="输入规则名称" />
-        </Form.Item>
+      <div className="page-hero" style={{ marginTop: 8 }}>
+        <div className="page-hero__eyebrow">alert rule</div>
+        <div className="page-hero__title">{isEdit ? '编辑告警规则' : '创建告警规则'}</div>
+        <div className="page-hero__subtitle">定义设备、指标、阈值和通知渠道，保留当前全部字段与提交流程。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">设备 {devices.length}</span>
+          <span className="soft-chip">渠道 {channels.length}</span>
+        </div>
+      </div>
 
-        <Form.Item label="设备" onClick={() => setDevicePickerVisible(true)}>
-          <span style={{ color: deviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>
-            {selectedDeviceName}
-          </span>
-        </Form.Item>
+      <div className="form-shell">
+        <div className="glass-card form-card">
+          <div className="form-card__title">基础设置</div>
+          <div className="form-card__subtitle">先确定规则名称、关联设备和目标遥测指标。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            <Form.Item label="规则名称">
+              <Input value={name} onChange={setName} placeholder="输入规则名称" />
+            </Form.Item>
+
+            <Form.Item label="设备" onClick={() => setDevicePickerVisible(true)}>
+              <div className="picker-trigger" style={{ color: deviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{selectedDeviceName}</div>
+            </Form.Item>
+            <Form.Item label="遥测指标" onClick={() => setMetricPickerVisible(true)}>
+              <div className="picker-trigger" style={{ color: telemetryKey ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{selectedMetricLabel}</div>
+            </Form.Item>
+          </Form>
+        </div>
         <Picker
           columns={[devices.map((d) => ({ label: d.name, value: d.id }))]}
           visible={devicePickerVisible}
@@ -139,12 +156,6 @@ export default function AlertRuleFormPage() {
           onConfirm={(v) => { if (v[0]) { setDeviceId(v[0] as number); setTelemetryKey(''); } }}
           value={deviceId ? [deviceId] : []}
         />
-
-        <Form.Item label="遥测指标" onClick={() => setMetricPickerVisible(true)}>
-          <span style={{ color: telemetryKey ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>
-            {selectedMetricLabel}
-          </span>
-        </Form.Item>
         <Picker
           columns={[metricOptions]}
           visible={metricPickerVisible}
@@ -153,9 +164,29 @@ export default function AlertRuleFormPage() {
           value={telemetryKey ? [telemetryKey] : []}
         />
 
-        <Form.Item label="条件" onClick={() => setCondPickerVisible(true)}>
-          <span style={{ color: 'var(--color-text)' }}>{selectedCondLabel}</span>
-        </Form.Item>
+        <div className="glass-card form-card">
+          <div className="form-card__title">触发条件</div>
+          <div className="form-card__subtitle">配置判定逻辑和触发持续时间。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            <Form.Item label="条件" onClick={() => setCondPickerVisible(true)}>
+              <div className="picker-trigger">{selectedCondLabel}</div>
+            </Form.Item>
+            <Form.Item label="阈值">
+              <Stepper value={threshold1} onChange={setThreshold1} step={0.1} style={{ width: '100%' }} />
+            </Form.Item>
+            {condition === 'between' && (
+              <Form.Item label="阈值上限">
+                <Stepper value={threshold2} onChange={setThreshold2} step={0.1} style={{ width: '100%' }} />
+              </Form.Item>
+            )}
+            <Form.Item label="持续时间(秒)">
+              <Stepper value={duration} onChange={setDuration} min={0} step={10} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="启用">
+              <Switch checked={enabled} onChange={setEnabled} />
+            </Form.Item>
+          </Form>
+        </div>
         <Picker
           columns={[CONDITIONS.map((c) => ({ label: c.label, value: c.value }))]}
           visible={condPickerVisible}
@@ -164,57 +195,34 @@ export default function AlertRuleFormPage() {
           value={[condition]}
         />
 
-        <Form.Item label="阈值">
-          <Stepper value={threshold1} onChange={setThreshold1} step={0.1} style={{ width: '100%' }} />
-        </Form.Item>
-        {(condition === 'between' || condition === 'not_between') && (
-          <Form.Item label="阈值上限">
-            <Stepper value={threshold2} onChange={setThreshold2} step={0.1} style={{ width: '100%' }} />
-          </Form.Item>
+        {channels.length > 0 && (
+          <div className="glass-card form-card">
+            <div className="form-card__title">通知渠道</div>
+            <div className="form-card__subtitle">可多选，触发后会同时下发到选中的渠道。</div>
+            <div className="channel-list">
+              {channels.map((ch) => (
+                <div
+                  key={ch.id}
+                  className={`channel-chip ${channelIds.includes(ch.id) ? 'channel-chip--active' : ''}`}
+                  onClick={() => {
+                    setChannelIds((prev) =>
+                      prev.includes(ch.id) ? prev.filter((x) => x !== ch.id) : [...prev, ch.id]
+                    );
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)' }}>{ch.name}</div>
+                  <div style={{ marginTop: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>{ch.type}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        <Form.Item label="持续时间(秒)">
-          <Stepper value={duration} onChange={setDuration} min={0} step={10} style={{ width: '100%' }} />
-        </Form.Item>
-
-        <Form.Item label="启用">
-          <Switch checked={enabled} onChange={setEnabled} />
-        </Form.Item>
-      </Form>
-
-      {/* Channel selection */}
-      {channels.length > 0 && (
-        <div style={{ padding: '0 16px 12px' }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 8 }}>通知渠道</div>
-          {channels.map((ch) => (
-            <div
-              key={ch.id}
-              onClick={() => {
-                setChannelIds((prev) =>
-                  prev.includes(ch.id) ? prev.filter((x) => x !== ch.id) : [...prev, ch.id]
-                );
-              }}
-              style={{
-                padding: '10px 14px',
-                marginBottom: 6,
-                borderRadius: 8,
-                background: channelIds.includes(ch.id) ? 'var(--color-primary-light)' : 'var(--color-fill)',
-                border: channelIds.includes(ch.id) ? '1px solid var(--color-primary)' : '1px solid transparent',
-                cursor: 'pointer',
-                fontSize: 14,
-                color: 'var(--color-text)',
-              }}
-            >
-              {ch.name} ({ch.type})
-            </div>
-          ))}
+        <div className="submit-wrap">
+          <Button block color="primary" loading={submitting} onClick={handleSubmit}>
+            {isEdit ? '保存修改' : '创建规则'}
+          </Button>
         </div>
-      )}
-
-      <div style={{ padding: '8px 16px 24px' }}>
-        <Button block color="primary" loading={submitting} onClick={handleSubmit} style={{ borderRadius: 8 }}>
-          {isEdit ? '保存修改' : '创建规则'}
-        </Button>
       </div>
     </div>
   );

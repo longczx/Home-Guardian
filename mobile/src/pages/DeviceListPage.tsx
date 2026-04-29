@@ -63,23 +63,30 @@ export default function DeviceListPage() {
   }, [filtered]);
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
-      <div style={{ padding: '12px 16px 8px', background: 'var(--navbar-bg)' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', marginBottom: 10 }}>
-          {locationFilter ? locationFilter : '设备'}
+    <div className="mobile-page mobile-page--tight">
+      <div className="page-hero">
+        <div className="page-hero__eyebrow">devices</div>
+        <div className="page-hero__title">{locationFilter || '设备控制台'}</div>
+        <div className="page-hero__subtitle">按位置、在线状态和关键词快速定位设备，入口和控制能力保持不变。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">设备 {devices.length}</span>
+          <span className="soft-chip">筛选结果 {filtered.length}</span>
         </div>
+      </div>
+
+      <div className="glass-card top-panel">
         <SearchBar
           placeholder="搜索设备名称、UID"
           value={search}
           onChange={setSearch}
-          style={{ '--background': 'var(--color-fill)' }}
+          style={{ '--background': 'transparent' }}
         />
       </div>
 
       <Tabs
         activeKey={filter}
         onChange={setFilter}
-        style={{ '--title-font-size': '14px', background: 'var(--navbar-bg)', position: 'sticky', top: 0, zIndex: 10 }}
+        style={{ '--title-font-size': '14px', position: 'sticky', top: 96, zIndex: 9, marginTop: 10 }}
       >
         <Tabs.Tab title="全部" key="all" />
         <Tabs.Tab title="在线" key="online" />
@@ -87,28 +94,24 @@ export default function DeviceListPage() {
       </Tabs>
 
       <PullToRefresh onRefresh={fetchDevices}>
-        <div style={{ padding: '12px 16px' }}>
+        <div style={{ paddingTop: 14 }}>
           {filtered.length === 0 ? (
             <EmptyState title="暂无设备" />
           ) : (
-            <>
-              {/* 网关分组 */}
+            <div className="list-stack">
               {grouped.gateways.map(({ gateway, sensors }) => (
-                <div key={gateway.device_uid} style={{ marginBottom: 16 }}>
-                  {/* 网关卡片 */}
+                <div key={gateway.device_uid} className="glass-card" style={{ padding: 14 }}>
                   <div
                     onClick={() => navigate(`/mobile/device/${gateway.id}`)}
                     style={{
-                      background: 'var(--color-bg-card)',
-                      borderRadius: 'var(--card-radius)',
-                      boxShadow: 'var(--card-shadow)',
-                      padding: '12px 16px',
-                      marginBottom: 2,
+                      borderRadius: '20px',
+                      background: 'var(--color-fill)',
+                      padding: '14px 14px',
                       cursor: 'pointer',
                       display: 'flex', alignItems: 'center', gap: 10,
                     }}
                   >
-                    <span style={{ fontSize: 18 }}>🖧</span>
+                    <span style={{ fontSize: 20 }}>🖧</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{
@@ -118,7 +121,7 @@ export default function DeviceListPage() {
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>
                           {gateway.name}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', background: 'var(--color-fill)', padding: '1px 6px', borderRadius: 4 }}>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.58)', padding: '3px 8px', borderRadius: 999 }}>
                           网关
                         </span>
                       </div>
@@ -127,8 +130,7 @@ export default function DeviceListPage() {
                       </div>
                     </div>
                   </div>
-                  {/* 传感器列表（缩进） */}
-                  <div style={{ paddingLeft: 20 }}>
+                  <div style={{ paddingLeft: 18, paddingTop: 12 }}>
                     {sensors.map((d) => (
                       <DeviceCard key={d.id} device={d} metrics={metricsMap[d.id]} metricLookup={metricLookup} />
                     ))}
@@ -136,11 +138,10 @@ export default function DeviceListPage() {
                 </div>
               ))}
 
-              {/* 独立设备 */}
               {grouped.standalone.length > 0 && (
                 <div>
                   {grouped.gateways.length > 0 && (
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', margin: '12px 0 8px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-secondary)', margin: '8px 4px 10px' }}>
                       独立设备
                     </div>
                   )}
@@ -149,7 +150,7 @@ export default function DeviceListPage() {
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </PullToRefresh>

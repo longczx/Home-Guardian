@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavBar, List, Switch, Button, Dialog, Toast, Tag } from 'antd-mobile';
+import { NavBar, Switch, Button, Dialog, Toast } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { AddOutline } from 'antd-mobile-icons';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/api/notificationChannel';
 import EmptyState from '@/components/EmptyState';
 import PageLoading from '@/components/PageLoading';
+import AppTag from '@/components/AppTag';
 
 const typeLabels: Record<string, string> = {
   email: '邮件',
@@ -27,38 +28,42 @@ export default function NotificationChannelPage() {
 
   const fetch = () => {
     setLoading(true);
-    getNotificationChannels().then(({ data: res }) => {
-      if (res.code === 0) setChannels(res.data);
-    }).finally(() => setLoading(false));
+    getNotificationChannels()
+      .then(({ data: res }) => {
+        if (res.code === 0) setChannels(res.data);
+      })
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => {
+    fetch();
+  }, []);
 
-  const handleToggle = async (ch: NotificationChannel, enabled: boolean) => {
+  const handleToggle = async (channel: NotificationChannel, enabled: boolean) => {
     try {
-      await updateNotificationChannel(ch.id, { is_enabled: enabled });
-      setChannels((prev) => prev.map((c) => (c.id === ch.id ? { ...c, is_enabled: enabled } : c)));
+      await updateNotificationChannel(channel.id, { is_enabled: enabled });
+      setChannels((prev) => prev.map((item) => (item.id === channel.id ? { ...item, is_enabled: enabled } : item)));
     } catch {
       Toast.show({ content: '操作失败', icon: 'fail' });
     }
   };
 
-  const handleTest = async (ch: NotificationChannel) => {
+  const handleTest = async (channel: NotificationChannel) => {
     try {
-      await testNotificationChannel(ch.id);
+      await testNotificationChannel(channel.id);
       Toast.show({ content: '测试消息已发送', icon: 'success' });
     } catch {
       Toast.show({ content: '发送失败', icon: 'fail' });
     }
   };
 
-  const handleDelete = (ch: NotificationChannel) => {
+  const handleDelete = (channel: NotificationChannel) => {
     Dialog.confirm({
-      content: `确认删除「${ch.name}」?`,
+      content: `确认删除「${channel.name}」?`,
       onConfirm: async () => {
         try {
-          await deleteNotificationChannel(ch.id);
-          setChannels((prev) => prev.filter((c) => c.id !== ch.id));
+          await deleteNotificationChannel(channel.id);
+          setChannels((prev) => prev.filter((item) => item.id !== channel.id));
           Toast.show({ content: '已删除', icon: 'success' });
         } catch {
           Toast.show({ content: '删除失败', icon: 'fail' });
@@ -70,55 +75,92 @@ export default function NotificationChannelPage() {
   if (loading) return <PageLoading />;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar
         onBack={() => navigate(-1)}
-        right={
-          <AddOutline fontSize={22} onClick={() => navigate('/mobile/notification-channels/create')} style={{ color: 'var(--color-primary)' }} />
-        }
+        right={<AddOutline fontSize={22} onClick={() => navigate('/mobile/notification-channels/create')} style={{ color: 'var(--color-primary)' }} />}
         style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}
       >
         通知渠道
       </NavBar>
 
+      <div className="page-hero" style={{ marginTop: 8, marginBottom: 16 }}>
+        <div className="page-hero__eyebrow">channels</div>
+        <div className="page-hero__title">通知渠道</div>
+        <div className="page-hero__subtitle">统一管理消息下发渠道，支持启停、测试、编辑和删除。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">渠道 {channels.length}</span>
+          <span className="soft-chip">启用 {channels.filter((item) => item.is_enabled).length}</span>
+        </div>
+      </div>
+
       {channels.length === 0 ? (
         <EmptyState title="暂无通知渠道" />
       ) : (
-        <List style={{ '--border-top': 'none' } as React.CSSProperties}>
-          {channels.map((ch) => (
-            <List.Item
-              key={ch.id}
-              onClick={() => navigate(`/mobile/notification-channels/${ch.id}/edit`)}
-              description={
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <Button size="mini" color="primary" fill="outline" onClick={(e) => { e.stopPropagation(); handleTest(ch); }}>
-                    测试
-                  </Button>
-                  <Button size="mini" color="danger" fill="outline" onClick={(e) => { e.stopPropagation(); handleDelete(ch); }}>
-                    删除
-                  </Button>
-                </div>
-              }
-              extra={
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={ch.is_enabled}
-                    onChange={(v) => handleToggle(ch, v)}
-                  />
-                </div>
-              }
-              style={{ background: 'var(--color-bg-card)' }}
+        <div className="list-stack">
+          {channels.map((channel) => (
+            <div
+              key={channel.id}
+              className="glass-card"
+              onClick={() => navigate(`/mobile/notification-channels/${channel.id}/edit`)}
+              style={{ padding: 16, cursor: 'pointer' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{ch.name}</span>
-                <Tag color="primary" fill="outline" style={{ fontSize: 11 }}>
-                  {typeLabels[ch.type] || ch.type}
-                </Tag>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: 16 }}>{channel.name}</span>
+                    <AppTag tone="primary">
+                      {typeLabels[channel.type] || channel.type}
+                    </AppTag>
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {channel.type === 'email' ? '邮件渠道' : channel.type === 'webhook' ? 'Webhook 推送' : '消息机器人渠道'}
+                  </div>
+                </div>
+                <div onClick={(event) => event.stopPropagation()}>
+                  <Switch checked={channel.is_enabled} onChange={(value) => handleToggle(channel, value)} />
+                </div>
               </div>
-            </List.Item>
+
+              <div className="soft-actions" style={{ marginTop: 14 }}>
+                <button
+                  className="soft-button soft-button--accent"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleTest(channel);
+                  }}
+                >
+                  测试
+                </button>
+                <button
+                  className="soft-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/mobile/notification-channels/${channel.id}/edit`);
+                  }}
+                >
+                  编辑
+                </button>
+                <button
+                  className="soft-button soft-button--danger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDelete(channel);
+                  }}
+                >
+                  删除
+                </button>
+              </div>
+            </div>
           ))}
-        </List>
+        </div>
       )}
+
+      <div style={{ padding: '16px 0' }}>
+        <Button block color="primary" onClick={() => navigate('/mobile/notification-channels/create')} style={{ borderRadius: 18 }}>
+          创建新渠道
+        </Button>
+      </div>
     </div>
   );
 }

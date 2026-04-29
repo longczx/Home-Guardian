@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavBar, Card, Button, Toast } from 'antd-mobile';
+import { NavBar, Button, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getAlertLog, acknowledgeAlert, resolveAlert, type AlertLog } from '@/api/telemetry';
 import StatusTag from '@/components/StatusTag';
@@ -44,7 +44,7 @@ export default function AlertDetailPage() {
   if (loading) return <PageLoading />;
   if (!alert) {
     return (
-      <div>
+      <div className="mobile-page">
         <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)' }}>告警详情</NavBar>
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-tertiary)' }}>告警不存在</div>
       </div>
@@ -62,40 +62,47 @@ export default function AlertDetailPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
         告警详情
       </NavBar>
 
-      <div style={{ padding: '12px 16px' }}>
-        {/* Header */}
-        <Card style={{ borderRadius: 'var(--card-radius)', background: 'var(--color-bg-card)', boxShadow: 'var(--card-shadow)', marginBottom: 12 }} bodyStyle={{ padding: 16 }}>
+      <div>
+        <div className="page-hero" style={{ marginTop: 8, marginBottom: 16 }}>
+          <div className="page-hero__eyebrow">alert detail</div>
+          <div className="page-hero__title">{alert.rule?.name || '告警详情'}</div>
+          <div className="page-hero__subtitle">查看告警的触发上下文、状态流转时间和后续处理动作。</div>
+          <div className="page-hero__meta">
+            <span className="soft-chip">状态 {alert.status}</span>
+            <span className="soft-chip">设备 {alert.device?.name || '未知设备'}</span>
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-text)' }}>{alert.rule?.name || '未知规则'}</span>
             <StatusTag status={alert.status} />
           </div>
           <RelativeTime date={alert.triggered_at} />
-        </Card>
+        </div>
 
-        {/* Details */}
-        <Card style={{ borderRadius: 'var(--card-radius)', background: 'var(--color-bg-card)', boxShadow: 'var(--card-shadow)', marginBottom: 16 }} bodyStyle={{ padding: 16 }}>
+        <div className="glass-card" style={{ padding: 16, marginBottom: 16 }}>
           {infoItems.map((item) => (
-            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
-              <span style={{ fontSize: 14, color: 'var(--color-text-tertiary)' }}>{item.label}</span>
-              <span style={{ fontSize: 14, color: 'var(--color-text)', fontWeight: 500 }}>{item.value}</span>
+            <div key={item.label} className="detail-row" style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+              <span className="detail-row__label">{item.label}</span>
+              <span className="detail-row__value" style={{ fontWeight: 500 }}>{item.value}</span>
             </div>
           ))}
-        </Card>
+        </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="soft-actions">
           {alert.status === 'triggered' && (
-            <Button block color="warning" onClick={handleAck} style={{ borderRadius: 8, flex: 1 }}>
+            <Button block color="warning" onClick={handleAck} style={{ borderRadius: 18, flex: 1 }}>
               确认告警
             </Button>
           )}
           {alert.status !== 'resolved' && (
-            <Button block color="success" onClick={handleResolve} style={{ borderRadius: 8, flex: 1 }}>
+            <Button block color="success" onClick={handleResolve} style={{ borderRadius: 18, flex: 1 }}>
               标记解决
             </Button>
           )}
@@ -105,7 +112,7 @@ export default function AlertDetailPage() {
               color="primary"
               fill="outline"
               onClick={() => navigate(`/mobile/device/${alert.device!.id}`)}
-              style={{ borderRadius: 8, flex: 1 }}
+              style={{ borderRadius: 18, flex: 1 }}
             >
               查看设备
             </Button>

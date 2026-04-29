@@ -3,6 +3,43 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
+function manualChunks(id: string) {
+  if (!id.includes('node_modules')) {
+    return undefined;
+  }
+
+  const normalizedId = id.replace(/\\/g, '/');
+
+  if (
+    normalizedId.includes('/react-dom/') ||
+    normalizedId.includes('/react/') ||
+    normalizedId.includes('/react-router/') ||
+    normalizedId.includes('/react-router-dom/') ||
+    normalizedId.includes('/scheduler/') ||
+    normalizedId.includes('/@remix-run/router/')
+  ) {
+    return 'react-vendor';
+  }
+
+  if (normalizedId.includes('/antd-mobile/') || normalizedId.includes('/antd-mobile-icons/') || normalizedId.includes('/@react-spring/')) {
+    return 'ui-vendor';
+  }
+
+  if (normalizedId.includes('/echarts/') || normalizedId.includes('/zrender/') || normalizedId.includes('/echarts-for-react/')) {
+    return 'charts-vendor';
+  }
+
+  if (normalizedId.includes('/axios/')) {
+    return 'network-vendor';
+  }
+
+  if (normalizedId.includes('/zustand/')) {
+    return 'state-vendor';
+  }
+
+  return undefined;
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -36,6 +73,11 @@ export default defineConfig({
   build: {
     outDir: '../public/mobile',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks,
+      },
+    },
   },
   server: {
     port: 5173,

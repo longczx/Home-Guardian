@@ -1,4 +1,4 @@
-import { Tag } from 'antd-mobile';
+import AppTag from './AppTag';
 
 type StatusType = 'online' | 'offline' | 'triggered' | 'acknowledged' | 'resolved'
   | 'pending' | 'delivered' | 'success' | 'failed' | 'timeout';
@@ -25,8 +25,8 @@ export default function StatusTag({ status = '', online }: StatusTagProps) {
   const key = online !== undefined ? (online ? 'online' : 'offline') : status;
   const c = config[key as StatusType] || { color: 'default', label: key };
   return (
-    <Tag color={c.color as 'success' | 'danger' | 'warning' | 'primary' | 'default'} fill="outline">
+    <AppTag tone={c.color as 'success' | 'danger' | 'warning' | 'primary' | 'default'}>
       {c.label}
-    </Tag>
+    </AppTag>
   );
 }

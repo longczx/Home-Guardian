@@ -1,4 +1,4 @@
-import { List, Dialog, Toast } from 'antd-mobile';
+import { Dialog, Toast } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import {
   RightOutline,
@@ -47,13 +47,9 @@ export default function ProfilePage() {
   const currentThemeLabel = themeOptions.find((o) => o.value === theme)?.label || '跟随系统';
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
-      {/* User header */}
-      <div style={{
-        background: 'linear-gradient(135deg, var(--color-primary), #764ba2)',
-        padding: '48px 24px 32px',
-        borderRadius: '0 0 24px 24px',
-      }}>
+    <div className="mobile-page mobile-page--tight">
+      <div className="page-hero">
+        <div className="page-hero__eyebrow">profile</div>
         <div style={{
           width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -65,52 +61,46 @@ export default function ProfilePage() {
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
           {user?.roles?.join(', ') || '用户'}
         </div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">主题 {currentThemeLabel}</span>
+          <span className="soft-chip">通知渠道可配置</span>
+        </div>
       </div>
 
-      {/* Settings */}
-      <div style={{ padding: '16px 16px 0' }}>
-        <List style={{ '--border-top': 'none', borderRadius: 'var(--card-radius)', overflow: 'hidden' } as React.CSSProperties}>
-          <List.Item
-            prefix={<SetOutline />}
-            onClick={handleThemeChange}
-            extra={<span style={{ color: 'var(--color-text-tertiary)' }}>{currentThemeLabel}</span>}
-            arrow={false}
-          >
-            主题
-          </List.Item>
-          <List.Item
-            prefix={<LockOutline />}
-            onClick={() => navigate('/mobile/profile/password')}
-            arrow={<RightOutline />}
-          >
-            修改密码
-          </List.Item>
-          <List.Item
-            prefix={<BellOutline />}
-            onClick={() => navigate('/mobile/notification-channels')}
-            arrow={<RightOutline />}
-          >
-            通知渠道
-          </List.Item>
-          <List.Item
-            prefix={<InformationCircleOutline />}
-            onClick={() => navigate('/mobile/profile/about')}
-            arrow={<RightOutline />}
-          >
-            关于
-          </List.Item>
-        </List>
+      <div className="section-row">
+        <span className="section-title">账号与设置</span>
       </div>
 
-      <div style={{ padding: '24px 16px' }}>
+      <div className="glass-card" style={{ padding: '4px 0' }}>
+        <div className="inline-list">
+          <button className="inline-list__item" onClick={handleThemeChange}>
+            <span className="inline-list__meta"><SetOutline />主题</span>
+            <span className="inline-list__tail">{currentThemeLabel}</span>
+          </button>
+          <button className="inline-list__item" onClick={() => navigate('/mobile/profile/password')}>
+            <span className="inline-list__meta"><LockOutline />修改密码</span>
+            <span className="inline-list__tail"><RightOutline /></span>
+          </button>
+          <button className="inline-list__item" onClick={() => navigate('/mobile/notification-channels')}>
+            <span className="inline-list__meta"><BellOutline />通知渠道</span>
+            <span className="inline-list__tail"><RightOutline /></span>
+          </button>
+          <button className="inline-list__item" onClick={() => navigate('/mobile/profile/about')}>
+            <span className="inline-list__meta"><InformationCircleOutline />关于</span>
+            <span className="inline-list__tail"><RightOutline /></span>
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 0' }}>
         <div
           onClick={handleLogout}
           style={{
             textAlign: 'center',
-            padding: '12px 0',
+            padding: '14px 0',
             color: 'var(--color-danger)',
             fontSize: 16,
-            fontWeight: 500,
+            fontWeight: 700,
             background: 'var(--color-bg-card)',
             borderRadius: 'var(--card-radius)',
             cursor: 'pointer',

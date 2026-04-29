@@ -1,4 +1,3 @@
-import { Card } from 'antd-mobile';
 import type { LatestMetric } from '@/api/telemetry';
 import type { MetricMeta } from '@/utils/metricLookup';
 
@@ -15,41 +14,38 @@ export default function RoomCard({ location, deviceCount, onlineCount, metrics =
   const lookup = metricLookup || ((key: string) => ({ label: key, unit: '', icon: '📊' }));
 
   return (
-    <Card
+    <div
+      className="glass-card glass-card--interactive"
       onClick={onClick}
       style={{
-        borderRadius: 'var(--card-radius)',
-        boxShadow: 'var(--card-shadow)',
         cursor: onClick ? 'pointer' : 'default',
-        background: 'var(--color-bg-card)',
         marginBottom: 12,
+        padding: '16px 16px 18px',
       }}
-      bodyStyle={{ padding: '14px 16px' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>{location}</div>
-        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-          {onlineCount}/{deviceCount} 在线
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)', marginBottom: 6 }}>{location}</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{deviceCount} 台设备 · {onlineCount} 台在线</div>
+        </div>
+        <div style={{ padding: '7px 10px', borderRadius: 999, background: 'var(--color-fill)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          进入房间
         </div>
       </div>
       {metrics.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div className="metric-pill-list">
           {metrics.slice(0, 4).map((m) => {
             const meta = lookup(m.metric_key);
             return (
-              <div key={m.metric_key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div key={m.metric_key} className="metric-pill">
                 <span style={{ fontSize: 14 }}>{meta.icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>
-                  {typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                  {meta.unit}
-                </span>
+                <strong>{typeof m.value === 'number' ? m.value.toFixed(1) : String(m.value)}</strong>
+                <span>{meta.unit || meta.label}</span>
               </div>
             );
           })}
         </div>
       )}
-    </Card>
+    </div>
   );
 }

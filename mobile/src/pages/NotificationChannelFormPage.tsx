@@ -154,19 +154,37 @@ export default function NotificationChannelFormPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
         {isEdit ? '编辑通知渠道' : '创建通知渠道'}
       </NavBar>
 
-      <Form layout="horizontal" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
-        <Form.Header>基本信息</Form.Header>
-        <Form.Item label="名称">
-          <Input value={name} onChange={setName} placeholder="渠道名称" />
-        </Form.Item>
-        <Form.Item label="类型" onClick={() => !isEdit && setTypePickerVisible(true)}>
-          <span style={{ color: 'var(--color-text)' }}>{typeLabels[type] || type}</span>
-        </Form.Item>
+      <div className="page-hero" style={{ marginTop: 8 }}>
+        <div className="page-hero__eyebrow">channel form</div>
+        <div className="page-hero__title">{isEdit ? '编辑通知渠道' : '创建通知渠道'}</div>
+        <div className="page-hero__subtitle">按不同渠道类型展示配置字段，提交流程保持不变。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">类型 {typeLabels[type] || type}</span>
+          <span className="soft-chip">状态 {enabled ? '启用' : '停用'}</span>
+        </div>
+      </div>
+
+      <div className="form-shell">
+        <div className="glass-card form-card">
+          <div className="form-card__title">基本信息</div>
+          <div className="form-card__subtitle">先选择渠道类型，再补充该渠道所需配置。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            <Form.Item label="名称">
+              <Input value={name} onChange={setName} placeholder="渠道名称" />
+            </Form.Item>
+            <Form.Item label="类型" onClick={() => !isEdit && setTypePickerVisible(true)}>
+              <div className="picker-trigger">{typeLabels[type] || type}</div>
+            </Form.Item>
+            <Form.Item label="启用">
+              <Switch checked={enabled} onChange={setEnabled} />
+            </Form.Item>
+          </Form>
+        </div>
         <Picker
           columns={[CHANNEL_TYPES]}
           visible={typePickerVisible}
@@ -179,18 +197,20 @@ export default function NotificationChannelFormPage() {
           }}
           value={[type]}
         />
-        <Form.Item label="启用">
-          <Switch checked={enabled} onChange={setEnabled} />
-        </Form.Item>
 
-        <Form.Header>渠道配置</Form.Header>
-        {renderConfigFields()}
-      </Form>
+        <div className="glass-card form-card">
+          <div className="form-card__title">渠道配置</div>
+          <div className="form-card__subtitle">根据当前类型展示对应参数。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            {renderConfigFields()}
+          </Form>
+        </div>
 
-      <div style={{ padding: '16px 16px 24px' }}>
-        <Button block color="primary" loading={submitting} onClick={handleSubmit} style={{ borderRadius: 8 }}>
-          {isEdit ? '保存修改' : '创建渠道'}
-        </Button>
+        <div className="submit-wrap">
+          <Button block color="primary" loading={submitting} onClick={handleSubmit}>
+            {isEdit ? '保存修改' : '创建渠道'}
+          </Button>
+        </div>
       </div>
     </div>
   );

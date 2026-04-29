@@ -117,19 +117,37 @@ export default function AutomationFormPage() {
   const actDeviceName = devices.find((d) => d.id === actDeviceId)?.name || '选择设备';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar onBack={() => navigate(-1)} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
         {isEdit ? '编辑自动化' : '创建自动化'}
       </NavBar>
 
-      <Form layout="horizontal" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
-        <Form.Header>基本信息</Form.Header>
-        <Form.Item label="名称">
-          <Input value={name} onChange={setName} placeholder="自动化名称" />
-        </Form.Item>
-        <Form.Item label="触发类型" onClick={() => setTriggerPickerVisible(true)}>
-          <span style={{ color: 'var(--color-text)' }}>{triggerType === 'telemetry' ? '遥测触发' : '定时触发'}</span>
-        </Form.Item>
+      <div className="page-hero" style={{ marginTop: 8 }}>
+        <div className="page-hero__eyebrow">automation form</div>
+        <div className="page-hero__title">{isEdit ? '编辑自动化' : '创建自动化'}</div>
+        <div className="page-hero__subtitle">配置触发条件和执行动作，继续复用现有 API 结构。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">设备 {devices.length}</span>
+          <span className="soft-chip">类型 {triggerType === 'telemetry' ? '遥测触发' : '定时触发'}</span>
+        </div>
+      </div>
+
+      <div className="form-shell">
+        <div className="glass-card form-card">
+          <div className="form-card__title">基本信息</div>
+          <div className="form-card__subtitle">设置名称、触发类型和启用状态。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            <Form.Item label="名称">
+              <Input value={name} onChange={setName} placeholder="自动化名称" />
+            </Form.Item>
+            <Form.Item label="触发类型" onClick={() => setTriggerPickerVisible(true)}>
+              <div className="picker-trigger">{triggerType === 'telemetry' ? '遥测触发' : '定时触发'}</div>
+            </Form.Item>
+            <Form.Item label="启用">
+              <Switch checked={enabled} onChange={setEnabled} />
+            </Form.Item>
+          </Form>
+        </div>
         <Picker
           columns={[TRIGGER_TYPES]}
           visible={triggerPickerVisible}
@@ -137,16 +155,33 @@ export default function AutomationFormPage() {
           onConfirm={(v) => { if (v[0]) setTriggerType(v[0] as 'telemetry' | 'schedule'); }}
           value={[triggerType]}
         />
-        <Form.Item label="启用">
-          <Switch checked={enabled} onChange={setEnabled} />
-        </Form.Item>
 
-        <Form.Header>触发条件</Form.Header>
-        {triggerType === 'telemetry' ? (
-          <>
-            <Form.Item label="设备" onClick={() => setDevPickerVisible(true)}>
-              <span style={{ color: trigDeviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{trigDeviceName}</span>
-            </Form.Item>
+        <div className="glass-card form-card">
+          <div className="form-card__title">触发条件</div>
+          <div className="form-card__subtitle">根据设备遥测或 cron 计划来触发自动化。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            {triggerType === 'telemetry' ? (
+              <>
+                <Form.Item label="设备" onClick={() => setDevPickerVisible(true)}>
+                  <div className="picker-trigger" style={{ color: trigDeviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{trigDeviceName}</div>
+                </Form.Item>
+                <Form.Item label="遥测指标">
+                  <Input value={trigMetricKey} onChange={setTrigMetricKey} placeholder="如 temperature" />
+                </Form.Item>
+                <Form.Item label="条件">
+                  <Input value={trigCondition} onChange={setTrigCondition} placeholder="gt / lt / eq" />
+                </Form.Item>
+                <Form.Item label="阈值">
+                  <Stepper value={trigThreshold} onChange={setTrigThreshold} step={0.1} style={{ width: '100%' }} />
+                </Form.Item>
+              </>
+            ) : (
+              <Form.Item label="Cron 配置">
+                <TextArea value={triggerConfig} onChange={setTriggerConfig} rows={3} placeholder='{"cron": "0 8 * * *"}' />
+              </Form.Item>
+            )}
+          </Form>
+        </div>
             <Picker
               columns={[devices.map((d) => ({ label: d.name, value: d.id }))]}
               visible={devPickerVisible}
@@ -154,46 +189,36 @@ export default function AutomationFormPage() {
               onConfirm={(v) => { if (v[0]) setTrigDeviceId(v[0] as number); }}
               value={trigDeviceId ? [trigDeviceId] : []}
             />
-            <Form.Item label="遥测指标">
-              <Input value={trigMetricKey} onChange={setTrigMetricKey} placeholder="如 temperature" />
-            </Form.Item>
-            <Form.Item label="条件">
-              <Input value={trigCondition} onChange={setTrigCondition} placeholder="gt / lt / eq" />
-            </Form.Item>
-            <Form.Item label="阈值">
-              <Stepper value={trigThreshold} onChange={setTrigThreshold} step={0.1} style={{ width: '100%' }} />
-            </Form.Item>
-          </>
-        ) : (
-          <Form.Item label="Cron 配置">
-            <TextArea value={triggerConfig} onChange={setTriggerConfig} rows={3} placeholder='{"cron": "0 8 * * *"}' />
-          </Form.Item>
-        )}
 
-        <Form.Header>执行动作</Form.Header>
-        <Form.Item label="动作类型">
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div className="glass-card form-card">
+          <div className="form-card__title">执行动作</div>
+          <div className="form-card__subtitle">选择动作类型，并在需要时指定目标设备和指令。</div>
+          <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+            <Form.Item label="动作类型">
+              <div className="option-chip-row">
             {ACTION_TYPES.map((t) => (
               <div
                 key={t.value}
                 onClick={() => setActType(t.value as 'send_command' | 'send_notification')}
-                style={{
-                  padding: '6px 14px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
-                  background: actType === t.value ? 'var(--color-primary-light)' : 'var(--color-fill)',
-                  border: actType === t.value ? '1px solid var(--color-primary)' : '1px solid transparent',
-                  color: 'var(--color-text)',
-                }}
+                className={`option-chip ${actType === t.value ? 'option-chip--active' : ''}`}
               >
                 {t.label}
               </div>
             ))}
-          </div>
-        </Form.Item>
-        {actType === 'send_command' && (
-          <>
-            <Form.Item label="目标设备" onClick={() => setActDevPickerVisible(true)}>
-              <span style={{ color: actDeviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{actDeviceName}</span>
+              </div>
             </Form.Item>
+            {actType === 'send_command' && (
+              <>
+                <Form.Item label="目标设备" onClick={() => setActDevPickerVisible(true)}>
+                  <div className="picker-trigger" style={{ color: actDeviceId ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{actDeviceName}</div>
+                </Form.Item>
+                <Form.Item label="指令">
+                  <Input value={actAction} onChange={setActAction} placeholder="如 turn_on" />
+                </Form.Item>
+              </>
+            )}
+          </Form>
+        </div>
             <Picker
               columns={[devices.map((d) => ({ label: d.name, value: d.id }))]}
               visible={actDevPickerVisible}
@@ -201,17 +226,12 @@ export default function AutomationFormPage() {
               onConfirm={(v) => { if (v[0]) setActDeviceId(v[0] as number); }}
               value={actDeviceId ? [actDeviceId] : []}
             />
-            <Form.Item label="指令">
-              <Input value={actAction} onChange={setActAction} placeholder="如 turn_on" />
-            </Form.Item>
-          </>
-        )}
-      </Form>
 
-      <div style={{ padding: '16px 16px 24px' }}>
-        <Button block color="primary" loading={submitting} onClick={handleSubmit} style={{ borderRadius: 8 }}>
-          {isEdit ? '保存修改' : '创建自动化'}
-        </Button>
+        <div className="submit-wrap">
+          <Button block color="primary" loading={submitting} onClick={handleSubmit}>
+            {isEdit ? '保存修改' : '创建自动化'}
+          </Button>
+        </div>
       </div>
     </div>
   );

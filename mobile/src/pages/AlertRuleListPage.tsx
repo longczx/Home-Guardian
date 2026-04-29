@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavBar, List, Switch, Toast, Button, Dialog } from 'antd-mobile';
+import { NavBar, Switch, Toast, Button, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { AddOutline } from 'antd-mobile-icons';
 import { getAlertRules, updateAlertRule, deleteAlertRule, type AlertRule } from '@/api/alertRule';
@@ -48,7 +48,7 @@ export default function AlertRuleListPage() {
   if (loading) return <PageLoading />;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar
         onBack={() => navigate(-1)}
         right={
@@ -59,50 +59,74 @@ export default function AlertRuleListPage() {
         告警规则
       </NavBar>
 
+      <div className="page-hero" style={{ marginTop: 8, marginBottom: 16 }}>
+        <div className="page-hero__eyebrow">alert rules</div>
+        <div className="page-hero__title">告警规则</div>
+        <div className="page-hero__subtitle">查看和管理所有规则，保持启停、编辑和删除能力不变。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">规则 {rules.length}</span>
+          <span className="soft-chip">启用 {rules.filter((rule) => rule.is_enabled).length}</span>
+        </div>
+      </div>
+
       {rules.length === 0 ? (
         <EmptyState title="暂无规则" description="点击右上角添加规则" />
       ) : (
-        <List style={{ '--border-top': 'none' } as React.CSSProperties}>
+        <div className="list-stack">
           {rules.map((rule) => (
-            <List.Item
+            <div
               key={rule.id}
+              className="glass-card"
               onClick={() => navigate(`/mobile/alert-rules/${rule.id}/edit`)}
-              description={
-                <div>
-                  <ConditionSummary
-                    telemetryKey={rule.telemetry_key}
-                    condition={rule.condition}
-                    thresholdValue={rule.threshold_value}
-                    duration={rule.trigger_duration_sec}
-                  />
-                  <div style={{ marginTop: 6 }}>
-                    <Button size="mini" color="danger" fill="outline" onClick={(e) => { e.stopPropagation(); handleDelete(rule); }}>
-                      删除
-                    </Button>
+              style={{ padding: 16, cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: 16 }}>{rule.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{rule.device?.name}</span>
+                  </div>
+                  <div style={{ marginTop: 10, color: 'var(--color-text-secondary)', fontSize: 13 }}>
+                    <ConditionSummary
+                      telemetryKey={rule.telemetry_key}
+                      condition={rule.condition}
+                      thresholdValue={rule.threshold_value}
+                      duration={rule.trigger_duration_sec}
+                    />
                   </div>
                 </div>
-              }
-              extra={
                 <div onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={rule.is_enabled}
-                    onChange={(v) => { handleToggle(rule, v); }}
-                  />
+                  <Switch checked={rule.is_enabled} onChange={(v) => { handleToggle(rule, v); }} />
                 </div>
-              }
-              style={{ background: 'var(--color-bg-card)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{rule.name}</span>
-                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{rule.device?.name}</span>
               </div>
-            </List.Item>
+
+              <div className="soft-actions" style={{ marginTop: 14 }}>
+                <button
+                  className="soft-button soft-button--accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/mobile/alert-rules/${rule.id}/edit`);
+                  }}
+                >
+                  编辑
+                </button>
+                <button
+                  className="soft-button soft-button--danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(rule);
+                  }}
+                >
+                  删除
+                </button>
+              </div>
+            </div>
           ))}
-        </List>
+        </div>
       )}
 
       <div style={{ padding: '16px' }}>
-        <Button block color="primary" onClick={() => navigate('/mobile/alert-rules/create')} style={{ borderRadius: 8 }}>
+        <Button block color="primary" onClick={() => navigate('/mobile/alert-rules/create')} style={{ borderRadius: 18 }}>
           创建新规则
         </Button>
       </div>

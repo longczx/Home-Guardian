@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { List, Switch, Toast, Button, Tag, Dialog } from 'antd-mobile';
+import { Switch, Toast, Button, Dialog } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { AddOutline } from 'antd-mobile-icons';
 import { getAutomations, updateAutomation, deleteAutomation, type Automation } from '@/api/automation';
+import AppTag from '@/components/AppTag';
 import ActionSummary from '@/components/ActionSummary';
 import EmptyState from '@/components/EmptyState';
 import PageLoading from '@/components/PageLoading';
@@ -54,57 +55,81 @@ export default function AutomationListPage() {
   if (loading) return <PageLoading />;
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
-      <div style={{ padding: '12px 16px 0', background: 'var(--navbar-bg)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)' }}>自动化</span>
-          <AddOutline fontSize={22} onClick={() => navigate('/mobile/automations/create')} style={{ color: 'var(--color-primary)' }} />
+    <div className="mobile-page mobile-page--tight">
+      <div className="page-hero">
+        <div className="page-hero__eyebrow">automation</div>
+        <div className="page-hero__title">自动化编排</div>
+        <div className="page-hero__subtitle">保留创建、编辑、启停和删除能力，把规则展示改成更接近参考图的卡片布局。</div>
+        <div className="page-hero__meta">
+          <span className="soft-chip">规则 {automations.length}</span>
+          <span className="soft-chip">启用 {automations.filter((item) => item.is_enabled).length}</span>
         </div>
+      </div>
+
+      <div className="section-row">
+        <span className="section-title">自动化列表</span>
+        <span className="section-link" onClick={() => navigate('/mobile/automations/create')}>
+          <AddOutline fontSize={16} /> 新建
+        </span>
       </div>
 
       {automations.length === 0 ? (
         <EmptyState title="暂无自动化" description="创建自动化来自动控制设备" />
       ) : (
-        <List style={{ '--border-top': 'none' } as React.CSSProperties}>
+        <div className="list-stack">
           {automations.map((item) => (
-            <List.Item
+            <div
               key={item.id}
+              className="glass-card"
               onClick={() => navigate(`/mobile/automations/${item.id}/edit`)}
-              description={
-                <div>
-                  <ActionSummary actions={item.actions} />
-                  {item.last_triggered_at && (
-                    <div style={{ marginTop: 4 }}>
-                      <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>上次触发: </span>
-                      <RelativeTime date={item.last_triggered_at} />
-                    </div>
-                  )}
-                  <div style={{ marginTop: 6 }}>
-                    <Button size="mini" color="danger" fill="outline" onClick={(e) => { e.stopPropagation(); handleDelete(item); }}>
-                      删除
-                    </Button>
+              style={{ padding: 16, cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: 16 }}>{item.name}</span>
+                    <AppTag tone="primary">
+                      {triggerLabels[item.trigger_type] || item.trigger_type}
+                    </AppTag>
+                  </div>
+                  <div style={{ marginTop: 10, color: 'var(--color-text-secondary)', fontSize: 13 }}>
+                    <ActionSummary actions={item.actions} />
                   </div>
                 </div>
-              }
-              extra={
                 <div onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={item.is_enabled}
-                    onChange={(v) => handleToggle(item, v)}
-                  />
+                  <Switch checked={item.is_enabled} onChange={(v) => handleToggle(item, v)} />
                 </div>
-              }
-              style={{ background: 'var(--color-bg-card)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{item.name}</span>
-                <Tag color="primary" fill="outline" style={{ fontSize: 11 }}>
-                  {triggerLabels[item.trigger_type] || item.trigger_type}
-                </Tag>
               </div>
-            </List.Item>
+
+              {item.last_triggered_at && (
+                <div style={{ marginTop: 14, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                  上次触发: <RelativeTime date={item.last_triggered_at} />
+                </div>
+              )}
+
+              <div className="soft-actions" style={{ marginTop: 14 }}>
+                <button
+                  className="soft-button soft-button--accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/mobile/automations/${item.id}/edit`);
+                  }}
+                >
+                  编辑
+                </button>
+                <button
+                  className="soft-button soft-button--danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(item);
+                  }}
+                >
+                  删除
+                </button>
+              </div>
+            </div>
           ))}
-        </List>
+        </div>
       )}
 
       <div style={{ padding: 16 }}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { NavBar, PullToRefresh, Grid } from 'antd-mobile';
+import { NavBar, PullToRefresh } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import {
   AppstoreOutline,
@@ -19,6 +19,7 @@ import RoomCard from '@/components/RoomCard';
 import { getGroupedAlertLogs, type GroupedAlert } from '@/api/telemetry';
 import { useState, useCallback } from 'react';
 import RelativeTime from '@/components/RelativeTime';
+import { preloadTelemetryRoutes } from '@/router/routeLoaders';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -54,13 +55,13 @@ export default function HomePage() {
       const room = map.get(loc)!;
       room.devices.push(d);
       const dm = metricsMap[d.id];
-      if (dm) room.metrics = dm;
+      if (dm && room.metrics.length === 0) room.metrics = dm;
     });
     return map;
   }, [devices, metricsMap]);
 
   const shortcuts = [
-    { icon: <HistogramOutline />, label: '数据图表', path: '/mobile/telemetry' },
+    { icon: <HistogramOutline />, label: '数据图表', path: '/mobile/telemetry', prefetch: preloadTelemetryRoutes },
     { icon: <BellOutline />, label: '告警规则', path: '/mobile/alert-rules' },
     { icon: <SetOutline />, label: '自动化', path: '/mobile/automations' },
     { icon: <FileOutline />, label: '命令历史', path: '/mobile/commands' },
@@ -75,55 +76,61 @@ export default function HomePage() {
   };
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
-      <NavBar backIcon={false} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)' }}>
-        Home Guardian
-      </NavBar>
-
+    <div className="mobile-page">
       <PullToRefresh onRefresh={fetchAll}>
-        <div style={{ padding: '12px 16px' }}>
-          <div style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-            你好, {user?.username}
+        <div>
+          <NavBar backIcon={false} style={{ background: 'var(--navbar-bg)', color: 'var(--color-text)', padding: 0 }}>
+            Home Guardian
+          </NavBar>
+
+          <div className="page-hero" style={{ marginTop: 8 }}>
+            <div className="page-hero__eyebrow">smart living</div>
+            <div className="page-hero__title">你好，{user?.username || '访客'}</div>
+            <div className="page-hero__subtitle">把家庭环境、设备状态和自动化流程收拢到一个移动控制台里。</div>
+            <div className="page-hero__meta">
+              <span className="soft-chip">在线设备 {onlineCount}/{devices.length}</span>
+              <span className="soft-chip">待处理告警 {unreadCount}</span>
+              <span className="soft-chip">房间 {rooms.size}</span>
+            </div>
           </div>
 
-          {/* Stats */}
-          <Grid columns={3} gap={10} style={{ marginBottom: 16 }}>
-            <Grid.Item>
-              <StatCard icon={<AppstoreOutline />} label="设备总数" value={devices.length} />
-            </Grid.Item>
-            <Grid.Item>
-              <StatCard icon={<UnorderedListOutline />} label="在线" value={onlineCount} color="var(--color-success)" />
-            </Grid.Item>
-            <Grid.Item>
-              <StatCard
-                icon={<BellOutline />}
-                label="待处理告警"
-                value={unreadCount}
-                color="var(--color-danger)"
-                onClick={() => navigate('/mobile/alerts')}
-              />
-            </Grid.Item>
-          </Grid>
+          <div className="hero-stat-grid">
+            <StatCard icon={<AppstoreOutline />} label="设备总数" value={devices.length} />
+            <StatCard icon={<UnorderedListOutline />} label="在线" value={onlineCount} color="var(--color-success)" />
+            <StatCard
+              icon={<BellOutline />}
+              label="待处理告警"
+              value={unreadCount}
+              color="var(--color-danger)"
+              onClick={() => navigate('/mobile/alerts')}
+            />
+          </div>
 
-          {/* Shortcuts */}
-          <div style={{ background: 'var(--color-bg-card)', borderRadius: 'var(--card-radius)', padding: '12px 8px', marginBottom: 16, boxShadow: 'var(--card-shadow)' }}>
-            <Grid columns={3} gap={0}>
+          <div className="section-row">
+            <span className="section-title">快捷入口</span>
+          </div>
+          <div className="glass-card glass-card--soft" style={{ padding: '12px' }}>
+            <div className="shortcut-grid">
               {shortcuts.map((s) => (
-                <Grid.Item key={s.path} onClick={() => navigate(s.path)}>
-                  <div style={{ textAlign: 'center', padding: '10px 0', cursor: 'pointer' }}>
-                    <div style={{ fontSize: 22, color: 'var(--color-primary)' }}>{s.icon}</div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>{s.label}</div>
-                  </div>
-                </Grid.Item>
+                <div
+                  key={s.path}
+                  className="shortcut-tile"
+                  onClick={() => navigate(s.path)}
+                  onMouseEnter={() => s.prefetch?.()}
+                  onTouchStart={() => s.prefetch?.()}
+                >
+                  <div className="shortcut-tile__icon">{s.icon}</div>
+                  <div className="shortcut-tile__label">{s.label}</div>
+                </div>
               ))}
-            </Grid>
+            </div>
           </div>
 
-          {/* Rooms */}
           {rooms.size > 0 && (
             <>
-              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
-                房间概览
+              <div className="section-row">
+                <span className="section-title">房间概览</span>
+                <span className="section-link" onClick={() => navigate('/mobile/devices')}>查看设备</span>
               </div>
               {Array.from(rooms.entries()).map(([loc, data]) => (
                 <RoomCard
@@ -139,19 +146,13 @@ export default function HomePage() {
             </>
           )}
 
-          {/* Recent Alerts */}
           {recentAlerts.length > 0 && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>最近告警</span>
-                <span
-                  style={{ fontSize: 13, color: 'var(--color-primary)', cursor: 'pointer' }}
-                  onClick={() => navigate('/mobile/alerts')}
-                >
-                  查看全部
-                </span>
+              <div className="section-row">
+                <span className="section-title">最近告警</span>
+                <span className="section-link" onClick={() => navigate('/mobile/alerts')}>查看全部</span>
               </div>
-              <div style={{ background: 'var(--color-bg-card)', borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', overflow: 'hidden' }}>
+              <div className="glass-card glass-card--soft" style={{ overflow: 'hidden' }}>
                 {recentAlerts.map((a) => (
                   <div
                     key={`${a.rule_id}-${a.device_id}-${a.status}`}
@@ -168,7 +169,7 @@ export default function HomePage() {
                       background: statusColors[a.status] || 'var(--color-text-tertiary)',
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {a.rule_name}
                         {a.alert_count > 1 && (
                           <span style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 600 }}>×{a.alert_count}</span>

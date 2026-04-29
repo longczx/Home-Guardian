@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { NavBar, Card, Switch, Slider, Button, Toast, Grid, PullToRefresh, List } from 'antd-mobile';
+import { NavBar, Switch, Slider, Button, Toast, PullToRefresh } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getDevice, sendCommand, getDeviceAttributes, setDeviceAttributes, type Device, type DeviceAttribute } from '@/api/device';
 import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
@@ -10,6 +10,7 @@ import StatusTag from '@/components/StatusTag';
 import DeviceIcon from '@/components/DeviceIcon';
 import MetricCard from '@/components/MetricCard';
 import PageLoading from '@/components/PageLoading';
+import { preloadTelemetryRoutes } from '@/router/routeLoaders';
 
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -123,11 +124,16 @@ export default function DeviceDetailPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="mobile-page mobile-page--tight">
       <NavBar
         onBack={() => navigate(-1)}
         right={
-          <span onClick={() => navigate(`/mobile/device/${device.id}/telemetry`)} style={{ fontSize: 14, color: 'var(--color-primary)' }}>
+          <span
+            onClick={() => navigate(`/mobile/device/${device.id}/telemetry`)}
+            onMouseEnter={() => preloadTelemetryRoutes()}
+            onTouchStart={() => preloadTelemetryRoutes()}
+            style={{ fontSize: 14, color: 'var(--color-primary)' }}
+          >
             图表
           </span>
         }
@@ -137,9 +143,31 @@ export default function DeviceDetailPage() {
       </NavBar>
 
       <PullToRefresh onRefresh={fetchData}>
-        <div style={{ padding: '12px 16px' }}>
-          {/* Device Info */}
-          <Card style={{ borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', background: 'var(--color-bg-card)', marginBottom: 12 }} bodyStyle={{ padding: 16 }}>
+        <div>
+          <div className="page-hero" style={{ marginTop: 8 }}>
+            <div className="page-hero__eyebrow">device detail</div>
+            <div className="page-hero__title">{device.name}</div>
+            <div className="page-hero__subtitle">查看设备状态、实时指标、属性和控制能力。</div>
+            <div className="page-hero__meta">
+              <span className="soft-chip">{device.location || '未分配位置'}</span>
+              <span className="soft-chip">{device.type}</span>
+              <span className="soft-chip">{device.is_online ? '在线' : '离线'}</span>
+            </div>
+            <div className="sub-hero-grid sub-hero-grid--two">
+              <div className="sub-hero-tile">
+                <div className="sub-hero-tile__label">设备 UID</div>
+                <div className="sub-hero-tile__value" style={{ fontSize: 16 }}>{device.device_uid}</div>
+                <div className="sub-hero-tile__meta">唯一标识</div>
+              </div>
+              <div className="sub-hero-tile">
+                <div className="sub-hero-tile__label">最后状态</div>
+                <div className="sub-hero-tile__value">{device.is_online ? '正常连接' : '等待上报'}</div>
+                <div className="sub-hero-tile__meta">{device.last_seen || '暂无上报时间'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card" style={{ padding: 16, marginTop: 16, marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 12,
@@ -156,56 +184,69 @@ export default function DeviceDetailPage() {
               </div>
               <StatusTag online={device.is_online} />
             </div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 12, fontFamily: 'monospace' }}>
-              UID: {device.device_uid}
+            <div className="detail-grid" style={{ marginTop: 14 }}>
+              <div className="detail-row">
+                <span className="detail-row__label">类型</span>
+                <span className="detail-row__value">{device.type}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">位置</span>
+                <span className="detail-row__value">{device.location || '未分配位置'}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">固件版本</span>
+                <span className="detail-row__value">{device.firmware_version || '未知'}</span>
+              </div>
             </div>
-          </Card>
+          </div>
 
-          {/* Metrics Grid */}
           {metrics.length > 0 && (
             <>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10, marginTop: 4 }}>
-                实时数据
+              <div className="section-row">
+                <span className="section-title">实时数据</span>
+                <span
+                  className="section-link"
+                  onClick={() => navigate(`/mobile/device/${device.id}/telemetry`)}
+                  onMouseEnter={() => preloadTelemetryRoutes()}
+                  onTouchStart={() => preloadTelemetryRoutes()}
+                >
+                  查看图表
+                </span>
               </div>
-              <Grid columns={2} gap={10} style={{ marginBottom: 12 }}>
+              <div className="metric-grid" style={{ marginBottom: 12 }}>
                 {metrics.map((m) => {
                   const meta = metricLookup(m.metric_key);
                   return (
-                    <Grid.Item key={m.metric_key}>
-                      <MetricCard
-                        icon={<span>{meta.icon}</span>}
-                        label={meta.label}
-                        value={getMetricValue(m)}
-                        unit={meta.unit}
-                      />
-                    </Grid.Item>
+                    <MetricCard
+                      key={m.metric_key}
+                      icon={<span>{meta.icon}</span>}
+                      label={meta.label}
+                      value={getMetricValue(m)}
+                      unit={meta.unit}
+                    />
                   );
                 })}
-              </Grid>
+              </div>
             </>
           )}
 
-          {/* Device Attributes */}
-          <Card
-            style={{ borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', background: 'var(--color-bg-card)', marginBottom: 12 }}
-            bodyStyle={{ padding: 16 }}
-          >
+          <div className="glass-card" style={{ padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 12 }}>
               设备属性
             </div>
             {attributes.length > 0 ? (
-              <List style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
+              <div className="inline-list">
                 {attributes.map((attr) => (
-                  <List.Item
+                  <button
                     key={attr.key}
                     onClick={() => handleEditAttr(attr)}
-                    extra={<span style={{ color: 'var(--color-text)', fontSize: 14 }}>{String(attr.value ?? '--')}</span>}
-                    style={{ background: 'transparent' }}
+                    className="inline-list__item"
                   >
                     <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>{attr.key}</span>
-                  </List.Item>
+                    <span style={{ color: 'var(--color-text)', fontSize: 14 }}>{String(attr.value ?? '--')}</span>
+                  </button>
                 ))}
-              </List>
+              </div>
             ) : (
               <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13, textAlign: 'center', padding: '8px 0' }}>
                 暂无属性
@@ -217,18 +258,14 @@ export default function DeviceDetailPage() {
               fill="outline"
               color="primary"
               onClick={handleAddAttr}
-              style={{ borderRadius: 6, marginTop: 8 }}
+              style={{ borderRadius: 14, marginTop: 10 }}
             >
               新增属性
             </Button>
-          </Card>
+          </div>
 
-          {/* Control Panel */}
           {device.type === 'actuator' && (
-            <Card
-              style={{ borderRadius: 'var(--card-radius)', boxShadow: 'var(--card-shadow)', background: 'var(--color-bg-card)' }}
-              bodyStyle={{ padding: 16 }}
-            >
+            <div className="glass-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
                 设备控制
               </div>
@@ -261,7 +298,7 @@ export default function DeviceDetailPage() {
               >
                 刷新状态
               </Button>
-            </Card>
+            </div>
           )}
         </div>
       </PullToRefresh>

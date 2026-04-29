@@ -25,32 +25,24 @@ export default function MainLayout() {
   const activeKey = tabs.find((t) => location.pathname === t.key)?.key ?? '/mobile';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+    <div className="app-shell">
+      <div className="app-shell__content">
         <Outlet />
       </div>
-      <div style={{
-        borderTop: '1px solid var(--color-border)',
-        background: 'var(--tabbar-bg)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}>
-        <TabBar
-          activeKey={activeKey}
-          onChange={(key) => navigate(key)}
-          style={{ '--adm-color-primary': 'var(--color-primary)' } as React.CSSProperties}
-        >
-          {tabs.map((tab) => (
-            <TabBar.Item
-              key={tab.key}
-              icon={tab.key === '/mobile/alerts' ? (
-                <Badge content={unreadCount > 0 ? Badge.dot : null}>
-                  {tab.icon}
-                </Badge>
-              ) : tab.icon}
-              title={tab.title}
-            />
-          ))}
-        </TabBar>
+      <div className="floating-tabbar">
+        <div className="floating-tabbar__inner">
+          <TabBar activeKey={activeKey} onChange={(key) => navigate(key)}>
+            {tabs.map((tab) => (
+              <TabBar.Item
+                key={tab.key}
+                icon={tab.key === '/mobile/alerts' ? (
+                  <Badge content={unreadCount > 0 ? Badge.dot : null}>{tab.icon}</Badge>
+                ) : tab.icon}
+                title={tab.title}
+              />
+            ))}
+          </TabBar>
+        </div>
       </div>
     </div>
   );
