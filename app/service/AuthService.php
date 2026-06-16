@@ -176,13 +176,16 @@ class AuthService
     /**
      * 全设备注销（退出所有登录会话）
      *
-     * 删除该用户的所有 refresh_token 记录。
-     * 已签发的 access_token 仍会在有效期内可用（最多 2 小时）。
+     * 删除该用户的所有 refresh_token 记录，并递增 token 版本号，
+     * 使该用户已签发的所有 access_token 立即失效（不再需要等待过期）。
      *
      * @param int $userId 用户 ID
      */
     public static function logoutAll(int $userId): void
     {
         RefreshToken::where('user_id', $userId)->delete();
+
+        // 递增 token 版本号，使该用户已签发的所有 access_token 立即失效
+        JwtService::bumpTokenVersion($userId);
     }
 }

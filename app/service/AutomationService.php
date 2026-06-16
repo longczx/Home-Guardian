@@ -15,10 +15,19 @@ namespace app\service;
 use app\model\Automation;
 use app\model\Device;
 use app\exception\BusinessException;
+use support\Redis;
 use support\Log;
 
 class AutomationService
 {
+    /**
+     * Redis 键：遥测型自动化规则变更标记
+     *
+     * 与告警规则同理，AlertEngineProcess 轮询此键，发现变更后重新加载内存中的
+     * 自动化规则。用 default 连接（DB0，带 hg: 前缀），实际键名 'hg:automation:rules:changed'。
+     */
+    private const RULES_CHANGED_KEY = 'automation:rules:changed';
+
     /**
      * 创建自动化规则
      *
@@ -27,7 +36,9 @@ class AutomationService
      */
     public static function create(array $data): Automation
     {
-        return Automation::create($data);
+        $automation = Automation::create($data);
+        self::notifyRulesChanged();
+        return $automation;
     }
 
     /**
@@ -47,6 +58,7 @@ class AutomationService
         }
 
         $automation->update($data);
+        self::notifyRulesChanged();
         return $automation->fresh();
     }
 
@@ -64,6 +76,7 @@ class AutomationService
         }
 
         $automation->delete();
+        self::notifyRulesChanged();
     }
 
     /**
@@ -132,64 +145,103 @@ class AutomationService
             return;
         }
 
-        NotificationService::send(
-            $channelIds,
-            "自动化触发: {$automation->name}",
-            $automation->description ?: "自动化规则 [{$automation->name}] 已触发执行",
-            ['automation_id' => $automation->id]
-        );
+        // 推入通知队列由 NotificationProcess 异步发送，避免在告警引擎事件循环里同步阻塞
+        $task = json_encode([
+            'channel_ids' => $channelIds,
+            'title'       => "自动化触发: {$automation->name}",
+            'content'     => $automation->description ?: "自动化规则 [{$automation->name}] 已触发执行",
+            'extra'       => ['automation_id' => $automation->id],
+        ], JSON_UNESCAPED_UNICODE);
+
+        Redis::connection('queue')->lPush('notify:queue', $task);
     }
 
     /**
-     * 检查遥测条件是否满足自动化触发
+     * 获取所有启用的遥测型自动化规则（供 AlertEngine 加载到内存缓存）
      *
-     * 由告警引擎进程复用，在消费遥测数据时同时匹配自动化规则。
-     *
-     * @param int    $deviceId  设备 ID
-     * @param string $metricKey 遥测指标名
-     * @param mixed  $value     遥测值
+     * @return \Illuminate\Database\Eloquent\Collection
      */
-    public static function checkTelemetryTrigger(int $deviceId, string $metricKey, mixed $value): void
+    public static function getEnabledTelemetryAutomations()
     {
-        $automations = Automation::enabled()
+        return Automation::enabled()
             ->ofTriggerType(Automation::TRIGGER_TELEMETRY)
             ->get();
+    }
 
+    /**
+     * 基于内存中已缓存的自动化规则匹配遥测数据（不查库）
+     *
+     * 由 AlertEngineProcess 在消费遥测数据时调用，避免每条数据都全表查询自动化规则。
+     *
+     * @param iterable $automations 已缓存的遥测型自动化规则
+     * @param int      $deviceId    设备 ID
+     * @param string   $metricKey   遥测指标名
+     * @param mixed    $value       遥测值
+     */
+    public static function evaluateTelemetry(iterable $automations, int $deviceId, string $metricKey, mixed $value): void
+    {
         foreach ($automations as $automation) {
-            $config = $automation->trigger_config;
+            self::matchAndExecute($automation, $deviceId, $metricKey, $value);
+        }
+    }
 
-            // 检查是否匹配目标设备和指标
-            if (($config['device_id'] ?? null) != $deviceId) {
-                continue;
-            }
-            if (($config['metric_key'] ?? '') !== $metricKey) {
-                continue;
-            }
+    /**
+     * 单条自动化规则的匹配与执行
+     *
+     * @param Automation $automation 规则
+     * @param int        $deviceId   设备 ID
+     * @param string     $metricKey  指标名
+     * @param mixed      $value      遥测值
+     */
+    private static function matchAndExecute(Automation $automation, int $deviceId, string $metricKey, mixed $value): void
+    {
+        $config = $automation->trigger_config;
 
-            // 检查条件是否满足
-            $condition = $config['condition'] ?? '';
-            $threshold = $config['value'] ?? null;
+        // 检查是否匹配目标设备和指标
+        if (($config['device_id'] ?? null) != $deviceId) {
+            return;
+        }
+        if (($config['metric_key'] ?? '') !== $metricKey) {
+            return;
+        }
 
-            if (!is_numeric($value) || !is_numeric($threshold)) {
-                continue;
-            }
+        $condition = $config['condition'] ?? '';
+        $threshold = $config['value'] ?? null;
 
-            $met = match ($condition) {
-                'GREATER_THAN' => (float)$value > (float)$threshold,
-                'LESS_THAN'    => (float)$value < (float)$threshold,
-                'EQUALS'       => abs((float)$value - (float)$threshold) < 0.0001,
-                'NOT_EQUALS'   => abs((float)$value - (float)$threshold) >= 0.0001,
-                default        => false,
-            };
+        if (!is_numeric($value) || !is_numeric($threshold)) {
+            return;
+        }
 
-            if ($met) {
-                // 防抖：检查 duration_sec 是否满足（使用 Redis 计时）
-                // 简化实现：无 duration 配置时立即触发
-                $durationSec = $config['duration_sec'] ?? 0;
-                if ($durationSec <= 0 || self::checkDuration($automation->id, $durationSec)) {
-                    self::executeActions($automation);
-                }
-            }
+        $met = match ($condition) {
+            'GREATER_THAN' => (float)$value > (float)$threshold,
+            'LESS_THAN'    => (float)$value < (float)$threshold,
+            'EQUALS'       => abs((float)$value - (float)$threshold) < 0.0001,
+            'NOT_EQUALS'   => abs((float)$value - (float)$threshold) >= 0.0001,
+            default        => false,
+        };
+
+        if (!$met) {
+            // 条件不满足，清除防抖计时，避免"持续满足"被旧记录污染
+            self::clearDuration($automation->id);
+            return;
+        }
+
+        // 防抖：无 duration 配置时立即触发
+        $durationSec = $config['duration_sec'] ?? 0;
+        if ($durationSec <= 0 || self::checkDuration($automation->id, $durationSec)) {
+            self::executeActions($automation);
+        }
+    }
+
+    /**
+     * 通知告警引擎重新加载遥测型自动化规则
+     */
+    private static function notifyRulesChanged(): void
+    {
+        try {
+            Redis::connection('default')->setex(self::RULES_CHANGED_KEY, 600, (string)time());
+        } catch (\Throwable $e) {
+            Log::error("通知引擎刷新自动化规则失败: {$e->getMessage()}");
         }
     }
 
@@ -222,5 +274,19 @@ class AutomationService
         }
 
         return false;
+    }
+
+    /**
+     * 清除指定自动化规则的防抖计时
+     *
+     * @param int $automationId 自动化规则 ID
+     */
+    private static function clearDuration(int $automationId): void
+    {
+        try {
+            Redis::connection('default')->del("automation:duration:{$automationId}");
+        } catch (\Throwable $e) {
+            // 忽略，下次条件满足时会重新计时
+        }
     }
 }

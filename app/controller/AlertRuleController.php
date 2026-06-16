@@ -123,6 +123,10 @@ class AlertRuleController
         if (empty($data['condition'])) $errors[] = 'condition 不能为空';
         if (!isset($data['threshold_value'])) $errors[] = 'threshold_value 不能为空';
 
+        if (!empty($data['condition']) && !in_array($data['condition'], AlertRule::VALID_CONDITIONS, true)) {
+            $errors[] = 'condition 非法，必须是 ' . implode(' / ', AlertRule::VALID_CONDITIONS) . ' 之一';
+        }
+
         if (!empty($errors)) {
             return api_error('参数验证失败', 422, 1000, $errors);
         }
@@ -130,6 +134,11 @@ class AlertRuleController
         // 确保 threshold_value 以数组格式存储
         if (!is_array($data['threshold_value'])) {
             $data['threshold_value'] = [$data['threshold_value']];
+        }
+
+        // 区间条件需要 [min, max] 两个数值阈值
+        if ($err = self::validateThreshold($data['condition'], $data['threshold_value'])) {
+            return api_error('参数验证失败', 422, 1000, [$err]);
         }
 
         $data['created_by'] = $request->userId();
@@ -178,8 +187,19 @@ class AlertRuleController
         $data = $request->post();
         $original = $rule->toArray();
 
+        if (!empty($data['condition']) && !in_array($data['condition'], AlertRule::VALID_CONDITIONS, true)) {
+            return api_error('参数验证失败', 422, 1000, ['condition 非法']);
+        }
+
         if (isset($data['threshold_value']) && !is_array($data['threshold_value'])) {
             $data['threshold_value'] = [$data['threshold_value']];
+        }
+
+        // 校验区间阈值（condition 未传时沿用原值）
+        $effectiveCondition = $data['condition'] ?? $rule->condition;
+        $effectiveThreshold = $data['threshold_value'] ?? $rule->threshold_value;
+        if ($err = self::validateThreshold($effectiveCondition, $effectiveThreshold)) {
+            return api_error('参数验证失败', 422, 1000, [$err]);
         }
 
         $rule = AlertService::updateRule($id, $data);
@@ -214,5 +234,28 @@ class AlertRuleController
         ]);
 
         return api_success(null, '告警规则已删除');
+    }
+
+    /**
+     * 校验区间条件的阈值格式
+     *
+     * BETWEEN / NOT_BETWEEN 需要 threshold_value 为 [最小值, 最大值] 两个数值。
+     *
+     * @param  string|null $condition 条件类型
+     * @param  mixed        $threshold 阈值（已归一化为数组）
+     * @return string|null  错误信息，校验通过返回 null
+     */
+    private static function validateThreshold(?string $condition, mixed $threshold): ?string
+    {
+        if ($condition !== AlertRule::CONDITION_BETWEEN && $condition !== AlertRule::CONDITION_NOT_BETWEEN) {
+            return null;
+        }
+
+        if (!is_array($threshold) || count($threshold) < 2
+            || !is_numeric($threshold[0]) || !is_numeric($threshold[1])) {
+            return 'BETWEEN / NOT_BETWEEN 需要 threshold_value 为 [最小值, 最大值] 两个数值';
+        }
+
+        return null;
     }
 }

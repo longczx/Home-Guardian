@@ -27,6 +27,8 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\SignatureInvalidException;
+use support\Redis;
+use support\Log;
 
 class JwtService
 {
@@ -34,6 +36,16 @@ class JwtService
      * JWT 签名算法
      */
     private const ALGORITHM = 'HS256';
+
+    /**
+     * Redis 键前缀：用户的 token 版本号
+     *
+     * access_token 签发时把当前版本号写入 payload 的 tv 字段；验证时若 token 的
+     * 版本号小于用户当前版本号，则视为已撤销。注销所有设备 / 修改密码时递增版本号，
+     * 即可让该用户已签发的所有 access_token 立即失效（无需等待过期）。
+     * 用 default 连接（DB0，带 hg: 前缀），实际键名为 'hg:user:tokenver:{id}'。
+     */
+    private const TOKEN_VERSION_KEY = 'user:tokenver:';
 
     /**
      * 签发 access_token
@@ -65,6 +77,7 @@ class JwtService
             'roles'       => $roles,
             'permissions' => $permissions,
             'locations'   => $locations,
+            'tv'          => self::getTokenVersion($userId), // token 版本号（用于主动撤销）
             'iat'         => $now,                 // 签发时间
             'exp'         => $now + $ttl,          // 过期时间
         ];
@@ -84,7 +97,7 @@ class JwtService
     public static function verifyAccessToken(string $token): ?object
     {
         try {
-            return JWT::decode($token, new Key(self::getSecret(), self::ALGORITHM));
+            $payload = JWT::decode($token, new Key(self::getSecret(), self::ALGORITHM));
         } catch (ExpiredException) {
             // Token 已过期 — 前端应使用 refresh_token 刷新
             return null;
@@ -94,6 +107,49 @@ class JwtService
         } catch (\Throwable) {
             // 其他解码错误（格式错误、算法不匹配等）
             return null;
+        }
+
+        // 撤销校验：token 版本号低于用户当前版本号则视为已失效（注销所有设备/改密后）
+        $tokenVersion = (int)($payload->tv ?? 0);
+        if ($tokenVersion < self::getTokenVersion((int)$payload->sub)) {
+            return null;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * 读取用户当前的 token 版本号
+     *
+     * Redis 不可用时返回 0（fail-open）：宁可放过校验也不因缓存故障锁死全部登录，
+     * 兼顾家庭场景的可用性。撤销失效窗口仅限 Redis 故障期间。
+     *
+     * @param  int $userId 用户 ID
+     * @return int 当前版本号，未设置或异常时为 0
+     */
+    public static function getTokenVersion(int $userId): int
+    {
+        try {
+            return (int)(Redis::connection('default')->get(self::TOKEN_VERSION_KEY . $userId) ?? 0);
+        } catch (\Throwable $e) {
+            Log::error("读取 token 版本号失败: {$e->getMessage()}");
+            return 0;
+        }
+    }
+
+    /**
+     * 递增用户的 token 版本号，使其已签发的所有 access_token 立即失效
+     *
+     * 用于"注销所有设备"和"修改密码"等需要全局踢下线的场景。
+     *
+     * @param int $userId 用户 ID
+     */
+    public static function bumpTokenVersion(int $userId): void
+    {
+        try {
+            Redis::connection('default')->incr(self::TOKEN_VERSION_KEY . $userId);
+        } catch (\Throwable $e) {
+            Log::error("递增 token 版本号失败: {$e->getMessage()}");
         }
     }
 

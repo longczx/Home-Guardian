@@ -22,6 +22,70 @@ use OpenApi\Attributes as OA;
 #[OA\Tag(name: '通知渠道', description: '通知渠道的 CRUD 和测试')]
 class NotificationChannelController
 {
+    /**
+     * config 中的敏感字段：返回给前端时脱敏，更新时留空/掩码则保留旧值
+     */
+    private const SENSITIVE_KEYS = [
+        'password', 'smtp_pass', 'smtp_pass_encrypted', 'bot_token',
+        'secret', 'token', 'access_token', 'api_key', 'app_key', 'app_secret',
+        'key', 'webhook_url', 'url',
+    ];
+
+    /**
+     * 脱敏占位符（前端回传此值表示"不修改"）
+     */
+    private const MASK = '********';
+
+    /**
+     * 对 config 中的敏感字段脱敏（用于返回给前端）
+     *
+     * @param  array $config 原始配置
+     * @return array 脱敏后的配置
+     */
+    private static function maskConfig(array $config): array
+    {
+        foreach ($config as $key => $value) {
+            if (in_array(strtolower((string)$key), self::SENSITIVE_KEYS, true)
+                && is_string($value) && $value !== '') {
+                $config[$key] = self::MASK;
+            }
+        }
+        return $config;
+    }
+
+    /**
+     * 把模型转为数组并对 config 脱敏
+     */
+    private static function toMaskedArray(NotificationChannel $channel): array
+    {
+        $arr = $channel->toArray();
+        $arr['config'] = self::maskConfig($arr['config'] ?? []);
+        return $arr;
+    }
+
+    /**
+     * 合并更新的 config：敏感字段若为空或仍是掩码，则保留旧值，避免被覆盖丢失
+     *
+     * @param  array $old 旧配置
+     * @param  array $new 客户端提交的新配置
+     * @return array 合并后的配置
+     */
+    private static function mergeConfig(array $old, array $new): array
+    {
+        foreach ($new as $key => $value) {
+            if (in_array(strtolower((string)$key), self::SENSITIVE_KEYS, true)
+                && ($value === '' || $value === null || $value === self::MASK)) {
+                // 敏感字段未提供有效新值 → 保留旧值（旧值不存在则丢弃该键）
+                if (array_key_exists($key, $old)) {
+                    $new[$key] = $old[$key];
+                } else {
+                    unset($new[$key]);
+                }
+            }
+        }
+        return $new;
+    }
+
     #[OA\Get(
         path: '/notification-channels',
         summary: '通知渠道列表',
@@ -44,7 +108,8 @@ class NotificationChannelController
             $query->ofType($type);
         }
 
-        $channels = $query->orderBy('id', 'asc')->get();
+        $channels = $query->orderBy('id', 'asc')->get()
+            ->map(fn($ch) => self::toMaskedArray($ch));
 
         return api_success($channels);
     }
@@ -71,7 +136,7 @@ class NotificationChannelController
             return api_error('通知渠道不存在', 404, 8001);
         }
 
-        return api_success($channel);
+        return api_success(self::toMaskedArray($channel));
     }
 
     #[OA\Post(
@@ -130,7 +195,7 @@ class NotificationChannelController
             'type' => $channel->type,
         ]);
 
-        return api_success($channel, '通知渠道创建成功', 201);
+        return api_success(self::toMaskedArray($channel), '通知渠道创建成功', 201);
     }
 
     #[OA\Put(
@@ -164,9 +229,15 @@ class NotificationChannelController
         $data = $request->post();
         $original = $channel->toArray();
 
+        // 敏感字段留空/掩码时保留旧值，避免脱敏后回传把密钥覆盖成掩码
+        $newConfig = null;
+        if (isset($data['config']) && is_array($data['config'])) {
+            $newConfig = self::mergeConfig($channel->config ?? [], $data['config']);
+        }
+
         $channel->update(array_filter([
             'name'       => $data['name'] ?? null,
-            'config'     => $data['config'] ?? null,
+            'config'     => $newConfig,
             'is_enabled' => isset($data['is_enabled']) ? (bool)$data['is_enabled'] : null,
         ], fn($v) => $v !== null));
 
@@ -174,7 +245,7 @@ class NotificationChannelController
             AuditService::diffChanges($original, $channel->fresh()->toArray())
         );
 
-        return api_success($channel->fresh(), '通知渠道更新成功');
+        return api_success(self::toMaskedArray($channel->fresh()), '通知渠道更新成功');
     }
 
     #[OA\Delete(

@@ -296,8 +296,12 @@ class AuthController
         $user->setPassword($newPassword);
         $user->save();
 
+        // 改密后吊销该用户所有会话（删除 refresh_token + 递增 token 版本号），
+        // 使包括当前设备在内的所有已签发 access_token 立即失效，需重新登录。
+        AuthService::logoutAll($user->id);
+
         AuditService::log($request, 'change_password', 'user', $user->id);
 
-        return api_success(null, '密码修改成功');
+        return api_success(null, '密码修改成功，请重新登录');
     }
 }

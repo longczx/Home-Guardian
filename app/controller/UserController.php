@@ -19,6 +19,7 @@ use app\model\UserAllowedLocation;
 use app\service\AuditService;
 use app\exception\BusinessException;
 use support\Request;
+use support\Db;
 use OpenApi\Attributes as OA;
 
 #[OA\Tag(name: '用户管理', description: '用户的 CRUD、角色分配、位置作用域')]
@@ -137,22 +138,27 @@ class UserController
             throw new BusinessException('邮箱已被使用', 409, 5003);
         }
 
-        $user = new User();
-        $user->username = $data['username'];
-        $user->setPassword($data['password']);
-        $user->email = $data['email'] ?? null;
-        $user->full_name = $data['full_name'] ?? null;
-        $user->is_active = $data['is_active'] ?? true;
-        $user->save();
+        // 用户 + 角色 + 位置作用域的多表写入用事务包裹，避免部分失败留下脏数据
+        $user = Db::transaction(function () use ($data) {
+            $user = new User();
+            $user->username = $data['username'];
+            $user->setPassword($data['password']);
+            $user->email = $data['email'] ?? null;
+            $user->full_name = $data['full_name'] ?? null;
+            $user->is_active = $data['is_active'] ?? true;
+            $user->save();
 
-        if (!empty($data['role_ids'])) {
-            $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
-            $user->roles()->sync($validRoleIds);
-        }
+            if (!empty($data['role_ids'])) {
+                $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
+                $user->roles()->sync($validRoleIds);
+            }
 
-        if (isset($data['allowed_locations'])) {
-            self::syncLocations($user->id, $data['allowed_locations']);
-        }
+            if (isset($data['allowed_locations'])) {
+                self::syncLocations($user->id, $data['allowed_locations']);
+            }
+
+            return $user;
+        });
 
         AuditService::log($request, 'create', 'user', $user->id, [
             'username' => $user->username,
@@ -219,16 +225,19 @@ class UserController
             $user->setPassword($data['password']);
         }
 
-        $user->save();
+        // 用户 + 角色 + 位置作用域的多表写入用事务包裹
+        Db::transaction(function () use ($user, $data) {
+            $user->save();
 
-        if (isset($data['role_ids'])) {
-            $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
-            $user->roles()->sync($validRoleIds);
-        }
+            if (isset($data['role_ids'])) {
+                $validRoleIds = Role::whereIn('id', $data['role_ids'])->pluck('id')->toArray();
+                $user->roles()->sync($validRoleIds);
+            }
 
-        if (isset($data['allowed_locations'])) {
-            self::syncLocations($user->id, $data['allowed_locations']);
-        }
+            if (isset($data['allowed_locations'])) {
+                self::syncLocations($user->id, $data['allowed_locations']);
+            }
+        });
 
         AuditService::log($request, 'update', 'user', $id,
             AuditService::diffChanges($original, $user->fresh()->toArray())

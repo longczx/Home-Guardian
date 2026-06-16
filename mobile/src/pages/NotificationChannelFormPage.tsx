@@ -60,7 +60,13 @@ export default function NotificationChannelFormPage() {
         setName(ch.name);
         setType(ch.type);
         setEnabled(ch.is_enabled);
-        setConfig(ch.config as ConfigFields);
+        // 后端会把密钥类字段脱敏为 '********'。清空这些占位值，让输入框留空：
+        // 提交时留空 = 保持原值不变（后端 mergeConfig 处理）。
+        const cfg: ConfigFields = { ...(ch.config as ConfigFields) };
+        Object.keys(cfg).forEach((k) => {
+          if (cfg[k] === '********') cfg[k] = '';
+        });
+        setConfig(cfg);
       }
     });
   }, [id]);
@@ -209,7 +215,9 @@ export default function NotificationChannelFormPage() {
 
         <div className="surface-card form-card form-card--layered">
           <div className="form-card__title">渠道配置</div>
-          <div className="form-card__subtitle">根据当前类型展示对应参数。</div>
+          <div className="form-card__subtitle">
+            根据当前类型展示对应参数。{isEdit ? '密钥类字段留空表示保持原值不变。' : ''}
+          </div>
           <Form layout="vertical" style={{ '--border-top': 'none', '--border-bottom': 'none' } as React.CSSProperties}>
             {renderConfigFields()}
           </Form>
