@@ -35,6 +35,14 @@ use support\Log;
 class MqttSubscriber
 {
     /**
+     * 设备信息内存缓存的有效期（秒）
+     *
+     * 缓存避免每条遥测都查库，但必须有 TTL：否则设备改了 location / 被删除后，
+     * 常驻进程会一直用旧值（影响 WS 按位置过滤、对已删除设备继续入库）。
+     */
+    private const DEVICE_CACHE_TTL = 300;
+
+    /**
      * MQTT 客户端实例
      */
     private ?MqttClient $mqttClient = null;
@@ -203,21 +211,26 @@ class MqttSubscriber
      */
     private function handleTelemetry(string $deviceUid, array $data): void
     {
-        // 查找设备 ID（使用内存缓存避免频繁查库）
+        // 查找设备 ID（使用带 TTL 的内存缓存避免频繁查库）
         static $deviceCache = [];
-        if (!isset($deviceCache[$deviceUid])) {
+        $nowTs = time();
+        $cached = $deviceCache[$deviceUid] ?? null;
+        if ($cached === null || $cached['expire'] <= $nowTs) {
             $device = Device::where('device_uid', $deviceUid)->first();
             if (!$device) {
                 Log::warning("收到未注册设备的遥测数据: {$deviceUid}");
+                unset($deviceCache[$deviceUid]);
                 return;
             }
-            $deviceCache[$deviceUid] = [
+            $cached = [
                 'id'       => $device->id,
                 'location' => $device->location,
+                'expire'   => $nowTs + self::DEVICE_CACHE_TTL,
             ];
+            $deviceCache[$deviceUid] = $cached;
         }
 
-        $deviceInfo = $deviceCache[$deviceUid];
+        $deviceInfo = $cached;
         $deviceId = $deviceInfo['id'];
         $now = date('Y-m-d H:i:s.u');
 
@@ -233,7 +246,7 @@ class MqttSubscriber
                 'ts'         => $now,
                 'device_id'  => $deviceId,
                 'metric_key' => $metricKey,
-                'value'      => is_array($value) ? json_encode($value) : json_encode($value),
+                'value'      => json_encode($value),  // 标量/数组统一编码为 JSON，入库为 jsonb
             ]);
             $this->redis->lPush('hg:q:data_ingest_queue', $ingestItem);
 

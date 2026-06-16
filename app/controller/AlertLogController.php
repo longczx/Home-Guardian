@@ -11,6 +11,7 @@
 namespace app\controller;
 
 use app\model\AlertLog;
+use app\model\Device;
 use app\service\AlertService;
 use app\service\AuditService;
 use support\Request;
@@ -90,6 +91,11 @@ class AlertLogController
             return api_error('告警记录不存在', 404, 3002);
         }
 
+        // 位置作用域校验：受限用户不能查看不在其位置范围内的告警
+        if (!$request->canAccessLocation($alertLog->device->location ?? null)) {
+            return api_error('无权访问该告警', 403, 1004);
+        }
+
         $data = $alertLog->toArray();
         // 手动加载确认人（避免 acknowledged_by=NULL 时 BelongsTo eager load 触发 null offset 错误）
         if ($alertLog->acknowledged_by) {
@@ -119,6 +125,10 @@ class AlertLogController
     ))]
     public function acknowledge(Request $request, int $id)
     {
+        if ($resp = $this->assertCanAccess($request, $id)) {
+            return $resp;
+        }
+
         $alertLog = AlertService::acknowledgeAlert($id, $request->userId());
 
         AuditService::log($request, 'update', 'alert_log', $id, [
@@ -145,6 +155,10 @@ class AlertLogController
     ))]
     public function resolve(Request $request, int $id)
     {
+        if ($resp = $this->assertCanAccess($request, $id)) {
+            return $resp;
+        }
+
         $alertLog = AlertService::resolveAlert($id);
 
         AuditService::log($request, 'update', 'alert_log', $id, [
@@ -210,6 +224,10 @@ class AlertLogController
             return api_error('rule_id 和 device_id 必填', 422, 1000);
         }
 
+        if ($resp = $this->assertCanAccessDevice($request, $deviceId)) {
+            return $resp;
+        }
+
         $count = AlertLog::where('rule_id', $ruleId)
             ->where('device_id', $deviceId)
             ->where('status', AlertLog::STATUS_TRIGGERED)
@@ -237,6 +255,10 @@ class AlertLogController
             return api_error('rule_id 和 device_id 必填', 422, 1000);
         }
 
+        if ($resp = $this->assertCanAccessDevice($request, $deviceId)) {
+            return $resp;
+        }
+
         $count = AlertLog::where('rule_id', $ruleId)
             ->where('device_id', $deviceId)
             ->whereIn('status', [AlertLog::STATUS_TRIGGERED, AlertLog::STATUS_ACKNOWLEDGED])
@@ -245,5 +267,36 @@ class AlertLogController
             ]);
 
         return api_success(['updated' => $count], "已批量解决 {$count} 条告警");
+    }
+
+    /**
+     * 校验当前用户是否有权操作指定告警（按设备位置作用域）
+     *
+     * @return \support\Response|null 无权时返回错误响应，有权返回 null
+     */
+    private function assertCanAccess(Request $request, int $alertLogId)
+    {
+        $alertLog = AlertLog::with('device:id,location')->find($alertLogId);
+        if (!$alertLog) {
+            return api_error('告警记录不存在', 404, 3002);
+        }
+        if (!$request->canAccessLocation($alertLog->device->location ?? null)) {
+            return api_error('无权操作该告警', 403, 1004);
+        }
+        return null;
+    }
+
+    /**
+     * 校验当前用户是否有权操作指定设备的告警（批量操作用）
+     *
+     * @return \support\Response|null 无权时返回错误响应，有权返回 null
+     */
+    private function assertCanAccessDevice(Request $request, int $deviceId)
+    {
+        $device = Device::find($deviceId, ['id', 'location']);
+        if ($device && !$request->canAccessLocation($device->location)) {
+            return api_error('无权操作该设备的告警', 403, 1004);
+        }
+        return null;
     }
 }

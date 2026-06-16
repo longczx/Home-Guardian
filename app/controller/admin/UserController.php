@@ -28,7 +28,6 @@ class UserController
         $users = $query->orderBy('id', 'asc')->paginate($perPage);
 
         $userList = array_map(fn($u) => $u->toArray(), $users->items());
-var_dump($userList);
         return view('admin/user/list', [
             'userList'  => $userList,
             'users'     => $users,

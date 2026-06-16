@@ -315,9 +315,24 @@ class DeviceController
             return api_error('无权控制该设备', 403, 1004);
         }
 
-        $payload = $request->post();
-        if (empty($payload)) {
+        $input = $request->post();
+        if (empty($input)) {
             return api_error('指令内容不能为空', 422, 1000);
+        }
+
+        // 校验指令结构：action 必填且为字符串，params 若存在必须是对象/数组
+        $action = $input['action'] ?? null;
+        if (!is_string($action) || $action === '') {
+            return api_error('指令 action 不能为空且必须为字符串', 422, 1000);
+        }
+        if (isset($input['params']) && !is_array($input['params'])) {
+            return api_error('指令 params 必须是对象', 422, 1000);
+        }
+
+        // 仅透传 action 与 params，剥离其它无关字段，避免下发任意结构
+        $payload = ['action' => $action];
+        if (isset($input['params'])) {
+            $payload['params'] = $input['params'];
         }
 
         $commandLog = MqttCommandService::sendCommand($id, $payload);

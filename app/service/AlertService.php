@@ -18,15 +18,13 @@ use support\Log;
 class AlertService
 {
     /**
-     * Redis 键：告警规则缓存（AlertEngine 从此键加载规则）
+     * Redis 键：规则变更标记
+     *
+     * AlertEngineProcess 每隔几秒轮询此键，发现存在即重新加载规则后删除。
+     * 用 default 连接（DB0，带 hg: 前缀）写入，实际键名为 'hg:alert:rules:changed'，
+     * 与告警引擎裸 \Redis 在 DB0 读取的键名保持一致。
      */
-    private const RULES_CACHE_KEY = 'alert:rules:all';
-
-    /**
-     * Redis 频道：规则变更通知
-     * AlertEngine 订阅此频道，收到通知后重新加载规则
-     */
-    private const RULES_CHANGED_CHANNEL = 'alert:rules:changed';
+    private const RULES_CHANGED_KEY = 'alert:rules:changed';
 
     /**
      * 创建告警规则
@@ -200,12 +198,13 @@ class AlertService
     /**
      * 通知告警引擎重新加载规则
      *
-     * 通过 Redis Pub/Sub 发送变更信号。
+     * 写入一个带过期时间的变更标记键，告警引擎轮询到后重新加载并删除。
+     * 之所以不用 Pub/Sub：引擎用的是定时轮询消费，Pub/Sub 的瞬时消息引擎收不到。
      */
     private static function notifyRulesChanged(): void
     {
         try {
-            Redis::connection('pubsub')->publish(self::RULES_CHANGED_CHANNEL, 'reload');
+            Redis::connection('default')->setex(self::RULES_CHANGED_KEY, 600, (string)time());
         } catch (\Throwable $e) {
             Log::error("通知告警引擎刷新规则失败: {$e->getMessage()}");
         }

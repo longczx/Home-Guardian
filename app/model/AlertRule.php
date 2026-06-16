@@ -6,7 +6,7 @@
  * 告警引擎进程（AlertEngineProcess）在内存中加载所有启用的规则，
  * 并对每条遥测数据进行实时匹配。
  *
- * 条件判断支持：GREATER_THAN / LESS_THAN / EQUALS / NOT_EQUALS
+ * 条件判断支持：GREATER_THAN / LESS_THAN / EQUALS / NOT_EQUALS / BETWEEN / NOT_BETWEEN
  * 防抖机制：trigger_duration_sec 秒内持续满足条件才触发告警
  */
 
@@ -58,6 +58,20 @@ class AlertRule extends Model
     const CONDITION_LESS_THAN    = 'LESS_THAN';
     const CONDITION_EQUALS       = 'EQUALS';
     const CONDITION_NOT_EQUALS   = 'NOT_EQUALS';
+    const CONDITION_BETWEEN      = 'BETWEEN';
+    const CONDITION_NOT_BETWEEN  = 'NOT_BETWEEN';
+
+    /**
+     * 所有合法的条件类型（供创建/更新时校验）
+     */
+    const VALID_CONDITIONS = [
+        self::CONDITION_GREATER_THAN,
+        self::CONDITION_LESS_THAN,
+        self::CONDITION_EQUALS,
+        self::CONDITION_NOT_EQUALS,
+        self::CONDITION_BETWEEN,
+        self::CONDITION_NOT_BETWEEN,
+    ];
 
     /* ============================
      * 关联关系
@@ -113,16 +127,32 @@ class AlertRule extends Model
     {
         $threshold = $this->threshold_value;
 
-        // 如果阈值是数组格式，取第一个元素（兼容 JSONB 存储格式）
-        if (is_array($threshold)) {
-            $threshold = $threshold[0] ?? $threshold;
+        $numericValue = is_numeric($value) ? (float)$value : null;
+        if ($numericValue === null) {
+            return false;
         }
 
-        // 转为数值进行比较
-        $numericValue = is_numeric($value) ? (float)$value : null;
-        $numericThreshold = is_numeric($threshold) ? (float)$threshold : null;
+        // 区间条件：threshold_value 需为 [min, max] 两元素数组
+        if ($this->condition === self::CONDITION_BETWEEN || $this->condition === self::CONDITION_NOT_BETWEEN) {
+            if (!is_array($threshold) || count($threshold) < 2
+                || !is_numeric($threshold[0]) || !is_numeric($threshold[1])) {
+                return false;
+            }
+            $min = (float)$threshold[0];
+            $max = (float)$threshold[1];
+            if ($min > $max) {
+                [$min, $max] = [$max, $min];
+            }
+            $inside = $numericValue >= $min && $numericValue <= $max;
+            return $this->condition === self::CONDITION_BETWEEN ? $inside : !$inside;
+        }
 
-        if ($numericValue === null || $numericThreshold === null) {
+        // 单阈值条件：数组格式取第一个元素（兼容 JSONB 存储格式）
+        if (is_array($threshold)) {
+            $threshold = $threshold[0] ?? null;
+        }
+        $numericThreshold = is_numeric($threshold) ? (float)$threshold : null;
+        if ($numericThreshold === null) {
             return false;
         }
 

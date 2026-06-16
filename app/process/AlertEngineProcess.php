@@ -23,7 +23,6 @@ use app\model\AlertRule;
 use app\model\RefreshToken;
 use app\service\AlertService;
 use app\service\AutomationService;
-use app\service\NotificationService;
 use Workerman\Timer;
 use support\Log;
 
@@ -47,28 +46,34 @@ class AlertEngineProcess
     private array $rules = [];
 
     /**
+     * 内存中的遥测型自动化规则列表（避免每条遥测都查库）
+     *
+     * @var \app\model\Automation[]
+     */
+    private array $automations = [];
+
+    /**
      * Worker 进程启动回调
      */
     public function onWorkerStart(): void
     {
         $this->initRedis();
 
-        // 加载告警规则到内存
+        // 加载告警规则和自动化规则到内存
         $this->loadRules();
+        $this->loadAutomations();
 
-        // 监听规则变更通知（通过 Timer 轮询 Redis 频道）
+        // 监听规则变更通知（通过 Timer 轮询 Redis 标记键）
         $this->watchRuleChanges();
 
         // 定时消费 alert_stream 队列（每 100ms）
         Timer::add(0.1, [$this, 'processAlertStream']);
 
-        // 定时消费通知队列（每 500ms）
-        Timer::add(0.5, [$this, 'processNotifyQueue']);
-
         // 每小时清理过期的 refresh_token
         Timer::add(3600, [$this, 'cleanExpiredTokens']);
 
-        Log::info('AlertEngineProcess 告警引擎进程已启动，已加载 ' . count($this->rules) . ' 条规则');
+        Log::info('AlertEngineProcess 告警引擎进程已启动，已加载 ' . count($this->rules)
+            . ' 条告警规则、' . count($this->automations) . ' 条遥测自动化规则');
     }
 
     /**
@@ -107,6 +112,19 @@ class AlertEngineProcess
     }
 
     /**
+     * 从数据库加载所有启用的遥测型自动化规则到内存
+     */
+    private function loadAutomations(): void
+    {
+        try {
+            $this->automations = AutomationService::getEnabledTelemetryAutomations()->all();
+            Log::info('自动化规则已刷新，当前规则数: ' . count($this->automations));
+        } catch (\Throwable $e) {
+            Log::error("加载自动化规则失败: {$e->getMessage()}");
+        }
+    }
+
+    /**
      * 监听告警规则变更通知
      *
      * 当规则被创建/修改/删除时，AlertService 会发布消息到 Redis，
@@ -117,10 +135,13 @@ class AlertEngineProcess
         // 使用轮询方式检查变更标记（比 Pub/Sub 更简单可靠）
         Timer::add(5, function () {
             try {
-                $changed = $this->redisCache->get('hg:alert:rules:changed');
-                if ($changed) {
+                if ($this->redisCache->get('hg:alert:rules:changed')) {
                     $this->redisCache->del('hg:alert:rules:changed');
                     $this->loadRules();
+                }
+                if ($this->redisCache->get('hg:automation:rules:changed')) {
+                    $this->redisCache->del('hg:automation:rules:changed');
+                    $this->loadAutomations();
                 }
             } catch (\Throwable $e) {
                 // 忽略，下次重试
@@ -177,8 +198,8 @@ class AlertEngineProcess
                     }
                 }
 
-                // 同时检查遥测条件型自动化规则
-                AutomationService::checkTelemetryTrigger($deviceId, $metricKey, $value);
+                // 同时检查遥测条件型自动化规则（使用内存缓存，不查库）
+                AutomationService::evaluateTelemetry($this->automations, $deviceId, $metricKey, $value);
             }
         } catch (\Throwable $e) {
             Log::error("告警引擎处理异常: {$e->getMessage()}");
@@ -237,37 +258,6 @@ class AlertEngineProcess
     {
         $key = "hg:alert:debounce:{$rule->id}";
         $this->redisCache->del($key);
-    }
-
-    /**
-     * 消费通知队列
-     *
-     * 读取 notify:queue 中的通知任务并调用 NotificationService 发送。
-     */
-    public function processNotifyQueue(): void
-    {
-        try {
-            for ($i = 0; $i < 10; $i++) {
-                $raw = $this->redis->rPop('hg:q:notify:queue');
-                if (!$raw) {
-                    break;
-                }
-
-                $task = json_decode($raw, true);
-                if (!$task) {
-                    continue;
-                }
-
-                NotificationService::send(
-                    $task['channel_ids'] ?? [],
-                    $task['title'] ?? '通知',
-                    $task['content'] ?? '',
-                    $task['extra'] ?? []
-                );
-            }
-        } catch (\Throwable $e) {
-            Log::error("通知发送异常: {$e->getMessage()}");
-        }
     }
 
     /**
