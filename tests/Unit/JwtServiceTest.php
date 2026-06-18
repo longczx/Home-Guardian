@@ -49,6 +49,18 @@ class JwtServiceTest extends TestCase
         $this->assertFalse($payload->permissions->admin);
     }
 
+    public function test_payload_contains_token_version(): void
+    {
+        // #18：access_token 内嵌 token 版本号 tv，用于「注销所有设备/改密」后主动失效。
+        // 测试环境无 Redis，getTokenVersion 走 fail-open 返回 0，因此 tv=0 且校验通过。
+        $token   = JwtService::issueAccessToken(1, 'u', [], [], []);
+        $payload = JwtService::verifyAccessToken($token);
+
+        $this->assertNotNull($payload);
+        $this->assertTrue(isset($payload->tv), 'payload 应包含 tv 字段');
+        $this->assertSame(0, (int) $payload->tv);
+    }
+
     public function test_payload_has_iat_and_exp(): void
     {
         $before = time();
