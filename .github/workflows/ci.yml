@@ -16,7 +16,7 @@ jobs:
     name: Backend (PHP 8.2)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -27,10 +27,12 @@ jobs:
           tools: composer:v2
 
       - name: Validate composer.json
-        run: composer validate --strict --no-check-publish
+        # 不用 --strict：Webman 约定使用空命名空间前缀的 PSR-4("": "./")，
+        # --strict 会把该性能类警告当作错误而使构建失败。
+        run: composer validate --no-check-publish
 
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor
           key: composer-${{ hashFiles('composer.lock') }}
@@ -54,10 +56,10 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm

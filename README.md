@@ -17,6 +17,8 @@
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
 </p>
 
+<p align="center"><a href="README.en.md">English</a> | 简体中文</p>
+
 ---
 
 **Home Guardian** 是一个开源的物联网 (IoT) 项目，旨在为您提供一个私有、安全且功能强大的智能家居核心。通过连接各种传感器和执行器，您可以实时监控家庭环境（如温度、湿度），并远程控制家中的设备（如灯光、开关）。
