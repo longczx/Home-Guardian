@@ -1,6 +1,33 @@
 import request from './request';
 import type { MetricField } from '@/utils/metricLookup';
 
+export type ControlWidget = 'switch' | 'stepper' | 'slider' | 'enum' | 'button' | 'number' | 'text';
+
+export interface ControlPoint {
+  key: string;
+  label: string;
+  widget: ControlWidget;
+  value_type: 'bool' | 'int' | 'float' | 'string' | 'enum';
+  command: string;
+  param: string;
+  state_key?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  options?: { label: string; value: string | number; icon?: string }[];
+  default?: unknown;
+  depends_on?: Record<string, unknown>;
+  group?: string;
+  order?: number;
+  icon?: string;
+}
+
+export interface Capability {
+  control_mode: 'merge' | 'discrete';
+  controls: ControlPoint[];
+}
+
 export interface Device {
   id: number;
   device_uid: string;
@@ -12,6 +39,8 @@ export interface Device {
   last_seen: string | null;
   metric_fields: MetricField[] | null;
   gateway_uid: string | null;
+  capability: Capability | null;
+  state?: Record<string, unknown>;
 }
 
 export interface DeviceAttribute {

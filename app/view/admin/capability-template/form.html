@@ -1,0 +1,68 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">{{$template ? '编辑能力模板' : '添加能力模板'}}</div>
+    <div class="layui-card-body" style="padding: 20px;">
+        {if !empty($error)}
+        <div class="layui-bg-red" style="padding:10px;margin-bottom:15px;border-radius:4px;">{{$error}}</div>
+        {/if}
+
+        {php}
+        // 计算 controls 的 JSON 文本：优先回显用户上次输入（old），否则用模板已有值
+        if (isset($old['controls'])) {
+            $controlsJson = $old['controls'];
+        } elseif ($template) {
+            $controlsJson = json_encode($template['controls'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        } else {
+            $controlsJson = "[]";
+        }
+        $currentMode = $template['control_mode'] ?? ($old['control_mode'] ?? 'discrete');
+        {/php}
+
+        <form class="layui-form" method="post" action="{{$template ? '/admin/capability-templates/'.$template['id'].'/update' : '/admin/capability-templates/store'}}">
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{$template['name'] ?? ($old['name'] ?? '')}}" required lay-verify="required" class="layui-input" placeholder="如 空调、调光灯">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">归类</label>
+                <div class="layui-input-block">
+                    <input type="text" name="device_category" value="{{$template['device_category'] ?? ($old['device_category'] ?? '')}}" class="layui-input" placeholder="如 ac / light / switch / curtain（用于图标）">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">下发模式</label>
+                <div class="layui-input-block">
+                    <select name="control_mode" lay-verify="required">
+                        <option value="discrete" {{$currentMode === 'discrete' ? 'selected' : ''}}>discrete（每个控制点发独立指令，适合开关/灯）</option>
+                        <option value="merge" {{$currentMode === 'merge' ? 'selected' : ''}}>merge（合并完整状态发 set_state，适合红外空调）</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" value="{{$template['description'] ?? ($old['description'] ?? '')}}" class="layui-input" placeholder="模板描述（可选）">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">控制点 (controls)</label>
+                <div class="layui-input-block">
+                    <textarea name="controls" class="layui-textarea" style="min-height:280px;font-family:monospace;font-size:13px;" placeholder='[{"key":"power","label":"电源","widget":"switch","value_type":"bool","command":"set_power","param":"on","state_key":"power","default":false}]'>{{$controlsJson}}</textarea>
+                    <div class="layui-form-mid layui-word-aux" style="margin-top:6px;">
+                        JSON 数组，每个控制点字段：key/label/widget(switch|stepper|slider|enum|button)/value_type(bool|int|float|string|enum)/command/param/state_key/min/max/step/unit/options/default/depends_on/order
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit>保存</button>
+                    <a href="/admin/capability-templates" class="layui-btn layui-btn-primary">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{/block}

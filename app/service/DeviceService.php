@@ -45,6 +45,11 @@ class DeviceService
             $data['metric_fields'] = json_decode($data['metric_fields'], true);
         }
 
+        // capability JSON 字符串转数组（执行器控制能力）
+        if (isset($data['capability']) && is_string($data['capability'])) {
+            $data['capability'] = $data['capability'] === '' ? null : json_decode($data['capability'], true);
+        }
+
         return Device::create($data);
     }
 
@@ -73,6 +78,11 @@ class DeviceService
         // metric_fields JSON 字符串转数组
         if (isset($data['metric_fields']) && is_string($data['metric_fields'])) {
             $data['metric_fields'] = json_decode($data['metric_fields'], true);
+        }
+
+        // capability JSON 字符串转数组（执行器控制能力）
+        if (isset($data['capability']) && is_string($data['capability'])) {
+            $data['capability'] = $data['capability'] === '' ? null : json_decode($data['capability'], true);
         }
 
         $device->update($data);

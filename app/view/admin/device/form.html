@@ -78,6 +78,33 @@
                     <div class="layui-form-mid layui-word-aux">不配置则使用全局指标定义</div>
                 </div>
             </div>
+            <!-- 控制能力配置（仅执行器） -->
+            <div class="layui-form-item" id="capability-field" style="display:none;">
+                <label class="layui-form-label">控制能力</label>
+                <div class="layui-input-block">
+                    <input type="hidden" name="capability" id="capability_input" value="">
+                    <div style="margin-bottom:10px;">
+                        <select id="cap_template_select" lay-ignore style="display:inline-block;width:220px;height:38px;border:1px solid #e6e6e6;border-radius:2px;padding:0 10px;">
+                            <option value="">从能力模板填充...</option>
+                            {volist name="capabilityTemplates" id="ct"}
+                            <option value="{{:htmlentities(json_encode($ct, JSON_UNESCAPED_UNICODE))}}">{{$ct['name']}} ({{$ct['control_mode']}})</option>
+                            {/volist}
+                        </select>
+                        <button type="button" class="layui-btn layui-btn-sm" onclick="applyCapTemplate()">填充</button>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        下发模式：
+                        <select id="cap_mode" lay-ignore style="width:160px;height:36px;border:1px solid #e6e6e6;border-radius:2px;padding:0 8px;" onchange="syncCapability()">
+                            <option value="discrete">discrete（独立指令）</option>
+                            <option value="merge">merge（全量 set_state）</option>
+                        </select>
+                    </div>
+                    <textarea id="cap_controls" class="layui-textarea" style="min-height:220px;font-family:monospace;font-size:13px;" oninput="syncCapability()" placeholder='[{"key":"power","label":"电源","widget":"switch","value_type":"bool","command":"set_power","param":"on","state_key":"power","default":false}]'></textarea>
+                    <div class="layui-form-mid layui-word-aux" style="margin-top:6px;">
+                        控制点 JSON 数组。可先选模板填充再微调。留空表示该执行器暂无控制界面。
+                    </div>
+                </div>
+            </div>
             {if !$device}
             <div class="layui-form-item">
                 <label class="layui-form-label">MQTT 密码</label>
@@ -188,12 +215,65 @@ function toggleGatewayField() {
         gwField.style.display = (typeSelect.value === 'gateway') ? 'none' : '';
     }
 }
+
+// ===== 控制能力（执行器） =====
+// 初始化已有 capability
+{php}
+    $cap = $device['capability'] ?? ($old['capability'] ?? null);
+    if (is_string($cap)) $cap = json_decode($cap, true);
+    if (!is_array($cap)) $cap = null;
+{/php}
+{if $cap !== null}
+(function(){
+    var cap = {php}echo json_encode($cap, JSON_UNESCAPED_UNICODE);{/php};
+    if (cap.control_mode) document.getElementById('cap_mode').value = cap.control_mode;
+    document.getElementById('cap_controls').value = JSON.stringify(cap.controls || [], null, 2);
+})();
+{/if}
+
+// 把 mode + controls 文本组合进隐藏字段 capability
+function syncCapability() {
+    var typeSelect = document.querySelector('select[name="type"]');
+    var input = document.getElementById('capability_input');
+    if (!typeSelect || typeSelect.value !== 'actuator') { input.value = ''; return; }
+    var raw = document.getElementById('cap_controls').value.trim();
+    if (!raw) { input.value = ''; return; }
+    try {
+        var controls = JSON.parse(raw);
+        input.value = JSON.stringify({ control_mode: document.getElementById('cap_mode').value, controls: controls });
+    } catch (e) {
+        // JSON 非法时不阻断，但提交的 capability 留空，避免存坏数据
+        input.value = '';
+    }
+}
+
+// 选模板填充
+function applyCapTemplate() {
+    var sel = document.getElementById('cap_template_select');
+    if (!sel.value) return;
+    var tpl = JSON.parse(sel.value);
+    document.getElementById('cap_mode').value = tpl.control_mode || 'discrete';
+    document.getElementById('cap_controls').value = JSON.stringify(tpl.controls || [], null, 2);
+    syncCapability();
+}
+
+// 根据类型显示/隐藏控制能力区块
+function toggleCapabilityField() {
+    var typeSelect = document.querySelector('select[name="type"]');
+    var capField = document.getElementById('capability-field');
+    if (typeSelect && capField) {
+        capField.style.display = (typeSelect.value === 'actuator') ? '' : 'none';
+    }
+    syncCapability();
+}
+
 // 初始化
 toggleGatewayField();
+toggleCapabilityField();
 // 监听类型变化（LayUI select 需要用 form.on）
 layui.use('form', function(){
     layui.form.on('select()', function(data){
-        if (data.elem.name === 'type') toggleGatewayField();
+        if (data.elem.name === 'type') { toggleGatewayField(); toggleCapabilityField(); }
     });
 });
 </script>

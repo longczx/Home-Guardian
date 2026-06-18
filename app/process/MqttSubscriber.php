@@ -326,6 +326,22 @@ class MqttSubscriber
 
             $this->redisPub->publish('ws:broadcast', $wsMessage);
 
+            // 执行器状态上报：state/post 带 state 字段时，落库并推送（闭环设备的真实状态）
+            if (isset($data['state']) && is_array($data['state'])) {
+                try {
+                    \app\service\ActuatorService::saveState($device->id, $data['state'], true);
+                    $this->redisPub->publish('ws:broadcast', json_encode([
+                        'type'            => 'device_state',
+                        'device_id'       => $device->id,
+                        'device_uid'      => $deviceUid,
+                        'device_location' => $device->location,
+                        'state'           => $data['state'],
+                    ], JSON_UNESCAPED_UNICODE));
+                } catch (\Throwable $e) {
+                    \support\Log::error("保存设备状态失败: {$e->getMessage()}");
+                }
+            }
+
             // 网关离线时，批量将其下所有传感器也标记为离线
             if (!$isOnline && $device->type === 'gateway') {
                 $sensors = Device::where('gateway_uid', $deviceUid)->get(['id', 'device_uid', 'location']);

@@ -7,6 +7,7 @@ namespace app\controller\admin;
 
 use app\model\Device;
 use app\model\MetricDefinition;
+use app\model\CapabilityTemplate;
 use app\service\DeviceService;
 use support\Request;
 
@@ -71,11 +72,13 @@ class DeviceController
     {
         $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
         $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
+        $capabilityTemplates = CapabilityTemplate::orderBy('name')->get(['id', 'name', 'control_mode', 'controls', 'device_category'])->toArray();
 
         return view('admin/device/form', [
             'device'            => null,
             'metricDefinitions' => $metricDefinitions,
             'gateways'          => $gateways,
+            'capabilityTemplates' => $capabilityTemplates,
             'nav'               => 'devices',
             'adminUser'         => $request->adminUser,
         ]);
@@ -88,6 +91,7 @@ class DeviceController
         if (empty($data['device_uid']) || empty($data['name']) || empty($data['type'])) {
             $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
             $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
+        $capabilityTemplates = CapabilityTemplate::orderBy('name')->get(['id', 'name', 'control_mode', 'controls', 'device_category'])->toArray();
             return view('admin/device/form', [
                 'device'            => null,
                 'metricDefinitions' => $metricDefinitions,
@@ -112,11 +116,13 @@ class DeviceController
 
         $metricDefinitions = MetricDefinition::ordered()->get(['id', 'metric_key', 'label', 'unit', 'icon'])->toArray();
         $gateways = Device::where('type', 'gateway')->orderBy('name')->get(['id', 'device_uid', 'name'])->toArray();
+        $capabilityTemplates = CapabilityTemplate::orderBy('name')->get(['id', 'name', 'control_mode', 'controls', 'device_category'])->toArray();
 
         return view('admin/device/form', [
             'device'            => $device,
             'metricDefinitions' => $metricDefinitions,
             'gateways'          => $gateways,
+            'capabilityTemplates' => $capabilityTemplates,
             'nav'               => 'devices',
             'adminUser'         => $request->adminUser,
         ]);
