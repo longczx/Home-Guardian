@@ -43,6 +43,7 @@ class Device extends Model
         'is_online',
         'metric_fields',
         'gateway_uid',
+        'capability',
     ];
 
     /**
@@ -63,6 +64,7 @@ class Device extends Model
         'created_at'    => 'datetime',
         'updated_at'    => 'datetime',
         'metric_fields' => 'array',
+        'capability'    => 'array',
     ];
 
     /* ============================
@@ -75,6 +77,14 @@ class Device extends Model
     public function attributes(): HasMany
     {
         return $this->hasMany(DeviceAttribute::class, 'device_id');
+    }
+
+    /**
+     * 执行器的当前/期望状态（一对一）
+     */
+    public function state()
+    {
+        return $this->hasOne(DeviceState::class, 'device_id');
     }
 
     /**

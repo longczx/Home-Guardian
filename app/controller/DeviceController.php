@@ -17,6 +17,7 @@ namespace app\controller;
 use app\model\Device;
 use app\service\DeviceService;
 use app\service\MqttCommandService;
+use app\service\ActuatorService;
 use app\service\AuditService;
 use support\Request;
 use OpenApi\Attributes as OA;
@@ -113,7 +114,13 @@ class DeviceController
             return api_error('无权访问该设备', 403, 1004);
         }
 
-        return api_success($device);
+        // 附带执行器当前状态（供前端动态控制 UI 初始化）
+        $data = $device->toArray();
+        $data['state'] = $device->capability
+            ? (ActuatorService::getState($device->id) ?? (object)[])
+            : (object)[];
+
+        return api_success($data);
     }
 
     /**
@@ -329,17 +336,16 @@ class DeviceController
             return api_error('指令 params 必须是对象', 422, 1000);
         }
 
-        // 仅透传 action 与 params，剥离其它无关字段，避免下发任意结构
-        $payload = ['action' => $action];
-        if (isset($input['params'])) {
-            $payload['params'] = $input['params'];
-        }
+        $params = isset($input['params']) ? $input['params'] : [];
 
-        $commandLog = MqttCommandService::sendCommand($id, $payload);
+        // 经执行器服务：按设备能力校验 → 合并/直发 → 状态双写 → 推 WS
+        // 校验失败抛 BusinessException，由全局异常处理器转为 JSON 错误响应
+        $commandLog = ActuatorService::applyCommand($device, $action, $params);
 
         AuditService::log($request, 'command_send', 'device', $id, [
             'request_id' => $commandLog->request_id,
-            'payload'    => $payload,
+            'action'     => $action,
+            'params'     => $params,
         ]);
 
         return api_success([

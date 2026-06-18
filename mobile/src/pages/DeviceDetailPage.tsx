@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { NavBar, Switch, Slider, Button, Toast, PullToRefresh } from 'antd-mobile';
+import { NavBar, Button, Toast, PullToRefresh } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getDevice, sendCommand, getDeviceAttributes, setDeviceAttributes, type Device, type DeviceAttribute } from '@/api/device';
 import { getLatestTelemetry, type LatestMetric } from '@/api/telemetry';
@@ -11,6 +11,7 @@ import StatusTag from '@/components/StatusTag';
 import DeviceIcon from '@/components/DeviceIcon';
 import MetricCard from '@/components/MetricCard';
 import PageLoading from '@/components/PageLoading';
+import DynamicControlPanel from '@/components/control/DynamicControlPanel';
 import { preloadTelemetryRoutes } from '@/router/routeLoaders';
 
 export default function DeviceDetailPage() {
@@ -20,8 +21,7 @@ export default function DeviceDetailPage() {
   const [metrics, setMetrics] = useState<LatestMetric[]>([]);
   const [attributes, setAttributes] = useState<DeviceAttribute[]>([]);
   const [loading, setLoading] = useState(true);
-  const [switchOn, setSwitchOn] = useState(false);
-  const [brightness, setBrightness] = useState(50);
+  const [controlState, setControlState] = useState<Record<string, unknown>>({});
 
   const { definitions, fetchDefinitions } = useMetricDefinitionStore();
 
@@ -35,7 +35,10 @@ export default function DeviceDetailPage() {
         getLatestTelemetry(deviceId),
         getDeviceAttributes(deviceId),
       ]);
-      if (deviceRes.data.code === 0) setDevice(deviceRes.data.data);
+      if (deviceRes.data.code === 0) {
+        setDevice(deviceRes.data.data);
+        if (deviceRes.data.data.state) setControlState(deviceRes.data.data.state);
+      }
       if (telemetryRes.data.code === 0) setMetrics(telemetryRes.data.data);
       if (attrRes.data.code === 0) setAttributes(attrRes.data.data);
     } finally {
@@ -72,6 +75,16 @@ export default function DeviceDetailPage() {
     });
   }, [deviceId]);
   useWSSubscription('telemetry', handleWS);
+
+  // 执行器状态实时同步（其它端操作 / 设备上报）
+  const handleStateWS = useCallback((msg: Record<string, unknown>) => {
+    if ((msg.device_id as number) !== deviceId) return;
+    const st = msg.state as Record<string, unknown> | undefined;
+    if (st && typeof st === 'object') {
+      setControlState((prev) => ({ ...prev, ...st }));
+    }
+  }, [deviceId]);
+  useWSSubscription('device_state', handleStateWS);
 
   const handleCommand = async (action: string, params: Record<string, unknown> = {}) => {
     if (!deviceId) return;
@@ -281,40 +294,16 @@ export default function DeviceDetailPage() {
             </Button>
           </div>
 
-          {device.type === 'actuator' && (
-            <div className="surface-card detail-section-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
-                设备控制
-              </div>
-              <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--color-text)' }}>电源开关</span>
-                <Switch
-                  checked={switchOn}
-                  onChange={(checked) => {
-                    setSwitchOn(checked);
-                    handleCommand(checked ? 'turn_on' : 'turn_off');
-                  }}
-                />
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ marginBottom: 8, color: 'var(--color-text)' }}>亮度: {brightness}%</div>
-                <Slider
-                  value={brightness}
-                  onChange={(v) => {
-                    const val = Array.isArray(v) ? v[0] : v;
-                    setBrightness(val);
-                    handleCommand('set_brightness', { value: val });
-                  }}
-                />
-              </div>
-              <Button
-                block
-                color="primary"
-                onClick={() => handleCommand('refresh_state')}
-                style={{ borderRadius: 8 }}
-              >
-                刷新状态
-              </Button>
+          {device.type === 'actuator' && device.capability && device.capability.controls?.length > 0 && (
+            <DynamicControlPanel
+              capability={device.capability}
+              state={controlState}
+              onCommand={handleCommand}
+            />
+          )}
+          {device.type === 'actuator' && (!device.capability || !device.capability.controls?.length) && (
+            <div className="surface-card detail-section-card" style={{ padding: 16, color: 'var(--color-text-tertiary)', fontSize: 13, textAlign: 'center' }}>
+              该执行器尚未配置控制能力，请在后台「能力模板 / 设备」中配置。
             </div>
           )}
         </div>

@@ -1,0 +1,46 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        执行器能力模板
+        <a href="/admin/capability-templates/create" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 添加模板
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col width="150"><col width="100"><col width="100"><col width="90"><col><col width="150"></colgroup>
+            <thead>
+                <tr><th>ID</th><th>名称</th><th>归类</th><th>下发模式</th><th>控制点数</th><th>描述</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {volist name="templateList" id="t"}
+                <tr>
+                    <td>{{$t['id']}}</td>
+                    <td>{{$t['name']}}</td>
+                    <td><code>{{$t['device_category'] ?: '-'}}</code></td>
+                    <td>
+                        {if $t['control_mode'] === 'merge'}
+                        <span class="layui-badge layui-bg-blue">merge</span>
+                        {else}
+                        <span class="layui-badge layui-bg-green">discrete</span>
+                        {/if}
+                    </td>
+                    <td>{{$t['control_count']}}</td>
+                    <td>{{$t['description'] ?: '-'}}</td>
+                    <td>
+                        <a href="/admin/capability-templates/{{$t['id']}}/edit" class="layui-btn layui-btn-xs">编辑</a>
+                        <form method="post" action="/admin/capability-templates/{{$t['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {/volist}
+                {empty name="templateList"}
+                <tr><td colspan="7" style="text-align:center;color:#999;">暂无能力模板</td></tr>
+                {/empty}
+            </tbody>
+        </table>
+    </div>
+</div>
+{/block}

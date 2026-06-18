@@ -114,6 +114,14 @@ Route::group('/admin', function () {
     Route::post('/locations/store', [app\controller\admin\LocationController::class, 'store']);
     Route::post('/locations/{id:\d+}/delete', [app\controller\admin\LocationController::class, 'delete']);
 
+    // 执行器能力模板
+    Route::get('/capability-templates', [app\controller\admin\CapabilityTemplateController::class, 'index']);
+    Route::get('/capability-templates/create', [app\controller\admin\CapabilityTemplateController::class, 'create']);
+    Route::post('/capability-templates/store', [app\controller\admin\CapabilityTemplateController::class, 'store']);
+    Route::get('/capability-templates/{id:\d+}/edit', [app\controller\admin\CapabilityTemplateController::class, 'edit']);
+    Route::post('/capability-templates/{id:\d+}/update', [app\controller\admin\CapabilityTemplateController::class, 'update']);
+    Route::post('/capability-templates/{id:\d+}/delete', [app\controller\admin\CapabilityTemplateController::class, 'delete']);
+
 })->middleware([AdminAuthMiddleware::class]);
 
 /*
