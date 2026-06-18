@@ -1,0 +1,53 @@
+name: Bug 报告
+description: 报告一个可复现的问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量提供可复现信息。**安全漏洞请勿在此公开**，见 SECURITY.md。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 发生了什么？期望是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 进入 ...
+        2. 操作 ...
+        3. 看到错误 ...
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: 受影响组件
+      multiple: true
+      options:
+        - 后端 API
+        - 管理后台
+        - 移动端 (mobile)
+        - MQTT / 设备接入
+        - 告警 / 自动化
+        - 部署 / Docker
+        - 其他
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      description: 部署方式、浏览器/设备、相关版本或提交号
+      placeholder: |
+        - 部署: docker compose / 裸机
+        - 提交: <git sha>
+        - 浏览器/设备:
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 相关日志（runtime/logs）、控制台报错或截图
+      render: shell

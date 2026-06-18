@@ -1,0 +1,42 @@
+version: 2
+updates:
+  # 后端 Composer 依赖
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, backend]
+    # 把 minor/patch 合并成一个 PR，减少噪音
+    groups:
+      composer-minor-patch:
+        update-types: [minor, patch]
+    # 不自动提大版本（破坏性升级手动协调），minor/patch 与安全更新照常
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # 移动端 npm 依赖
+  - package-ecosystem: npm
+    directory: "/mobile"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    # 不自动提大版本（如 eslint 9→10、TS 5→6 会破坏工具链/构建）
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions（大版本通常安全，合并成一个分组 PR）
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: [dependencies, ci]
+    groups:
+      github-actions:
+        patterns: ["*"]

@@ -7,6 +7,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml"><img src="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#"><img src="https://img.shields.io/badge/PHP-8.2-blue.svg" alt="PHP 8.2"></a>
   <a href="#"><img src="https://img.shields.io/badge/Webman-latest-brightgreen.svg" alt="Webman"></a>
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
@@ -15,6 +16,8 @@
   <a href="#"><img src="https://img.shields.io/badge/Mobile-React_19-61dafb.svg" alt="React"></a>
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
 </p>
+
+<p align="center"><a href="README.en.md">English</a> | 简体中文</p>
 
 ---
 

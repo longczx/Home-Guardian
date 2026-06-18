@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的并发运行只保留最新一次
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (PHP 8.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo, pdo_sqlite, sqlite3, pcntl, posix, sockets, bcmath, redis
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer.json
+        # 不用 --strict：Webman 约定使用空命名空间前缀的 PSR-4("": "./")，
+        # --strict 会把该性能类警告当作错误而使构建失败。
+        run: composer validate --no-check-publish
+
+      - name: Cache Composer packages
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction --no-scripts
+
+      - name: Lint (php -l) all PHP sources
+        run: |
+          find app config database tests -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit --testdox
+
+  frontend:
+    name: Mobile (React / TS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
