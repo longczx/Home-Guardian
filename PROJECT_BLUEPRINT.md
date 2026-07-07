@@ -300,6 +300,54 @@ Authorization → HTTP Server
 **实现方式：**
 在 Webman 中间件或 Service 层统一写入 `audit_logs` 表，记录操作人、操作类型、目标资源、详情（JSON 格式记录变更前后差异）、IP 地址和 User-Agent。用户删除后日志保留（`ON DELETE SET NULL`）。
 
+#### **4.11. 执行器控制（能力模型）**
+
+执行器"能控什么"不写死在代码里，而是用**声明式能力（capability）schema** 描述，前端据此**动态渲染控制界面**，后端据此**校验指令**并维护设备状态。这样新增一类执行器（灯、空调、窗帘）只需配置一份 schema，无需改代码。
+
+**能力定义 capability：**
+- 存于 `devices.capability`（JSONB，per-device），也可从 `capability_templates`（可复用整设备模板）填充。
+- 结构：`control_mode` + `controls[]`。每个控制点声明 `key/label/widget/value_type/command/param/state_key/min/max/options/default/depends_on` 等。
+- `widget` 决定前端控件：`switch / slider / stepper / enum / button`。
+
+**两种下发模式（control_mode）：**
+
+| 模式 | 语义 | 适用 |
+| :--- | :--- | :--- |
+| `discrete` | 单控制点直发，`action` 即该控制点的 `command` | 开关、灯（每个动作独立）|
+| `merge` | 合并完整状态后整体下发，统一 `action = set_state` | 红外空调等有状态、需整帧下发的设备 |
+
+**指令校验（ActuatorService）：** 按 capability 校验 `action` 是否声明、每个 `param` 是否命中控制点并符合类型/范围/枚举，非法则拒绝（业务码 2100–2105）。
+
+**状态模型：** `device_states` 表 + Redis（`hg:device:state:{id}`）**双写**。
+- 闭环设备由 `state/post` 上报真实状态（`reported=true`）。
+- 开环设备（如红外）下发即更新"期望状态"（`reported=false`），作为前端展示依据。
+- 状态变更通过 WebSocket（`type=device_state`）推送，多端同步。
+
+**下发链路复用** 4.2 的网关-子设备模型与既有 `command/set` 主题；MQTT 侧统一 `{action, params}` 载荷。
+
+#### **4.12. 设备自助配网**
+
+面向普通用户的"插电 → 配网 → 自动上线"流程，免去手动建设备 / 设 MQTT 密码 / 烧录 `config.h`（后者作为高级/批量方式保留）。
+
+**信任模型 —— 配对码：** 移动端生成一个短时有效（10 分钟）、绑定当前用户 + 位置的配对码；设备凭该码自注册。配对码即信任凭证——只有登录用户能生成，注册出的设备自动归属该用户。
+
+**流程：**
+```
+移动端"添加设备" ──► POST /api/provisioning/codes ──► 配对码(TTL 10min)
+设备通电 → SoftAP(HG-Setup-xxxx) ──► 配网页填 家里WiFi + 粘贴配对码
+设备连网 ──► POST /api/provisioning/register(配对码 + 网关/传感器自述)
+平台校验码 → 建网关+子传感器 + 生成MQTT凭证(bcrypt) → 返回一次性明文凭证
+设备连 EMQX 上线 ──► 移动端 GET /codes/{code}/status 轮询到 registered
+```
+
+**接口：** `POST /provisioning/codes`（JWT + `devices.create`）、`GET /provisioning/codes/{code}/status`（JWT）、`POST /provisioning/register`（公开，凭码信任）。
+
+**方案选型：** 采用 **SoftAP + 设备自托管配网页**（任何手机可用），而非 Web Bluetooth（iOS 不支持）或 PWA 直连（混合内容/私有网络限制）。设备自注册顺带**上报自身 capability**，实现执行器零后台配置（衔接 4.11）。
+
+**安全：** 配对码 8 位高熵 + TTL + 一次性使用；`register` 响应含明文 MQTT 密码，生产须启用 HTTPS 并对该公开接口限流；返回的 MQTT 地址取自 `MQTT_PUBLIC_HOST`。
+
+> **落地状态：** 平台侧（API + 移动端 `/mobile/devices/add`）已实现；设备端 SoftAP 配网固件为后续 Phase。
+
 ---
 
 ## **第二部分：数据库结构 (SQL Schema)**
@@ -684,6 +732,46 @@ CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+```
+
+### **增量表（PHP 迁移，`database/php-migrations/`）**
+
+以下表随功能迭代新增，通过 `webman migrate:run` 管理（支持版本追踪/回滚），非首次建库的 SQL。
+
+**`metric_definitions`** — 全局遥测指标元数据（`metric_key/label/unit/icon/sort_order`）；`devices` 增加 `metric_fields JSONB`（设备级指标覆盖）、`gateway_uid`（子设备关联网关）。
+
+**`capability_templates`** — 执行器能力模板（可复用），见 4.11：
+```sql
+-- 字段：name, device_category, control_mode(merge|discrete), controls JSONB, description
+-- controls[] 每项：key,label,widget,value_type,command,param,state_key,min,max,options,default,depends_on
+-- devices 增加 capability JSONB（per-device 控制能力，可从模板填充或设备自上报）
+```
+
+**`device_states`** — 执行器当前/期望状态（见 4.11）：
+```sql
+CREATE TABLE device_states (
+    device_id   INT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    state       JSONB NOT NULL DEFAULT '{}',   -- 完整状态快照
+    reported_at TIMESTAMPTZ,                     -- 设备真实上报时间（闭环）
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+**`provision_codes`** — 设备自助配网配对码（见 4.12）：
+```sql
+CREATE TABLE provision_codes (
+    id          BIGSERIAL PRIMARY KEY,
+    code        VARCHAR(16) NOT NULL UNIQUE,     -- 一次性、短时有效
+    user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    location    VARCHAR(100),                    -- 预设设备位置
+    status      VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending/registered/expired
+    device_uid  VARCHAR(64),                     -- 注册成功回填的网关 uid
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_provision_codes_expires ON provision_codes(expires_at);
 ```
 
 ---

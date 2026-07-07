@@ -319,6 +319,7 @@ vendor/bin/openapi app/ -o public/openapi.yaml
 | 角色管理 | 5 | CRUD |
 | 仪表盘 | 5 | CRUD |
 | 审计日志 | 1 | 查询 |
+| 设备配网 | 3 | 生成配对码、轮询状态、设备自注册 |
 | MQTT 认证 | 2 | EMQX 内部回调 |
 
 ## 配置 EMQX 设备认证
@@ -372,6 +373,39 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 // PUBLISH:   home/upstream/esp32-livingroom-01/telemetry/post
 // SUBSCRIBE: home/downstream/esp32-livingroom-01/command/set
 ```
+
+## 设备自助配网
+
+除了在后台手动创建设备 + 生成 `config.h` 烧录（适合批量/高级用户），平台还提供**自助配网**流程，让普通用户"插电 → 配网 → 自动上线"，无需手工设置 MQTT 凭证。
+
+**核心思路**：移动端生成一个短时有效、绑定当前用户和位置的**配对码**；设备通过 SoftAP 配网页拿到家里 WiFi + 配对码后连上网，凭配对码向平台自注册；平台据此创建网关及其子传感器、分配 MQTT 凭证，设备随即上线。配对码本身即信任凭证——注册出的设备自动归属该用户。
+
+**接口：**
+
+| 方法 | 路径 | 认证 | 说明 |
+|:---|:---|:---|:---|
+| POST | `/api/provisioning/codes` | JWT（`devices.create`） | 生成配对码 |
+| GET | `/api/provisioning/codes/{code}/status` | JWT | 轮询状态（pending / registered / expired） |
+| POST | `/api/provisioning/register` | 公开（凭配对码信任） | 设备自注册，返回一次性 MQTT 凭证 |
+
+**流程：**
+
+```
+移动端"添加设备" ──► 生成配对码(10min TTL) ──┐
+                                            │
+设备通电 → SoftAP(HG-Setup-xxxx) ──► 用户在配网页填 WiFi + 粘贴配对码
+                                            │
+设备连上家里 WiFi ──► POST /provisioning/register(配对码 + 自身信息)
+                                            │
+平台建网关+子传感器 + 生成 MQTT 凭证 ──► 设备连 EMQX 上线 ──► 移动端轮询到"已上线"
+```
+
+移动端页面：`/mobile/devices/add`（设备列表右上角「+ 添加」进入）。
+
+> **生产注意**：
+> - 配置环境变量 `MQTT_PUBLIC_HOST` 为设备可达的公网 EMQX 地址（注册响应据此返回，未配置回退 `MQTT_HOST`）。
+> - `register` 响应含明文 MQTT 密码，生产环境应启用 HTTPS，并对该公开接口加限流。
+> - 设备端固件的 SoftAP 配网与自注册握手为固件层能力，当前平台侧（API + 移动端）已就绪。
 
 ## ESP32 设备固件
 
@@ -496,7 +530,9 @@ python simulator.py --api
 - [x] API 在线文档 (Swagger UI + swagger-php 注解)
 - [x] 全局指标定义 + 设备指标配置 + 模拟数据生成
 - [x] ESP32 设备固件 (Arduino + PlatformIO，模块化传感器架构)
-- [ ] **下一步: 更多传感器/执行器模块 + OTA 远程升级**
+- [x] 执行器能力模型 + 动态控制 UI (声明式 capability，前端按 schema 渲染控件)
+- [x] 设备自助配网 (平台侧：配对码 + 设备自注册 API + 移动端添加设备页)
+- [ ] **下一步: 配网固件 (SoftAP) + 更多执行器模块 + OTA 远程升级**
 
 ## 贡献
 

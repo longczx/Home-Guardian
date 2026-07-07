@@ -319,6 +319,7 @@ vendor/bin/openapi app/ -o public/openapi.yaml
 | Roles | 5 | CRUD |
 | Dashboards | 5 | CRUD |
 | Audit logs | 1 | Query |
+| Device provisioning | 3 | Generate pairing code, poll status, device self-registration |
 | MQTT auth | 2 | EMQX internal callbacks |
 
 ## Configuring EMQX Device Authentication
@@ -372,6 +373,39 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 // PUBLISH:   home/upstream/esp32-livingroom-01/telemetry/post
 // SUBSCRIBE: home/downstream/esp32-livingroom-01/command/set
 ```
+
+## Self-Service Device Provisioning
+
+Besides manually creating a device in the admin panel and flashing a generated `config.h` (suited to bulk / advanced users), the platform offers a **self-service provisioning** flow so ordinary users can go "power on → set up WiFi → auto online" without manually configuring MQTT credentials.
+
+**Core idea**: the mobile app generates a short-lived **pairing code** bound to the current user and location; the device obtains the home WiFi + pairing code via a SoftAP setup page, connects to the network, and self-registers to the platform using the code. The platform then creates the gateway and its sub-sensors, assigns MQTT credentials, and the device comes online. The pairing code itself is the trust anchor — the registered device is automatically owned by that user.
+
+**Endpoints:**
+
+| Method | Path | Auth | Description |
+|:---|:---|:---|:---|
+| POST | `/api/provisioning/codes` | JWT (`devices.create`) | Generate a pairing code |
+| GET | `/api/provisioning/codes/{code}/status` | JWT | Poll status (pending / registered / expired) |
+| POST | `/api/provisioning/register` | Public (trusted via pairing code) | Device self-registration, returns one-time MQTT credentials |
+
+**Flow:**
+
+```
+Mobile "Add device" ──► generate pairing code (10min TTL) ──┐
+                                                            │
+Device powers on → SoftAP (HG-Setup-xxxx) ──► user enters WiFi + pastes pairing code
+                                                            │
+Device joins home WiFi ──► POST /provisioning/register (code + self info)
+                                                            │
+Platform creates gateway+sensors + MQTT creds ──► device connects EMQX ──► mobile polls "online"
+```
+
+Mobile page: `/mobile/devices/add` (via the "+ Add" button at the top of the device list).
+
+> **Production notes:**
+> - Set `MQTT_PUBLIC_HOST` to the publicly reachable EMQX address for devices (the register response uses it; falls back to `MQTT_HOST` if unset).
+> - The `register` response contains a plaintext MQTT password; enable HTTPS in production and rate-limit this public endpoint.
+> - The device-side SoftAP provisioning and self-registration handshake are firmware-layer capabilities; the platform side (API + mobile) is ready.
 
 ## ESP32 Device Firmware
 
@@ -496,7 +530,9 @@ The simulator generates realistic data (sine wave + random noise) for each metri
 - [x] Online API docs (Swagger UI + swagger-php annotations)
 - [x] Global metric definitions + per-device metric config + simulated data generation
 - [x] ESP32 device firmware (Arduino + PlatformIO, modular sensor architecture)
-- [ ] **Next: more sensor/actuator modules + OTA remote upgrades**
+- [x] Actuator capability model + dynamic control UI (declarative capability, frontend renders controls from schema)
+- [x] Self-service device provisioning (platform side: pairing code + device self-registration API + mobile add-device page)
+- [ ] **Next: provisioning firmware (SoftAP) + more actuator modules + OTA remote upgrades**
 
 ## Contributing
 
