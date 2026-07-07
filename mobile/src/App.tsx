@@ -8,6 +8,7 @@ import {
   loadAlertListPage,
   loadAlertRuleFormPage,
   loadAlertRuleListPage,
+  loadAddDevicePage,
   loadAuthenticatedApp,
   loadAutomationFormPage,
   loadAutomationListPage,
@@ -31,6 +32,7 @@ const MainLayout = lazy(loadMainLayout);
 const Login = lazy(loadLoginPage);
 const HomePage = lazy(loadHomePage);
 const DeviceListPage = lazy(loadDeviceListPage);
+const AddDevicePage = lazy(loadAddDevicePage);
 const DeviceDetailPage = lazy(loadDeviceDetailPage);
 const DeviceTelemetryPage = lazy(loadDeviceTelemetryPage);
 const TelemetryView = lazy(loadTelemetryViewPage);
@@ -68,6 +70,7 @@ export default function App() {
               <Route path="/mobile/profile" element={<ProfilePage />} />
             </Route>
 
+            <Route path="/mobile/devices/add" element={<AddDevicePage />} />
             <Route path="/mobile/device/:id" element={<DeviceDetailPage />} />
             <Route path="/mobile/device/:id/telemetry" element={<SuspenseWrap fallback={<TelemetryPageSkeleton />}><DeviceTelemetryPage /></SuspenseWrap>} />
             <Route path="/mobile/telemetry" element={<SuspenseWrap fallback={<TelemetryPageSkeleton />}><TelemetryView /></SuspenseWrap>} />
