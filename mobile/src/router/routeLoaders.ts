@@ -3,6 +3,7 @@ export const loadMainLayout = () => import('@/layouts/MainLayout');
 export const loadLoginPage = () => import('@/pages/Login');
 export const loadHomePage = () => import('@/pages/HomePage');
 export const loadDeviceListPage = () => import('@/pages/DeviceListPage');
+export const loadAddDevicePage = () => import('@/pages/AddDevicePage');
 export const loadDeviceDetailPage = () => import('@/pages/DeviceDetailPage');
 export const loadDeviceTelemetryPage = () => import('@/pages/DeviceTelemetryPage');
 export const loadTelemetryViewPage = () => import('@/pages/TelemetryView');

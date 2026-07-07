@@ -82,7 +82,10 @@ export default function DeviceListPage() {
           <div className="screen-header__title">设备</div>
           <div className="screen-header__subtitle">先看房间，再看设备明细和在线状态。</div>
         </div>
-        <button className="ghost-icon-button" onClick={() => navigate('/mobile/telemetry')}>图表</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="ghost-icon-button" onClick={() => navigate('/mobile/devices/add')}>+ 添加</button>
+          <button className="ghost-icon-button" onClick={() => navigate('/mobile/telemetry')}>图表</button>
+        </div>
       </div>
 
       <div className="surface-card top-panel top-panel--flat">
