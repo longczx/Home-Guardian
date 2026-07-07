@@ -51,9 +51,25 @@ $capsule->schema()->create('devices', function ($table) {
     $table->string('firmware_version')->nullable();
     $table->string('mqtt_username')->default('');
     $table->string('mqtt_password_hash')->nullable();
+    $table->string('gateway_uid')->nullable();
+    $table->text('metric_fields')->nullable();
+    $table->text('capability')->nullable();
     $table->boolean('is_online')->default(false);
     $table->timestamp('last_seen')->nullable();
     $table->boolean('is_active')->default(true);
+    $table->timestamps();
+});
+
+// provision_codes 表（设备配网）
+$capsule->schema()->create('provision_codes', function ($table) {
+    $table->id();
+    $table->string('code')->unique();
+    $table->unsignedBigInteger('user_id');
+    $table->string('location')->nullable();
+    $table->string('status')->default('pending');
+    $table->string('device_uid')->nullable();
+    $table->timestamp('expires_at');
+    $table->timestamp('used_at')->nullable();
     $table->timestamps();
 });
 

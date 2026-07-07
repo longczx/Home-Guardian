@@ -168,6 +168,15 @@ Route::group('/api/mqtt', function () {
 
 /*
 |--------------------------------------------------------------------------
+| 设备自注册（公开，凭配对码信任；同 MQTT 回调不走 JWT）
+|--------------------------------------------------------------------------
+*/
+Route::group('/api/provisioning', function () {
+    Route::post('/register', [app\controller\ProvisioningController::class, 'register']);
+});
+
+/*
+|--------------------------------------------------------------------------
 | 需要认证的接口（JWT 中间件）
 |--------------------------------------------------------------------------
 */
@@ -179,6 +188,11 @@ Route::group('/api', function () {
     Route::post('/auth/logout-all', [app\controller\AuthController::class, 'logoutAll']);
     Route::post('/auth/change-password', [app\controller\AuthController::class, 'changePassword'])
         ->middleware([AuditLogMiddleware::class]);
+
+    /* ---------- 设备配网（生成配对码 / 轮询状态） ---------- */
+    Route::post('/provisioning/codes', [app\controller\ProvisioningController::class, 'createCode'])
+        ->middleware([new PermissionMiddleware('devices.create')]);
+    Route::get('/provisioning/codes/{code}/status', [app\controller\ProvisioningController::class, 'status']);
 
     /* ---------- 指标定义 ---------- */
     Route::get('/metric-definitions', [app\controller\MetricDefinitionController::class, 'index'])
