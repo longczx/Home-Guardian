@@ -101,8 +101,9 @@ class ProvisioningService
         // 网关 MQTT 明文密码（仅在响应里返回一次，库里只存 bcrypt）
         $mqttPassword = bin2hex(random_bytes(16));
 
-        // 多表写入用事务（用模型自身连接，兼容生产 PgSQL 与测试 SQLite）
-        $devices = Device::getConnection()->transaction(function () use ($record, $gw, $gwUid, $payload, $mqttPassword) {
+        // 多表写入用事务（用模型实例的连接，兼容生产 PgSQL 与测试 SQLite；
+        // getConnection() 是实例方法，不能静态调用）
+        $devices = (new Device)->getConnection()->transaction(function () use ($record, $gw, $gwUid, $payload, $mqttPassword) {
             $created = [];
 
             // 1. 网关（幂等 upsert：支持恢复出厂后重新配网）
