@@ -23,14 +23,17 @@ class AlertLog extends Model
         'triggered_at',
         'triggered_value',
         'status',
+        'severity',
         'acknowledged_by',
         'acknowledged_at',
+        'resolved_at',
     ];
 
     protected $casts = [
         'triggered_value' => 'array',    // JSONB
         'triggered_at'    => 'datetime',
         'acknowledged_at' => 'datetime',
+        'resolved_at'     => 'datetime',
     ];
 
     /**

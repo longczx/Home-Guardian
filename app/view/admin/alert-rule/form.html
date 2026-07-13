@@ -26,9 +26,32 @@
                 </div>
             </div>
             <div class="layui-form-item">
+                <label class="layui-form-label">触发类型</label>
+                <div class="layui-input-block">
+                    {php}$tt = $rule['trigger_type'] ?? ($old['trigger_type'] ?? 'telemetry');{/php}
+                    <select name="trigger_type" lay-filter="trigger-type-select" id="trigger-type-select">
+                        <option value="telemetry" {{$tt === 'telemetry' ? 'selected' : ''}}>遥测阈值</option>
+                        <option value="offline" {{$tt === 'offline' ? 'selected' : ''}}>设备离线</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">告警级别</label>
+                <div class="layui-input-block">
+                    {php}$sv = $rule['severity'] ?? ($old['severity'] ?? 'warning');{/php}
+                    <select name="severity">
+                        <option value="info" {{$sv === 'info' ? 'selected' : ''}}>提醒</option>
+                        <option value="warning" {{$sv === 'warning' ? 'selected' : ''}}>警告</option>
+                        <option value="critical" {{$sv === 'critical' ? 'selected' : ''}}>严重</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="telemetry-fields">
+            <div class="layui-form-item">
                 <label class="layui-form-label">遥测指标</label>
                 <div class="layui-input-block">
-                    <select name="telemetry_key" lay-verify="required" id="metric-select">
+                    <select name="telemetry_key" id="metric-select">
                         <option value="">请先选择设备</option>
                     </select>
                 </div>
@@ -37,7 +60,7 @@
                 <label class="layui-form-label">比较条件</label>
                 <div class="layui-input-block">
                     {php}$currentCond = $rule['condition'] ?? ($old['condition'] ?? '');{/php}
-                    <select name="condition" lay-verify="required">
+                    <select name="condition">
                         <option value="">请选择</option>
                         <option value="GREATER_THAN" {{$currentCond === 'GREATER_THAN' ? 'selected' : ''}}>大于 (>)</option>
                         <option value="LESS_THAN" {{$currentCond === 'LESS_THAN' ? 'selected' : ''}}>小于 (<)</option>
@@ -58,13 +81,36 @@
                             $thVal = $old['threshold_value'];
                         }
                     {/php}
-                    <input type="number" step="any" name="threshold_value" value="{{$thVal}}" required class="layui-input" placeholder="阈值数值">
+                    <input type="number" step="any" name="threshold_value" value="{{$thVal}}" class="layui-input" placeholder="阈值数值">
                 </div>
             </div>
             <div class="layui-form-item">
                 <label class="layui-form-label">持续时间(秒)</label>
                 <div class="layui-input-block">
                     <input type="number" name="trigger_duration_sec" value="{{$rule['trigger_duration_sec'] ?? ($old['trigger_duration_sec'] ?? 0)}}" class="layui-input" placeholder="0 表示立即触发">
+                </div>
+            </div>
+            </div><!-- /telemetry-fields -->
+
+            <div id="offline-fields" style="display:none;">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">离线超时(秒)</label>
+                    <div class="layui-input-block">
+                        <input type="number" name="offline_timeout_sec" value="{{$rule['offline_timeout_sec'] ?? ($old['offline_timeout_sec'] ?? 120)}}" class="layui-input" placeholder="心跳超时多少秒判离线">
+                    </div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">通知冷却(秒)</label>
+                <div class="layui-input-block">
+                    <input type="number" name="notify_cooldown_sec" value="{{$rule['notify_cooldown_sec'] ?? ($old['notify_cooldown_sec'] ?? 600)}}" class="layui-input" placeholder="同规则多少秒内只通知一次">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">恢复通知</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="notify_on_recovery" lay-skin="switch" lay-text="开|关" {{(($rule['notify_on_recovery'] ?? true)) ? 'checked' : ''}}>
                 </div>
             </div>
             <div class="layui-form-item">
@@ -138,6 +184,12 @@ function updateMetricSelect(deviceId) {
     layui.form.render('select');
 }
 
+function toggleTriggerType(tt) {
+    var isOffline = (tt === 'offline');
+    document.getElementById('telemetry-fields').style.display = isOffline ? 'none' : '';
+    document.getElementById('offline-fields').style.display = isOffline ? '' : 'none';
+}
+
 layui.use('form', function(){
     var form = layui.form;
     // 设备选择变更时更新指标下拉
@@ -145,9 +197,14 @@ layui.use('form', function(){
         currentTelemetryKey = ''; // 切换设备时清空已选指标
         updateMetricSelect(data.value);
     });
+    // 触发类型切换：显示/隐藏 遥测 vs 离线 相关字段
+    form.on('select(trigger-type-select)', function(data) {
+        toggleTriggerType(data.value);
+    });
     // 初始化：如果有已选设备，加载其指标
     var initDeviceId = document.getElementById('device-select').value;
     if (initDeviceId) updateMetricSelect(initDeviceId);
+    toggleTriggerType(document.getElementById('trigger-type-select').value);
 });
 </script>
 {/block}

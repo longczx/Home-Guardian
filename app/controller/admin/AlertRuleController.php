@@ -58,7 +58,13 @@ class AlertRuleController
     {
         $data = $request->post();
 
-        if (empty($data['name']) || empty($data['device_id']) || empty($data['telemetry_key']) || empty($data['condition'])) {
+        $isOffline = (($data['trigger_type'] ?? 'telemetry') === 'offline');
+
+        // 遥测型才要求指标/条件；离线型只需名称+设备
+        $missing = empty($data['name']) || empty($data['device_id'])
+            || (!$isOffline && (empty($data['telemetry_key']) || empty($data['condition'])));
+
+        if ($missing) {
             $devices  = Device::orderBy('name')->get(['id', 'name', 'device_uid', 'location', 'metric_fields'])->toArray();
             $channels = NotificationChannel::where('is_enabled', true)->get(['id', 'name', 'type'])->toArray();
             $metricDefinitions = MetricDefinition::ordered()->get(['metric_key', 'label'])->toArray();
@@ -74,10 +80,15 @@ class AlertRuleController
             ]);
         }
 
-        if (!is_array($data['threshold_value'] ?? null)) {
+        if ($isOffline) {
+            $data['telemetry_key'] = null;
+            $data['condition']     = null;
+            $data['threshold_value'] = null;
+        } elseif (!is_array($data['threshold_value'] ?? null)) {
             $data['threshold_value'] = [$data['threshold_value'] ?? 0];
         }
         $data['notification_channel_ids'] = $data['notification_channel_ids'] ?? [];
+        $data['notify_on_recovery'] = isset($data['notify_on_recovery']);  // checkbox
         $data['created_by'] = $request->adminUser['id'];
 
         AlertService::createRule($data);
@@ -113,10 +124,16 @@ class AlertRuleController
         }
 
         $data = $request->post();
-        if (isset($data['threshold_value']) && !is_array($data['threshold_value'])) {
+
+        if (($data['trigger_type'] ?? 'telemetry') === 'offline') {
+            $data['telemetry_key'] = null;
+            $data['condition']     = null;
+            $data['threshold_value'] = null;
+        } elseif (isset($data['threshold_value']) && !is_array($data['threshold_value'])) {
             $data['threshold_value'] = [$data['threshold_value']];
         }
         $data['notification_channel_ids'] = $data['notification_channel_ids'] ?? [];
+        $data['notify_on_recovery'] = isset($data['notify_on_recovery']);  // checkbox
 
         AlertService::updateRule($id, $data);
         return redirect('/admin/alert-rules');
