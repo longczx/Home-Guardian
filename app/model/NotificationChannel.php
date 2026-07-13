@@ -15,14 +15,18 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NotificationChannel extends Model
 {
+    use BelongsToHome;
+
     protected $table = 'notification_channels';
 
     protected $fillable = [
+        'home_id',
         'name',
         'type',
         'config',

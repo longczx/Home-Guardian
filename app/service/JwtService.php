@@ -23,6 +23,8 @@
 
 namespace app\service;
 
+use app\model\Home;
+use app\model\HomeUser;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Firebase\JWT\ExpiredException;
@@ -58,6 +60,8 @@ class JwtService
      * @param  array  $roles       角色名列表
      * @param  array  $permissions 权限集合
      * @param  array  $locations   允许的位置作用域
+     * @param  int    $homeId      归属家庭（单家庭版恒为默认家庭）
+     * @param  string $homeRole    家庭内角色 owner/admin/member
      * @return string 签名后的 JWT 字符串
      */
     public static function issueAccessToken(
@@ -65,7 +69,9 @@ class JwtService
         string $username,
         array $roles,
         array $permissions,
-        array $locations
+        array $locations,
+        int $homeId = Home::DEFAULT_HOME_ID,
+        string $homeRole = HomeUser::ROLE_MEMBER
     ): string {
         $now = time();
         $ttl = (int)(getenv('JWT_ACCESS_TTL') ?: 7200); // 默认 2 小时
@@ -77,6 +83,8 @@ class JwtService
             'roles'       => $roles,
             'permissions' => $permissions,
             'locations'   => $locations,
+            'home_id'     => $homeId,
+            'home_role'   => $homeRole,
             'tv'          => self::getTokenVersion($userId), // token 版本号（用于主动撤销）
             'iat'         => $now,                 // 签发时间
             'exp'         => $now + $ttl,          // 过期时间

@@ -9,14 +9,18 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProvisionCode extends Model
 {
+    use BelongsToHome;
+
     protected $table = 'provision_codes';
 
     protected $fillable = [
+        'home_id',
         'code',
         'user_id',
         'location',

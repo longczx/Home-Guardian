@@ -12,12 +12,15 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AlertRule extends Model
 {
+    use BelongsToHome;
+
     protected $table = 'alert_rules';
 
     /**
@@ -31,6 +34,7 @@ class AlertRule extends Model
     }
 
     protected $fillable = [
+        'home_id',
         'name',
         'description',
         'device_id',

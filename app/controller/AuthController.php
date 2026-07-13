@@ -16,6 +16,7 @@ namespace app\controller;
 use app\model\User;
 use app\service\AuthService;
 use app\service\AuditService;
+use app\service\HomeService;
 use app\exception\BusinessException;
 use support\Request;
 use OpenApi\Attributes as OA;
@@ -90,6 +91,55 @@ class AuthController
         ]);
 
         return api_success($result, '登录成功');
+    }
+
+    /**
+     * 邀请码注册
+     *
+     * POST /api/auth/register
+     * Body: { "invite_code": "ABCD2345", "username": "mom", "password": "123456", "full_name"?, "email"? }
+     */
+    #[OA\Post(
+        path: '/auth/register',
+        summary: '邀请码注册',
+        description: '凭家庭邀请码自助注册并加入家庭（邮箱可选），注册成功后直接返回登录态。',
+        tags: ['认证'],
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['invite_code', 'username', 'password'],
+            properties: [
+                new OA\Property(property: 'invite_code', type: 'string', example: 'ABCD2345'),
+                new OA\Property(property: 'username', type: 'string', example: 'mom'),
+                new OA\Property(property: 'password', type: 'string', minLength: 6),
+                new OA\Property(property: 'full_name', type: 'string', description: '可选'),
+                new OA\Property(property: 'email', type: 'string', description: '可选'),
+            ]
+        )
+    )]
+    #[OA\Response(response: 201, description: '注册成功，返回与登录一致的 token 结构')]
+    #[OA\Response(response: 422, description: '参数/邀请码无效', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    #[OA\Response(response: 410, description: '邀请码已使用或过期', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
+    public function register(Request $request)
+    {
+        $data = $request->post();
+
+        $user = HomeService::register($data);
+
+        // 注册即登录：直接签发双 token，App 端无需二次输入
+        $result = AuthService::login(
+            $user->username,
+            (string)($data['password'] ?? ''),
+            $request->header('user-agent', 'Unknown')
+        );
+
+        $request->user = (object)['id' => $user->id];
+        AuditService::log($request, 'register', 'user', $user->id, [
+            'username' => $user->username,
+        ]);
+
+        return api_success($result, '注册成功', 201);
     }
 
     /**
@@ -241,6 +291,8 @@ class AuthController
             'roles'       => $request->user->roles,
             'permissions' => $request->user->permissions,
             'locations'   => $request->user->locations,
+            'home_id'     => $request->user->home_id,
+            'home_role'   => $request->user->home_role,
         ]);
     }
 

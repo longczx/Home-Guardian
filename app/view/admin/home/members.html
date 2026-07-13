@@ -1,0 +1,73 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">
+        家庭成员 — {{$home['name'] ?? '我的家'}}
+        <a href="/admin/invite-codes" class="layui-btn layui-btn-sm layui-btn-normal" style="float:right;margin-top:3px;">
+            <i class="layui-icon layui-icon-add-1"></i> 邀请新成员
+        </a>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="60"><col><col><col width="120"><col width="80"><col><col width="220"></colgroup>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>姓名</th>
+                    <th>家庭角色</th>
+                    <th>状态</th>
+                    <th>加入时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {volist name="members" id="m"}
+                <tr>
+                    <td>{{$m['user']['id'] ?? $m['user_id']}}</td>
+                    <td>{{$m['user']['username'] ?? '-'}}</td>
+                    <td>{{$m['user']['full_name'] ?? '-'}}</td>
+                    <td>
+                        {if $m['role'] === 'owner'}
+                        <span class="layui-badge layui-bg-orange">户主</span>
+                        {elseif $m['role'] === 'admin'/}
+                        <span class="layui-badge layui-bg-blue">管理员</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">成员</span>
+                        {/if}
+                    </td>
+                    <td>
+                        {if !empty($m['user']['is_active'])}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">禁用</span>
+                        {/if}
+                    </td>
+                    <td>{{$m['joined_at'] ?? '-'}}</td>
+                    <td>
+                        {if $m['role'] !== 'owner'}
+                        <form method="post" action="/admin/home-members/{{$m['user_id']}}/role" style="display:inline;">
+                            <select name="role" onchange="this.form.submit()" style="height:26px;">
+                                <option value="">调整角色…</option>
+                                <option value="owner">转让户主</option>
+                                <option value="admin" {{$m['role'] === 'admin' ? 'disabled' : ''}}>设为管理员</option>
+                                <option value="member" {{$m['role'] === 'member' ? 'disabled' : ''}}>设为成员</option>
+                            </select>
+                        </form>
+                        <form method="post" action="/admin/home-members/{{$m['user_id']}}/remove" style="display:inline;" onsubmit="return confirm('确定将该用户移出家庭？其所有登录会话将立即失效。')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">移出家庭</button>
+                        </form>
+                        {else/}
+                        <span class="layui-word-aux">—</span>
+                        {/if}
+                    </td>
+                </tr>
+                {/volist}
+            </tbody>
+        </table>
+        <div class="layui-word-aux" style="margin-top:10px;">
+            移出家庭只解除成员关系，不删除用户账号（可在「用户管理」中处理账号）。户主唯一：转让后原户主自动降为管理员。
+        </div>
+    </div>
+</div>
+{/block}

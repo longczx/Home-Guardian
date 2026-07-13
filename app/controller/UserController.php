@@ -157,6 +157,9 @@ class UserController
                 self::syncLocations($user->id, $data['allowed_locations']);
             }
 
+            // 旁路建号也要有家庭成员关系（默认家庭 member），否则新用户无家庭上下文
+            \app\service\HomeService::ensureMembership($user->id);
+
             return $user;
         });
 
