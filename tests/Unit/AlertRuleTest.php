@@ -114,4 +114,23 @@ class AlertRuleTest extends TestCase
         $r = $this->rule('NOT_A_REAL_CONDITION', [30]);
         $this->assertFalse($r->evaluate(99));
     }
+
+    /* ============ 告警分级标签（闭环/降噪） ============ */
+
+    public function test_severity_label(): void
+    {
+        $this->assertSame('提醒', AlertRule::severityLabel(AlertRule::SEVERITY_INFO));
+        $this->assertSame('警告', AlertRule::severityLabel(AlertRule::SEVERITY_WARNING));
+        $this->assertSame('严重', AlertRule::severityLabel(AlertRule::SEVERITY_CRITICAL));
+        // 未知/空 → 默认「警告」
+        $this->assertSame('警告', AlertRule::severityLabel(null));
+        $this->assertSame('警告', AlertRule::severityLabel('bogus'));
+    }
+
+    public function test_valid_enum_sets(): void
+    {
+        $this->assertContains('critical', AlertRule::VALID_SEVERITIES);
+        $this->assertContains('offline', AlertRule::VALID_TRIGGER_TYPES);
+        $this->assertContains('telemetry', AlertRule::VALID_TRIGGER_TYPES);
+    }
 }

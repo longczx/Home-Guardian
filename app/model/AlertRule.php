@@ -41,6 +41,11 @@ class AlertRule extends Model
         'notification_channel_ids',
         'is_enabled',
         'created_by',
+        'severity',
+        'notify_cooldown_sec',
+        'notify_on_recovery',
+        'trigger_type',
+        'offline_timeout_sec',
     ];
 
     protected $casts = [
@@ -49,6 +54,9 @@ class AlertRule extends Model
         'trigger_duration_sec'     => 'integer',
         'is_enabled'              => 'boolean',
         'created_at'              => 'datetime',
+        'notify_cooldown_sec'     => 'integer',
+        'notify_on_recovery'      => 'boolean',
+        'offline_timeout_sec'     => 'integer',
     ];
 
     /**
@@ -72,6 +80,45 @@ class AlertRule extends Model
         self::CONDITION_BETWEEN,
         self::CONDITION_NOT_BETWEEN,
     ];
+
+    /* 告警分级 */
+    const SEVERITY_INFO     = 'info';
+    const SEVERITY_WARNING  = 'warning';
+    const SEVERITY_CRITICAL = 'critical';
+    const VALID_SEVERITIES  = [self::SEVERITY_INFO, self::SEVERITY_WARNING, self::SEVERITY_CRITICAL];
+
+    /* 触发类型 */
+    const TRIGGER_TELEMETRY = 'telemetry';  // 遥测阈值
+    const TRIGGER_OFFLINE   = 'offline';     // 设备离线
+    const VALID_TRIGGER_TYPES = [self::TRIGGER_TELEMETRY, self::TRIGGER_OFFLINE];
+
+    /**
+     * severity 的中文标签（用于通知标题）
+     */
+    public static function severityLabel(?string $severity): string
+    {
+        return match ($severity) {
+            self::SEVERITY_INFO     => '提醒',
+            self::SEVERITY_CRITICAL => '严重',
+            default                 => '警告',
+        };
+    }
+
+    /**
+     * 只查询遥测型规则（供告警引擎加载）
+     */
+    public function scopeTelemetryType($query)
+    {
+        return $query->where('trigger_type', self::TRIGGER_TELEMETRY);
+    }
+
+    /**
+     * 只查询离线型规则
+     */
+    public function scopeOfflineType($query)
+    {
+        return $query->where('trigger_type', self::TRIGGER_OFFLINE);
+    }
 
     /* ============================
      * 关联关系

@@ -93,50 +93,116 @@ class AlertService
      * @param int       $deviceId       触发设备 ID
      * @param mixed     $triggeredValue 触发时的遥测值
      */
-    public static function triggerAlert(AlertRule $rule, int $deviceId, mixed $triggeredValue): void
+    public static function triggerAlert(AlertRule $rule, int $deviceId, mixed $triggeredValue, string $kind = 'telemetry'): ?AlertLog
     {
-        // 记录告警日志
+        $cache = self::cache();
+        $activeKey = "alert:active:{$rule->id}:{$deviceId}";
+
+        // 降噪去重：已处于"激活(firing)"状态则不重复建日志/发通知，直到恢复
+        if ($cache) {
+            try { if ($cache->get($activeKey)) return null; } catch (\Throwable $e) {}
+        }
+
+        $severity = $rule->severity ?: AlertRule::SEVERITY_WARNING;
+
         $alertLog = AlertLog::create([
             'rule_id'         => $rule->id,
             'device_id'       => $deviceId,
             'triggered_at'    => now(),
             'triggered_value' => is_array($triggeredValue) ? $triggeredValue : [$triggeredValue],
             'status'          => AlertLog::STATUS_TRIGGERED,
+            'severity'        => $severity,
         ]);
 
-        // 通过 Redis Pub/Sub 推送到 WebSocket（前端实时弹窗）
-        $wsPayload = json_encode([
-            'type'    => 'alert',
-            'data'    => [
-                'alert_log_id' => $alertLog->id,
-                'rule_id'      => $rule->id,
-                'rule_name'    => $rule->name,
-                'device_id'    => $deviceId,
-                'value'        => $triggeredValue,
-                'triggered_at' => $alertLog->triggered_at->toIso8601String(),
-            ],
-        ], JSON_UNESCAPED_UNICODE);
-
-        try {
-            Redis::connection('pubsub')->publish('ws:broadcast', $wsPayload);
-        } catch (\Throwable $e) {
-            Log::error("告警 WebSocket 推送失败: {$e->getMessage()}");
+        // 置激活标记（安全 TTL 30 天，防止异常残留）
+        if ($cache) {
+            try { $cache->setex($activeKey, 2592000, (string)$alertLog->id); } catch (\Throwable $e) {}
         }
 
-        // 异步发送通知（推入 Redis 队列，由通知进程处理）
-        if (!empty($rule->notification_channel_ids)) {
-            $notifyTask = json_encode([
-                'channel_ids' => $rule->notification_channel_ids,
-                'title'       => "告警触发: {$rule->name}",
-                'content'     => "设备 ID {$deviceId} 的 {$rule->telemetry_key} 值 ({$triggeredValue}) 触发了告警规则 [{$rule->name}]",
-                'extra'       => [
-                    'rule_id'   => $rule->id,
-                    'device_id' => $deviceId,
-                    'value'     => $triggeredValue,
-                ],
-            ], JSON_UNESCAPED_UNICODE);
+        self::pushWs('alert', $rule, $deviceId, [
+            'alert_log_id' => $alertLog->id,
+            'severity'     => $severity,
+            'value'        => $triggeredValue,
+            'triggered_at' => $alertLog->triggered_at->toIso8601String(),
+        ]);
 
-            Redis::connection('queue')->lPush('notify:queue', $notifyTask);
+        // 通知：受冷却窗口约束，防止同规则反复轰炸（闪断场景）
+        if (!empty($rule->notification_channel_ids)) {
+            $cooldownKey = "alert:cooldown:{$rule->id}:{$deviceId}";
+            $inCooldown = false;
+            if ($cache) {
+                try { $inCooldown = (bool)$cache->get($cooldownKey); } catch (\Throwable $e) {}
+            }
+            if (!$inCooldown) {
+                $label = AlertRule::severityLabel($severity);
+                $content = $kind === AlertRule::TRIGGER_OFFLINE
+                    ? "设备(ID {$deviceId}) 已离线，触发规则 [{$rule->name}]"
+                    : "设备(ID {$deviceId}) 的 {$rule->telemetry_key} 值 (" . self::scalar($triggeredValue) . ") 触发规则 [{$rule->name}]";
+                self::queueNotify($rule->notification_channel_ids, "【{$label}】{$rule->name}", $content, [
+                    'rule_id' => $rule->id, 'device_id' => $deviceId, 'severity' => $severity, 'value' => $triggeredValue,
+                ]);
+                $cd = (int)($rule->notify_cooldown_sec ?? 600);
+                if ($cache && $cd > 0) {
+                    try { $cache->setex($cooldownKey, $cd, (string)time()); } catch (\Throwable $e) {}
+                }
+            }
+        }
+
+        return $alertLog;
+    }
+
+    /**
+     * 条件恢复：自动 resolve 该规则+设备的激活告警，并（可选）发恢复通知。
+     * 由告警引擎在"条件不再满足"时调用；无激活告警时快速返回。
+     */
+    public static function resolveActive(AlertRule $rule, int $deviceId, mixed $value = null): void
+    {
+        $cache = self::cache();
+        $activeKey = "alert:active:{$rule->id}:{$deviceId}";
+
+        // 无激活标记 → 不查库直接返回（热路径高频调用）
+        if ($cache) {
+            try { if (!$cache->get($activeKey)) return; } catch (\Throwable $e) {}
+        }
+
+        $affected = AlertLog::where('rule_id', $rule->id)
+            ->where('device_id', $deviceId)
+            ->whereIn('status', [AlertLog::STATUS_TRIGGERED, AlertLog::STATUS_ACKNOWLEDGED])
+            ->update(['status' => AlertLog::STATUS_RESOLVED, 'resolved_at' => now()]);
+
+        if ($cache) { try { $cache->del($activeKey); } catch (\Throwable $e) {} }
+
+        if ($affected <= 0) return;
+
+        self::pushWs('alert_resolved', $rule, $deviceId, ['value' => $value]);
+
+        if ($rule->notify_on_recovery && !empty($rule->notification_channel_ids)) {
+            self::queueNotify($rule->notification_channel_ids, "【恢复】{$rule->name}",
+                "设备(ID {$deviceId}) 的规则 [{$rule->name}] 已恢复正常", [
+                'rule_id' => $rule->id, 'device_id' => $deviceId, 'event' => 'recovered',
+            ]);
+        }
+    }
+
+    /**
+     * 设备离线 → 触发该设备所有 offline 型规则
+     */
+    public static function triggerOfflineAlerts(int $deviceId): void
+    {
+        $rules = AlertRule::enabled()->where('device_id', $deviceId)->offlineType()->get();
+        foreach ($rules as $rule) {
+            self::triggerAlert($rule, $deviceId, 'offline', AlertRule::TRIGGER_OFFLINE);
+        }
+    }
+
+    /**
+     * 设备恢复在线 → 自动解决该设备的 offline 告警
+     */
+    public static function resolveOfflineAlerts(int $deviceId): void
+    {
+        $rules = AlertRule::enabled()->where('device_id', $deviceId)->offlineType()->get();
+        foreach ($rules as $rule) {
+            self::resolveActive($rule, $deviceId, 'online');
         }
     }
 
@@ -179,20 +245,86 @@ class AlertService
         }
 
         $alertLog->update([
-            'status' => AlertLog::STATUS_RESOLVED,
+            'status'      => AlertLog::STATUS_RESOLVED,
+            'resolved_at' => now(),
         ]);
+
+        // 清激活标记，允许该规则+设备后续再次触发
+        $cache = self::cache();
+        if ($cache) {
+            try { $cache->del("alert:active:{$alertLog->rule_id}:{$alertLog->device_id}"); } catch (\Throwable $e) {}
+        }
 
         return $alertLog->fresh();
     }
 
     /**
-     * 获取所有启用的告警规则（供 AlertEngine 加载）
+     * 获取所有启用的【遥测型】告警规则（供 AlertEngine 加载匹配）
+     * offline 型规则由 MqttSubscriber 的上下线事件处理，不在此列。
      *
      * @return \Illuminate\Database\Eloquent\Collection
      */
     public static function getEnabledRules()
     {
-        return AlertRule::enabled()->with('device:id,device_uid')->get();
+        return AlertRule::enabled()->telemetryType()->with('device:id,device_uid')->get();
+    }
+
+    /* ============================
+     * 内部辅助
+     * ============================ */
+
+    /** DB0 缓存连接（用于激活标记/冷却），失败返回 null（fail-open） */
+    private static function cache()
+    {
+        try {
+            return Redis::connection('default');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /** 推送告警相关事件到 WebSocket */
+    private static function pushWs(string $type, AlertRule $rule, int $deviceId, array $data): void
+    {
+        $payload = json_encode([
+            'type' => $type,
+            'data' => array_merge([
+                'rule_id'   => $rule->id,
+                'rule_name' => $rule->name,
+                'device_id' => $deviceId,
+            ], $data),
+        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            Redis::connection('pubsub')->publish('ws:broadcast', $payload);
+        } catch (\Throwable $e) {
+            Log::error("告警 WS 推送失败: {$e->getMessage()}");
+        }
+    }
+
+    /** 通知任务入队（由 NotificationProcess 异步发送） */
+    private static function queueNotify(array $channelIds, string $title, string $content, array $extra): void
+    {
+        $task = json_encode([
+            'channel_ids' => $channelIds,
+            'title'       => $title,
+            'content'     => $content,
+            'extra'       => $extra,
+        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            Redis::connection('queue')->lPush('notify:queue', $task);
+        } catch (\Throwable $e) {
+            Log::error("通知入队失败: {$e->getMessage()}");
+        }
+    }
+
+    /** 把遥测值转成可读标量字符串 */
+    private static function scalar(mixed $v): string
+    {
+        if (is_array($v)) return json_encode($v, JSON_UNESCAPED_UNICODE);
+        if (is_bool($v))  return $v ? 'true' : 'false';
+        return (string)$v;
     }
 
     /**

@@ -326,6 +326,17 @@ class MqttSubscriber
 
             $this->redisPub->publish('ws:broadcast', $wsMessage);
 
+            // 离线告警闭环：上线→解决 offline 告警；离线→触发（内部按激活标记去重，重复上报安全）
+            try {
+                if ($isOnline) {
+                    \app\service\AlertService::resolveOfflineAlerts($device->id);
+                } else {
+                    \app\service\AlertService::triggerOfflineAlerts($device->id);
+                }
+            } catch (\Throwable $e) {
+                Log::error("离线告警处理失败: {$e->getMessage()}");
+            }
+
             // 执行器状态上报：state/post 带 state 字段时，落库并推送（闭环设备的真实状态）
             if (isset($data['state']) && is_array($data['state'])) {
                 try {
@@ -355,6 +366,9 @@ class MqttSubscriber
                         'is_online'       => false,
                     ], JSON_UNESCAPED_UNICODE);
                     $this->redisPub->publish('ws:broadcast', $sensorMsg);
+
+                    try { \app\service\AlertService::triggerOfflineAlerts($sensor->id); }
+                    catch (\Throwable $e) { Log::error("传感器离线告警失败: {$e->getMessage()}"); }
                 }
             }
         }

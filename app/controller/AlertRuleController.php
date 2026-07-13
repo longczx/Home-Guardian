@@ -115,30 +115,48 @@ class AlertRuleController
     {
         $data = $request->post();
 
+        $triggerType = $data['trigger_type'] ?? AlertRule::TRIGGER_TELEMETRY;
+
         // 参数校验
         $errors = [];
         if (empty($data['name'])) $errors[] = 'name 不能为空';
         if (empty($data['device_id'])) $errors[] = 'device_id 不能为空';
-        if (empty($data['telemetry_key'])) $errors[] = 'telemetry_key 不能为空';
-        if (empty($data['condition'])) $errors[] = 'condition 不能为空';
-        if (!isset($data['threshold_value'])) $errors[] = 'threshold_value 不能为空';
 
-        if (!empty($data['condition']) && !in_array($data['condition'], AlertRule::VALID_CONDITIONS, true)) {
-            $errors[] = 'condition 非法，必须是 ' . implode(' / ', AlertRule::VALID_CONDITIONS) . ' 之一';
+        if (!in_array($triggerType, AlertRule::VALID_TRIGGER_TYPES, true)) {
+            $errors[] = 'trigger_type 非法，必须是 ' . implode(' / ', AlertRule::VALID_TRIGGER_TYPES);
+        }
+        if (isset($data['severity']) && !in_array($data['severity'], AlertRule::VALID_SEVERITIES, true)) {
+            $errors[] = 'severity 非法，必须是 ' . implode(' / ', AlertRule::VALID_SEVERITIES);
+        }
+
+        // 遥测型才需要指标/条件/阈值；离线型不需要
+        if ($triggerType === AlertRule::TRIGGER_TELEMETRY) {
+            if (empty($data['telemetry_key'])) $errors[] = 'telemetry_key 不能为空';
+            if (empty($data['condition'])) $errors[] = 'condition 不能为空';
+            if (!isset($data['threshold_value'])) $errors[] = 'threshold_value 不能为空';
+            if (!empty($data['condition']) && !in_array($data['condition'], AlertRule::VALID_CONDITIONS, true)) {
+                $errors[] = 'condition 非法，必须是 ' . implode(' / ', AlertRule::VALID_CONDITIONS) . ' 之一';
+            }
         }
 
         if (!empty($errors)) {
             return api_error('参数验证失败', 422, 1000, $errors);
         }
 
-        // 确保 threshold_value 以数组格式存储
-        if (!is_array($data['threshold_value'])) {
-            $data['threshold_value'] = [$data['threshold_value']];
-        }
-
-        // 区间条件需要 [min, max] 两个数值阈值
-        if ($err = self::validateThreshold($data['condition'], $data['threshold_value'])) {
-            return api_error('参数验证失败', 422, 1000, [$err]);
+        if ($triggerType === AlertRule::TRIGGER_TELEMETRY) {
+            // 确保 threshold_value 以数组格式存储
+            if (!is_array($data['threshold_value'])) {
+                $data['threshold_value'] = [$data['threshold_value']];
+            }
+            // 区间条件需要 [min, max] 两个数值阈值
+            if ($err = self::validateThreshold($data['condition'], $data['threshold_value'])) {
+                return api_error('参数验证失败', 422, 1000, [$err]);
+            }
+        } else {
+            // 离线规则：清空无关的遥测字段
+            $data['telemetry_key']   = null;
+            $data['condition']       = null;
+            $data['threshold_value'] = null;
         }
 
         $data['created_by'] = $request->userId();

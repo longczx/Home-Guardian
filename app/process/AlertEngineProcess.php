@@ -188,13 +188,14 @@ class AlertEngineProcess
 
                     // 评估条件
                     if ($rule->evaluate($numericValue)) {
-                        // 防抖检查
+                        // 防抖通过则触发（AlertService 内部按"激活标记"去重，持续满足不会重复告警）
                         if ($this->checkDebounce($rule)) {
                             AlertService::triggerAlert($rule, $deviceId, $numericValue);
                         }
                     } else {
-                        // 条件不满足，清除防抖计时
+                        // 条件不再满足：清防抖 + 自动恢复(resolve)激活告警(内部无激活则快速返回)
                         $this->clearDebounce($rule);
+                        AlertService::resolveActive($rule, $deviceId, $numericValue);
                     }
                 }
 
