@@ -1,0 +1,89 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">生成邀请码</div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="post" action="/admin/invite-codes/store">
+            <div class="layui-inline">
+                <label class="layui-form-label" style="width:90px;">注册后角色</label>
+                <div class="layui-input-inline" style="width:140px;">
+                    <select name="role">
+                        <option value="member">成员</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-inline">
+                <label class="layui-form-label" style="width:90px;">有效期(小时)</label>
+                <div class="layui-input-inline" style="width:100px;">
+                    <input type="number" name="ttl_hours" value="72" min="1" max="720" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-inline">
+                <button class="layui-btn" lay-submit>生成邀请码</button>
+            </div>
+        </form>
+        <div class="layui-word-aux" style="margin-top:6px;">
+            邀请码一次性有效。新用户在 App / 移动端注册页填写邀请码即可自助注册并加入家庭。
+        </div>
+    </div>
+</div>
+
+<div class="layui-card" style="margin-top:15px;">
+    <div class="layui-card-header">邀请码列表</div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <colgroup><col width="140"><col width="110"><col width="90"><col><col><col><col width="90"></colgroup>
+            <thead>
+                <tr>
+                    <th>邀请码</th>
+                    <th>注册后角色</th>
+                    <th>状态</th>
+                    <th>生成者 / 时间</th>
+                    <th>过期时间</th>
+                    <th>使用者 / 时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {volist name="invites" id="iv"}
+                <tr>
+                    <td style="font-family:monospace;font-size:16px;letter-spacing:2px;">{{$iv['code']}}</td>
+                    <td>{{$iv['role'] === 'admin' ? '管理员' : '成员'}}</td>
+                    <td>
+                        {if $iv['status'] === 'pending'}
+                        <span class="layui-badge layui-bg-green">待使用</span>
+                        {elseif $iv['status'] === 'used'/}
+                        <span class="layui-badge layui-bg-blue">已使用</span>
+                        {else/}
+                        <span class="layui-badge layui-bg-gray">已过期</span>
+                        {/if}
+                    </td>
+                    <td>{{$iv['creator']['username'] ?? '-'}}<br><span class="layui-word-aux">{{$iv['created_at'] ?? ''}}</span></td>
+                    <td>{{$iv['expires_at'] ?? '-'}}</td>
+                    <td>
+                        {if !empty($iv['used_by_user'])}
+                        {{$iv['used_by_user']['username']}}<br><span class="layui-word-aux">{{$iv['used_at'] ?? ''}}</span>
+                        {else/}
+                        -
+                        {/if}
+                    </td>
+                    <td>
+                        {if $iv['status'] === 'pending'}
+                        <form method="post" action="/admin/invite-codes/{{$iv['id']}}/delete" style="display:inline;" onsubmit="return confirm('确定作废该邀请码？')">
+                            <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger">作废</button>
+                        </form>
+                        {else/}
+                        <span class="layui-word-aux">—</span>
+                        {/if}
+                    </td>
+                </tr>
+                {/volist}
+            </tbody>
+        </table>
+        {empty name="invites"}
+        <div class="layui-word-aux" style="padding:20px 0;text-align:center;">暂无邀请码</div>
+        {/empty}
+    </div>
+</div>
+{/block}

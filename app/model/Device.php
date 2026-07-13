@@ -15,11 +15,14 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Device extends Model
 {
+    use BelongsToHome;
+
     /**
      * 关联的数据表名
      */
@@ -32,6 +35,7 @@ class Device extends Model
      * mqtt_password_hash 不在此列，密码哈希由 Service 层控制写入。
      */
     protected $fillable = [
+        'home_id',
         'device_uid',
         'name',
         'type',

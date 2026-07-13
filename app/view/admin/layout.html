@@ -68,9 +68,11 @@
                 <li class="layui-nav-item {{$nav === 'automations' ? 'layui-this' : ''}}">
                     <a href="/admin/automations"><i class="layui-icon layui-icon-engine"></i> 自动化</a>
                 </li>
-                <li class="layui-nav-item {{in_array($nav, ['users','roles']) ? 'layui-nav-itemed' : ''}}">
+                <li class="layui-nav-item {{in_array($nav, ['users','roles','home-members','invite-codes']) ? 'layui-nav-itemed' : ''}}">
                     <a href="javascript:;"><i class="layui-icon layui-icon-user"></i> 用户权限</a>
                     <dl class="layui-nav-child">
+                        <dd class="{{$nav === 'home-members' ? 'layui-this' : ''}}"><a href="/admin/home-members">家庭成员</a></dd>
+                        <dd class="{{$nav === 'invite-codes' ? 'layui-this' : ''}}"><a href="/admin/invite-codes">邀请码</a></dd>
                         <dd class="{{$nav === 'users' ? 'layui-this' : ''}}"><a href="/admin/users">用户管理</a></dd>
                         <dd class="{{$nav === 'roles' ? 'layui-this' : ''}}"><a href="/admin/roles">角色管理</a></dd>
                     </dl>

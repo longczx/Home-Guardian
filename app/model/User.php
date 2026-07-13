@@ -79,6 +79,26 @@ class User extends Model
         return $this->hasMany(Dashboard::class, 'owner_id');
     }
 
+    /**
+     * 家庭成员关系记录
+     */
+    public function homeMemberships(): HasMany
+    {
+        return $this->hasMany(HomeUser::class, 'user_id');
+    }
+
+    /**
+     * 用户在指定家庭内的角色（单家庭版默认查默认家庭）
+     *
+     * @return string|null owner / admin / member，非成员返回 null
+     */
+    public function homeRole(int $homeId = Home::DEFAULT_HOME_ID): ?string
+    {
+        return $this->homeMemberships()
+            ->where('home_id', $homeId)
+            ->value('role');
+    }
+
     /* ============================
      * 业务方法
      * ============================ */

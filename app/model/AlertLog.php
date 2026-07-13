@@ -8,16 +8,20 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AlertLog extends Model
 {
+    use BelongsToHome;
+
     protected $table = 'alert_logs';
 
     public $timestamps = false;
 
     protected $fillable = [
+        'home_id',
         'rule_id',
         'device_id',
         'triggered_at',

@@ -17,12 +17,31 @@
 
 namespace app\service;
 
+use app\model\Home;
+use app\model\HomeUser;
 use app\model\User;
 use app\model\RefreshToken;
 use app\exception\BusinessException;
 
 class AuthService
 {
+    /**
+     * 用户的家庭成员关系（单家庭版取最早加入的一条）
+     *
+     * 无成员记录时兜底为默认家庭的 member（理论上迁移已归位全部存量用户）。
+     *
+     * @return array{home_id:int, role:string}
+     */
+    private static function homeContext(int $userId): array
+    {
+        $membership = HomeUser::where('user_id', $userId)->orderBy('home_id')->first();
+
+        return [
+            'home_id' => (int)($membership->home_id ?? Home::DEFAULT_HOME_ID),
+            'role'    => $membership->role ?? HomeUser::ROLE_MEMBER,
+        ];
+    }
+
     /**
      * 用户登录
      *
@@ -55,8 +74,14 @@ class AuthService
 
         // 收集 JWT 需要的用户权限信息
         $roles = $user->roles->pluck('name')->toArray();
-        $permissions = $user->getMergedPermissions();
         $locations = $user->getAllowedLocationList();
+
+        // 家庭上下文：家庭角色映射出的权限与平台角色权限取并集
+        $home = self::homeContext($user->id);
+        $permissions = HomeUser::mergePermissions(
+            $user->getMergedPermissions(),
+            HomeUser::permissionsFor($home['role'])
+        );
 
         // 签发 access_token（JWT，包含完整权限信息）
         $accessToken = JwtService::issueAccessToken(
@@ -64,7 +89,9 @@ class AuthService
             $user->username,
             $roles,
             $permissions,
-            $locations
+            $locations,
+            $home['home_id'],
+            $home['role']
         );
 
         // 生成 refresh_token 并存入数据库
@@ -83,10 +110,12 @@ class AuthService
             'refresh_token' => $refreshToken,
             'expires_in'    => (int)(getenv('JWT_ACCESS_TTL') ?: 7200),
             'user' => [
-                'id'       => $user->id,
-                'username' => $user->username,
-                'email'    => $user->email,
-                'roles'    => $roles,
+                'id'        => $user->id,
+                'username'  => $user->username,
+                'email'     => $user->email,
+                'roles'     => $roles,
+                'home_id'   => $home['home_id'],
+                'home_role' => $home['role'],
             ],
         ];
     }
@@ -131,15 +160,22 @@ class AuthService
 
         // 签发新的 access_token
         $roles = $user->roles->pluck('name')->toArray();
-        $permissions = $user->getMergedPermissions();
         $locations = $user->getAllowedLocationList();
+
+        $home = self::homeContext($user->id);
+        $permissions = HomeUser::mergePermissions(
+            $user->getMergedPermissions(),
+            HomeUser::permissionsFor($home['role'])
+        );
 
         $newAccessToken = JwtService::issueAccessToken(
             $user->id,
             $user->username,
             $roles,
             $permissions,
-            $locations
+            $locations,
+            $home['home_id'],
+            $home['role']
         );
 
         // 签发新的 refresh_token

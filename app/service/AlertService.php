@@ -106,6 +106,7 @@ class AlertService
         $severity = $rule->severity ?: AlertRule::SEVERITY_WARNING;
 
         $alertLog = AlertLog::create([
+            'home_id'         => $rule->home_id ?? \app\model\Home::DEFAULT_HOME_ID, // 常驻进程无请求上下文，随规则归属
             'rule_id'         => $rule->id,
             'device_id'       => $deviceId,
             'triggered_at'    => now(),

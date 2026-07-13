@@ -45,6 +45,12 @@ class AuthMiddleware implements MiddlewareInterface
             return api_error('认证令牌无效或已过期', 401, 1001);
         }
 
+        // 用户体系升级后 JWT 必须携带家庭上下文；旧版 token 一律视为过期，
+        // 客户端会走 refresh 流程静默换取带 home_id 的新 token（等效强制重签）。
+        if (!isset($payload->home_id)) {
+            return api_error('认证令牌无效或已过期', 401, 1001);
+        }
+
         // 将用户信息挂载到 request 对象上
         // 后续代码通过 $request->user->id / $request->isAdmin() 等方式访问
         $request->user = (object)[
@@ -53,6 +59,8 @@ class AuthMiddleware implements MiddlewareInterface
             'roles'       => $payload->roles ?? [],
             'permissions' => $payload->permissions ?? (object)[],
             'locations'   => $payload->locations ?? [],
+            'home_id'     => (int)$payload->home_id,
+            'home_role'   => $payload->home_role ?? \app\model\HomeUser::ROLE_MEMBER,
         ];
 
         // 继续处理请求

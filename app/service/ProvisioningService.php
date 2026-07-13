@@ -107,7 +107,9 @@ class ProvisioningService
             $created = [];
 
             // 1. 网关（幂等 upsert：支持恢复出厂后重新配网）
+            // home_id 继承配对码归属：设备注册即归属生成该码的家庭
             $gwData = [
+                'home_id'            => $record->home_id,
                 'device_uid'         => $gwUid,
                 'name'               => $gw['name'] ?? $gwUid,
                 'type'               => 'gateway',
@@ -126,6 +128,7 @@ class ProvisioningService
             foreach (($payload['sensors'] ?? []) as $i => $s) {
                 $sUid = trim((string)($s['device_uid'] ?? '')) ?: ($gwUid . '-s' . ($i + 1));
                 $sData = [
+                    'home_id'       => $record->home_id,
                     'device_uid'    => $sUid,
                     'name'          => $s['name'] ?? $sUid,
                     'type'          => $s['type'] ?? 'sensor',

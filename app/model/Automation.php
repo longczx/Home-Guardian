@@ -14,14 +14,18 @@
 
 namespace app\model;
 
+use app\model\concern\BelongsToHome;
 use support\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Automation extends Model
 {
+    use BelongsToHome;
+
     protected $table = 'automations';
 
     protected $fillable = [
+        'home_id',
         'name',
         'description',
         'trigger_type',

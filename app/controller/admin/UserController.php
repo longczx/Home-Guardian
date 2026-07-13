@@ -92,6 +92,9 @@ class UserController
             $this->syncLocations($user->id, $locations);
         }
 
+        // 后台建号也补默认家庭成员关系，保证新用户有家庭上下文
+        \app\service\HomeService::ensureMembership($user->id);
+
         return redirect('/admin/users');
     }
 

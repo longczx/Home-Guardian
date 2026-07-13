@@ -52,6 +52,14 @@ Route::group('/admin', function () {
     Route::post('/users/{id:\d+}/update', [app\controller\admin\UserController::class, 'update']);
     Route::post('/users/{id:\d+}/delete', [app\controller\admin\UserController::class, 'delete']);
 
+    // 家庭治理（成员 + 邀请码）
+    Route::get('/home-members', [app\controller\admin\HomeController::class, 'members']);
+    Route::post('/home-members/{userId:\d+}/role', [app\controller\admin\HomeController::class, 'updateMemberRole']);
+    Route::post('/home-members/{userId:\d+}/remove', [app\controller\admin\HomeController::class, 'removeMember']);
+    Route::get('/invite-codes', [app\controller\admin\HomeController::class, 'invites']);
+    Route::post('/invite-codes/store', [app\controller\admin\HomeController::class, 'storeInvite']);
+    Route::post('/invite-codes/{id:\d+}/delete', [app\controller\admin\HomeController::class, 'deleteInvite']);
+
     // 角色管理
     Route::get('/roles', [app\controller\admin\RoleController::class, 'index']);
     Route::get('/roles/create', [app\controller\admin\RoleController::class, 'create']);
@@ -154,6 +162,7 @@ Route::get('/api/health', function () {
 Route::group('/api/auth', function () {
     Route::post('/login', [app\controller\AuthController::class, 'login']);
     Route::post('/refresh', [app\controller\AuthController::class, 'refresh']);
+    Route::post('/register', [app\controller\AuthController::class, 'register']);
 });
 
 /*
@@ -188,6 +197,22 @@ Route::group('/api', function () {
     Route::post('/auth/logout-all', [app\controller\AuthController::class, 'logoutAll']);
     Route::post('/auth/change-password', [app\controller\AuthController::class, 'changePassword'])
         ->middleware([AuditLogMiddleware::class]);
+
+    /* ---------- 家庭与邀请码（家庭治理走 home_role 校验） ---------- */
+    Route::get('/home', [app\controller\HomeController::class, 'show']);
+    Route::put('/home', [app\controller\HomeController::class, 'update'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_OWNER), AuditLogMiddleware::class]);
+    Route::put('/home/members/{userId:\d+}', [app\controller\HomeController::class, 'updateMember'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_OWNER), AuditLogMiddleware::class]);
+    Route::delete('/home/members/{userId:\d+}', [app\controller\HomeController::class, 'removeMember'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+
+    Route::get('/invites', [app\controller\InviteController::class, 'index'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::post('/invites', [app\controller\InviteController::class, 'store'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+    Route::delete('/invites/{id:\d+}', [app\controller\InviteController::class, 'destroy'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
 
     /* ---------- 设备配网（生成配对码 / 轮询状态） ---------- */
     Route::post('/provisioning/codes', [app\controller\ProvisioningController::class, 'createCode'])
@@ -283,14 +308,15 @@ Route::group('/api', function () {
         ->middleware([new PermissionMiddleware('alerts.view')]);
     Route::get('/alert-logs/{id:\d+}', [app\controller\AlertLogController::class, 'show'])
         ->middleware([new PermissionMiddleware('alerts.view')]);
+    // 确认/解决告警使用独立的 alerts.ack 权限：member 可处理告警，但不能改规则（alerts.edit）
     Route::patch('/alert-logs/{id:\d+}/acknowledge', [app\controller\AlertLogController::class, 'acknowledge'])
-        ->middleware([new PermissionMiddleware('alerts.edit')]);
+        ->middleware([new PermissionMiddleware('alerts.ack')]);
     Route::patch('/alert-logs/{id:\d+}/resolve', [app\controller\AlertLogController::class, 'resolve'])
-        ->middleware([new PermissionMiddleware('alerts.edit')]);
+        ->middleware([new PermissionMiddleware('alerts.ack')]);
     Route::patch('/alert-logs/batch-acknowledge', [app\controller\AlertLogController::class, 'batchAcknowledge'])
-        ->middleware([new PermissionMiddleware('alerts.edit')]);
+        ->middleware([new PermissionMiddleware('alerts.ack')]);
     Route::patch('/alert-logs/batch-resolve', [app\controller\AlertLogController::class, 'batchResolve'])
-        ->middleware([new PermissionMiddleware('alerts.edit')]);
+        ->middleware([new PermissionMiddleware('alerts.ack')]);
 
     /* ---------- 仪表盘 ---------- */
     Route::get('/dashboards', [app\controller\DashboardController::class, 'index'])

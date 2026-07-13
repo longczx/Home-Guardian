@@ -34,7 +34,8 @@
     *   **后台管理面板** — Webman + LayUI 服务端渲染，session 认证，供管理员进行系统配置和设备管理。
     *   **移动端前端** — React 19 + Ant Design Mobile + PWA，JWT 认证，面向普通用户查看环境数据和控制设备。
 *   **完全容器化:** 使用 Docker Compose 一键启动所有服务。
-*   **灵活权限:** RBAC + 位置作用域双层控制。
+*   **灵活权限:** 家庭三级角色（户主/管理员/成员）+ RBAC + 位置作用域多层控制。
+*   **家庭用户体系:** 邀请码自助注册加入家庭，资源按家庭作用域隔离（多家庭地基已就位，详见 `docs/design/home-user-system.md`）。
 
 ## 系统架构
 
@@ -373,6 +374,24 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 // PUBLISH:   home/upstream/esp32-livingroom-01/telemetry/post
 // SUBSCRIBE: home/downstream/esp32-livingroom-01/command/set
 ```
+
+## 家庭用户体系（单家庭制）
+
+平台以**家庭（Home）**为资源边界：设备、告警规则、告警日志、自动化、通知渠道、配网码全部归属家庭，查询层通过 Eloquent Global Scope 强制作用域。当前版本为单家庭制（全服一个默认家庭「我的家」），schema 已按多家庭设计，未来升级为"解锁"而非"重构"。
+
+**家庭内三级角色：**
+
+| 角色 | 能力 |
+|:---|:---|
+| **owner**（户主，唯一） | 一切能力 + 修改成员角色 / 转让户主 / 改家庭名 |
+| **admin**（管理员） | 设备 CRUD 与配网、告警规则、通知渠道、自动化、生成邀请码、移除普通成员 |
+| **member**（成员） | 查看设备/遥测/告警、控制执行器、确认与解决告警 |
+
+**邀请注册**：owner/admin 生成一次性邀请码（默认 72h 有效，后台「用户权限 → 邀请码」或 `POST /api/invites`），新用户凭码调用 `POST /api/auth/register` 自助注册并自动入家庭（邮箱可选），注册成功直接返回登录态。
+
+**成员管理接口**：`GET/PUT /api/home`、`PUT/DELETE /api/home/members/{userId}`；后台对应「用户权限 → 家庭成员」页。
+
+> 升级部署后需运行迁移 `webman migrate:run`；旧 access_token 会被拒绝，客户端将通过 refresh 流程自动换取带家庭上下文的新 token。
 
 ## 设备自助配网
 
