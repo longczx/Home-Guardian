@@ -50,6 +50,7 @@ class NotificationChannel extends Model
     const TYPE_WECHAT_WORK = 'wechat_work';
     const TYPE_DINGTALK    = 'dingtalk';
     const TYPE_IN_APP      = 'in_app';
+    const TYPE_UNIPUSH     = 'unipush';
 
     /**
      * 创建此渠道的用户

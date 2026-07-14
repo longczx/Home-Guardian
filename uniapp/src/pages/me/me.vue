@@ -5,6 +5,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useServerStore } from '@/stores/server';
 import { ensureReady, toast } from '@/utils/guard';
+import { unregisterPush } from '@/utils/push';
 
 const auth = useAuthStore();
 const server = useServerStore();
@@ -30,8 +31,9 @@ function onLogout() {
   uni.showModal({
     title: '退出登录',
     content: '确定退出当前账号？',
-    success: (r) => {
+    success: async (r) => {
       if (r.confirm) {
+        await unregisterPush(); // 先注销 cid（趁 token 还在）
         auth.logout();
         uni.reLaunch({ url: '/pages/auth/login' });
       }
@@ -65,7 +67,7 @@ function onLogout() {
       <view v-if="auth.canManage" class="item" @tap="uni.navigateTo({ url: '/pages/manage/invite' })">
         <text class="t">邀请家人</text><text class="arrow">›</text>
       </view>
-      <view class="item" @tap="todo">
+      <view class="item" @tap="uni.navigateTo({ url: '/pages/me/push-settings' })">
         <text class="t">推送设置</text><text class="arrow">›</text>
       </view>
       <view class="item" @tap="todo">

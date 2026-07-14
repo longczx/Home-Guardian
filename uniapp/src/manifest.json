@@ -16,7 +16,8 @@
       "delay": 0
     },
     "modules": {
-      "Camera": {}
+      "Camera": {},
+      "Push": {}
     },
     "distribute": {
       "android": {

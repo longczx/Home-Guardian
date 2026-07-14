@@ -75,6 +75,10 @@
       "style": { "navigationBarTitleText": "邀请家人" }
     },
     {
+      "path": "pages/me/push-settings",
+      "style": { "navigationBarTitleText": "推送设置" }
+    },
+    {
       "path": "pages/auth/login",
       "style": {
         "navigationBarTitleText": "登录"

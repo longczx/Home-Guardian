@@ -26,6 +26,7 @@
                         <option value="wechat_work" {{$ct === 'wechat_work' ? 'selected' : ''}}>企业微信</option>
                         <option value="dingtalk" {{$ct === 'dingtalk' ? 'selected' : ''}}>钉钉</option>
                         <option value="in_app" {{$ct === 'in_app' ? 'selected' : ''}}>站内通知</option>
+                        <option value="unipush" {{$ct === 'unipush' ? 'selected' : ''}}>App 推送 (uniPush)</option>
                     </select>
                 </div>
             </div>
@@ -40,7 +41,9 @@
                     {/php}
                     <textarea name="config_json" class="layui-textarea" style="font-family:monospace;min-height:120px;" placeholder='email:     {"smtp_host":"smtp.gmail.com","smtp_port":587,"smtp_user":"...","to":["admin@example.com"]}
 webhook:   {"url":"https://...","method":"POST"}
-telegram:  {"bot_token":"...","chat_id":"..."}'>{{$cfgJson}}</textarea>
+telegram:  {"bot_token":"...","chat_id":"..."}
+unipush:   {"app_id":"个推AppID","app_key":"个推AppKey","master_secret":"个推MasterSecret"}'>{{$cfgJson}}</textarea>
+                    <div class="layui-word-aux">uniPush 推送凭证在 DCloud 开发者中心 / 个推控制台申请，仅推送到已登录 App 的家庭成员设备。</div>
                 </div>
             </div>
             <div class="layui-form-item">

@@ -140,7 +140,8 @@ class AlertService
                     ? "设备(ID {$deviceId}) 已离线，触发规则 [{$rule->name}]"
                     : "设备(ID {$deviceId}) 的 {$rule->telemetry_key} 值 (" . self::scalar($triggeredValue) . ") 触发规则 [{$rule->name}]";
                 self::queueNotify($rule->notification_channel_ids, "【{$label}】{$rule->name}", $content, [
-                    'rule_id' => $rule->id, 'device_id' => $deviceId, 'severity' => $severity, 'value' => $triggeredValue,
+                    'rule_id' => $rule->id, 'device_id' => $deviceId, 'severity' => $severity,
+                    'value' => $triggeredValue, 'alert_id' => $alertLog->id,
                 ]);
                 $cd = (int)($rule->notify_cooldown_sec ?? 600);
                 if ($cache && $cd > 0) {
@@ -181,6 +182,7 @@ class AlertService
             self::queueNotify($rule->notification_channel_ids, "【恢复】{$rule->name}",
                 "设备(ID {$deviceId}) 的规则 [{$rule->name}] 已恢复正常", [
                 'rule_id' => $rule->id, 'device_id' => $deviceId, 'event' => 'recovered',
+                'severity' => $rule->severity ?: AlertRule::SEVERITY_WARNING,
             ]);
         }
     }
