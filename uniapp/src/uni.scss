@@ -1,0 +1,34 @@
+/**
+ * Home Guardian 设计令牌（A 米家卡片风为主体 + 深色图表卡点缀）
+ * 见 docs/design/uniapp-client.md §5。uni.scss 会被 uni-app 自动全局注入。
+ */
+
+// 底色 / 卡片
+$hg-bg: #f2f4f8;
+$hg-card: #ffffff;
+$hg-card-2: #f6f8fb;
+$hg-line: #e8ebf2;
+
+// 文字
+$hg-fg: #1a2233;
+$hg-muted: #7a8299;
+
+// 主色
+$hg-accent: #2b6fe3;
+$hg-accent-soft: #e8f0fe;
+
+// 语义色
+$hg-ok: #2fb56b;
+$hg-warn: #f0980b;
+$hg-crit: #e5484d;
+$hg-info: #4a83e8;
+
+// 深色图表卡
+$hg-chart-bg: #1b2540;
+$hg-chart-line: #6ea8ff;
+$hg-chart-fg: #c9d6f2;
+
+// 圆角 / 阴影
+$hg-radius: 20rpx;
+$hg-radius-s: 14rpx;
+$hg-shadow: 0 2rpx 10rpx rgba(28, 42, 78, 0.06);

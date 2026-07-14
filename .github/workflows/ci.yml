@@ -76,3 +76,30 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  uniapp:
+    name: uni-app (Vue3 / TS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: uniapp
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      # 无 lockfile（手写 package.json），用 install 解析依赖
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build (H5)
+        run: npm run build:h5
