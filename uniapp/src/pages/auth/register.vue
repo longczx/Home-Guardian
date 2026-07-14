@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onLoad } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
@@ -7,6 +8,7 @@ import { register, toAuthUser } from '@/api/auth';
 import { registerPush } from '@/utils/push';
 import { toast } from '@/utils/guard';
 
+const { t } = useI18n();
 const server = useServerStore();
 const auth = useAuthStore();
 const form = ref({ invite_code: '', username: '', password: '', full_name: '' });
@@ -38,7 +40,7 @@ async function onRegister() {
     // 注册即登录：后端直接返回 token
     auth.setSession(res.access_token, res.refresh_token, toAuthUser(res.user));
     registerPush();
-    toast('注册成功', 'success');
+    toast(t('auth.registerSuccess'), 'success');
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
     toast((e as Error).message || '注册失败');
@@ -51,31 +53,31 @@ async function onRegister() {
 <template>
   <view class="page">
     <view class="tip">
-      <text>输入家庭管理员发给你的邀请码，注册后自动加入「{{ server.current?.name || '该服务器' }}」的家庭。</text>
+      <text>{{ t('auth.inviteTip', { name: server.current?.name || t('me.noServer') }) }}</text>
     </view>
 
     <view class="card">
       <view class="field">
-        <text class="label">邀请码</text>
-        <input v-model="form.invite_code" class="input code" placeholder="如 ABCD2345" placeholder-class="ph" />
+        <text class="label">{{ t('auth.inviteCode') }}</text>
+        <input v-model="form.invite_code" class="input code" placeholder="ABCD2345" placeholder-class="ph" />
       </view>
       <view class="field">
-        <text class="label">用户名</text>
-        <input v-model="form.username" class="input" placeholder="3-32 位字母/数字/下划线" placeholder-class="ph" />
+        <text class="label">{{ t('auth.username') }}</text>
+        <input v-model="form.username" class="input" :placeholder="t('auth.usernamePh')" placeholder-class="ph" />
       </view>
       <view class="field">
-        <text class="label">密码</text>
-        <input v-model="form.password" class="input" password placeholder="至少 6 位" placeholder-class="ph" />
+        <text class="label">{{ t('auth.password') }}</text>
+        <input v-model="form.password" class="input" password :placeholder="t('auth.passwordPh')" placeholder-class="ph" />
       </view>
       <view class="field">
-        <text class="label">昵称（可选）</text>
-        <input v-model="form.full_name" class="input" placeholder="家人怎么称呼你" placeholder-class="ph" />
+        <text class="label">{{ t('auth.nickname') }}</text>
+        <input v-model="form.full_name" class="input" :placeholder="t('auth.nicknamePh')" placeholder-class="ph" />
       </view>
     </view>
 
-    <button class="btn btn-primary" :loading="loading" @tap="onRegister">注 册并进入</button>
+    <button class="btn btn-primary" :loading="loading" @tap="onRegister">{{ t('auth.registerBtn') }}</button>
     <view class="links">
-      <text class="link" @tap="uni.navigateBack()">已有账号，去登录</text>
+      <text class="link" @tap="uni.navigateBack()">{{ t('auth.toLogin') }}</text>
     </view>
   </view>
 </template>

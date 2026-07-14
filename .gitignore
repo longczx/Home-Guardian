@@ -14,3 +14,9 @@ mobile/dist/
 
 # Build output
 /public/mobile/
+/public/app/
+
+# uni-app client
+uniapp/node_modules/
+uniapp/dist/
+uniapp/unpackage/

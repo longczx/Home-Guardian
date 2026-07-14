@@ -103,3 +103,6 @@ jobs:
 
       - name: Build (H5)
         run: npm run build:h5
+
+      - name: Build (微信小程序 compile-only)
+        run: npm run build:mp-weixin

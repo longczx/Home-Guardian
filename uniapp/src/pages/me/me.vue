@@ -1,36 +1,49 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useServerStore } from '@/stores/server';
+import { useLocaleStore, type Lang } from '@/stores/locale';
 import { ensureReady, toast } from '@/utils/guard';
 import { unregisterPush } from '@/utils/push';
 
+const { t } = useI18n();
 const auth = useAuthStore();
 const server = useServerStore();
+const locale = useLocaleStore();
 
 onShow(() => {
   ensureReady();
 });
 
-const roleLabel = computed(() => {
-  const r = auth.user?.home_role;
-  return r === 'owner' ? '户主' : r === 'admin' ? '管理员' : '成员';
-});
+const roleLabel = computed(() => t(`me.role.${auth.user?.home_role || 'member'}`));
 
 function goServers() {
   uni.navigateTo({ url: '/pages/server/list' });
 }
 
 function todo() {
-  toast('该功能将在后续版本提供');
+  toast(t('common.loading'));
+}
+
+function chooseLanguage() {
+  const opts: { key: Lang; label: string }[] = [
+    { key: 'system', label: t('me.langSystem') },
+    { key: 'zh-Hans', label: t('me.langZh') },
+    { key: 'en', label: t('me.langEn') },
+  ];
+  uni.showActionSheet({
+    itemList: opts.map((o) => o.label),
+    success: (r) => locale.set(opts[r.tapIndex].key),
+  });
 }
 
 function onLogout() {
   uni.showModal({
-    title: '退出登录',
-    content: '确定退出当前账号？',
+    title: t('me.logout'),
+    content: t('me.logoutConfirm'),
     success: async (r) => {
       if (r.confirm) {
         await unregisterPush(); // 先注销 cid（趁 token 还在）
@@ -44,7 +57,7 @@ function onLogout() {
 
 <template>
   <view class="page">
-    <PageHeader title="我的" />
+    <PageHeader :title="t('tab.me')" />
 
     <view class="profile">
       <view class="avatar">{{ (auth.user?.username || 'U').slice(0, 1).toUpperCase() }}</view>
@@ -65,20 +78,24 @@ function onLogout() {
 
     <view class="menu">
       <view v-if="auth.canManage" class="item" @tap="uni.navigateTo({ url: '/pages/manage/invite' })">
-        <text class="t">邀请家人</text><text class="arrow">›</text>
+        <text class="t">{{ t('me.inviteFamily') }}</text><text class="arrow">›</text>
       </view>
       <view class="item" @tap="uni.navigateTo({ url: '/pages/me/push-settings' })">
-        <text class="t">推送设置</text><text class="arrow">›</text>
+        <text class="t">{{ t('me.pushSettings') }}</text><text class="arrow">›</text>
+      </view>
+      <view class="item" @tap="chooseLanguage">
+        <text class="t">{{ t('me.language') }}</text>
+        <text class="v">{{ locale.pref === 'system' ? t('me.langSystem') : (locale.pref === 'en' ? 'English' : '简体中文') }}</text>
       </view>
       <view class="item" @tap="todo">
-        <text class="t">修改密码</text><text class="arrow">›</text>
+        <text class="t">{{ t('me.changePassword') }}</text><text class="arrow">›</text>
       </view>
       <view class="item" @tap="todo">
-        <text class="t">关于</text><text class="v">Home Guardian v1.0.0</text>
+        <text class="t">{{ t('me.about') }}</text><text class="v">Home Guardian v1.0.0</text>
       </view>
     </view>
 
-    <button class="logout" @tap="onLogout">退出登录</button>
+    <button class="logout" @tap="onLogout">{{ t('me.logout') }}</button>
   </view>
 </template>
 

@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { getAlertLogs, acknowledgeAlert, resolveAlert } from '@/api/alert';
 import type { AlertLog } from '@/api/types';
 import { ensureReady, toast } from '@/utils/guard';
-import { timeAgo, severityLabel, severityColor } from '@/utils/format';
+import { timeAgo, severityColor } from '@/utils/format';
 
-const FILTERS = [
-  { key: '', label: '全部' },
-  { key: 'triggered', label: '未处理' },
-  { key: 'acknowledged', label: '已确认' },
-  { key: 'resolved', label: '已恢复' },
-];
+const { t } = useI18n();
+const FILTERS = computed(() => [
+  { key: '', label: t('alert.all') },
+  { key: 'triggered', label: t('alert.triggered') },
+  { key: 'acknowledged', label: t('alert.acknowledged') },
+  { key: 'resolved', label: t('alert.resolved') },
+]);
+
+function sevLabel(sev: string | null): string {
+  return t(sev === 'critical' ? 'alert.sevCritical' : sev === 'info' ? 'alert.sevInfo' : 'alert.sevWarning');
+}
 
 const logs = ref<AlertLog[]>([]);
 const filter = ref('');
@@ -69,7 +75,7 @@ onPullDownRefresh(async () => {
 
 <template>
   <view class="page">
-    <PageHeader title="告警中心" :subtitle="`${untreated} 条未处理`" />
+    <PageHeader :title="t('alert.title')" :subtitle="t('alert.untreated', { n: untreated })" />
 
     <scroll-view scroll-x class="chips" :show-scrollbar="false">
       <view
@@ -94,12 +100,12 @@ onPullDownRefresh(async () => {
             <text
               v-if="l.status === 'resolved'"
               class="sev done"
-            >已恢复</text>
+            >{{ t('alert.sevDone') }}</text>
             <text
               v-else
               class="sev"
               :style="{ background: severityColor(l.severity) }"
-            >{{ severityLabel(l.severity) }}</text>
+            >{{ sevLabel(l.severity) }}</text>
             <text class="title">{{ l.rule?.name || '告警' }}</text>
           </view>
           <text class="desc">
@@ -108,18 +114,18 @@ onPullDownRefresh(async () => {
           </text>
           <view class="foot">
             <text class="time">
-              {{ timeAgo(l.triggered_at) }} 触发<text v-if="l.resolved_at"> · 已恢复</text>
+              {{ timeAgo(l.triggered_at) }} {{ t('alert.triggeredAt') }}<text v-if="l.resolved_at"> · {{ t('alert.recovered') }}</text>
             </text>
             <view class="acts">
-              <text v-if="l.status === 'triggered'" class="act solid" @tap="onAck(l)">确认</text>
-              <text v-if="l.status !== 'resolved'" class="act" @tap="onResolve(l)">解决</text>
+              <text v-if="l.status === 'triggered'" class="act solid" @tap="onAck(l)">{{ t('alert.ack') }}</text>
+              <text v-if="l.status !== 'resolved'" class="act" @tap="onResolve(l)">{{ t('alert.resolve') }}</text>
             </view>
           </view>
         </view>
       </view>
     </view>
 
-    <view v-if="!loading && !logs.length" class="empty">暂无告警</view>
+    <view v-if="!loading && !logs.length" class="empty">{{ t('alert.empty') }}</view>
   </view>
 </template>
 
