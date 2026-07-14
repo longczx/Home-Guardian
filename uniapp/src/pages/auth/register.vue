@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 import { register, toAuthUser } from '@/api/auth';
@@ -9,6 +10,11 @@ const server = useServerStore();
 const auth = useAuthStore();
 const form = ref({ invite_code: '', username: '', password: '', full_name: '' });
 const loading = ref(false);
+
+// 扫邀请码进来时预填
+onLoad((q) => {
+  if (q?.code) form.value.invite_code = String(q.code).toUpperCase();
+});
 
 async function onRegister() {
   const { invite_code, username, password } = form.value;

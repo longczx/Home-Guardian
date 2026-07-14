@@ -13,6 +13,14 @@ export function sendCommand(id: number, payload: Record<string, unknown>) {
   return request.post<{ request_id: string; status: string }>(`/devices/${id}/command`, payload);
 }
 
+export function updateDevice(id: number, data: { name?: string; location?: string }) {
+  return request.put<Device>(`/devices/${id}`, data);
+}
+
+export function deleteDevice(id: number) {
+  return request.del(`/devices/${id}`);
+}
+
 export function getLatestTelemetry(deviceId: number) {
   return request.get<LatestMetric[]>('/telemetry/latest', { device_id: deviceId });
 }

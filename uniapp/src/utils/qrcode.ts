@@ -7,6 +7,31 @@ export interface ParsedServer {
   name: string;
 }
 
+export interface ParsedInvite {
+  code: string;
+  url: string;
+  name: string;
+}
+
+/** 解析邀请二维码 hg://invite?code=&url=&name= */
+export function parseInviteQr(raw: string): ParsedInvite | null {
+  const text = (raw || '').trim();
+  if (!text.startsWith('hg://invite')) return null;
+  const params = parseQuery(text);
+  if (!params.code) return null;
+  return { code: params.code, url: params.url || '', name: params.name || '' };
+}
+
+function parseQuery(text: string): Record<string, string> {
+  const qs = text.split('?')[1] || '';
+  const params: Record<string, string> = {};
+  qs.split('&').forEach((pair) => {
+    const [k, v] = pair.split('=');
+    if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+  });
+  return params;
+}
+
 export function parseServerQr(raw: string): ParsedServer | null {
   const text = (raw || '').trim();
   if (!text.startsWith('hg://server')) {
@@ -16,12 +41,7 @@ export function parseServerQr(raw: string): ParsedServer | null {
     }
     return null;
   }
-  const qs = text.split('?')[1] || '';
-  const params: Record<string, string> = {};
-  qs.split('&').forEach((pair) => {
-    const [k, v] = pair.split('=');
-    if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
-  });
+  const params = parseQuery(text);
   if (!params.url) return null;
   return { url: params.url, name: params.name || '' };
 }

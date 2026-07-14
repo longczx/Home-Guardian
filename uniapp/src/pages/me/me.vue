@@ -62,7 +62,7 @@ function onLogout() {
     </view>
 
     <view class="menu">
-      <view v-if="auth.canManage" class="item" @tap="todo">
+      <view v-if="auth.canManage" class="item" @tap="uni.navigateTo({ url: '/pages/manage/invite' })">
         <text class="t">邀请家人</text><text class="arrow">›</text>
       </view>
       <view class="item" @tap="todo">

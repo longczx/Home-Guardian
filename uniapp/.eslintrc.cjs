@@ -34,5 +34,5 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     'no-empty': ['error', { allowEmptyCatch: true }],
   },
-  ignorePatterns: ['node_modules/', 'unpackage/', 'dist/'],
+  ignorePatterns: ['node_modules/', 'unpackage/', 'dist/', 'src/utils/uqrcode/'],
 };
