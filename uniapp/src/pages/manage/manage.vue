@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { useAuthStore } from '@/stores/auth';
 import { ensureReady } from '@/utils/guard';
 
+const { t } = useI18n();
 const auth = useAuthStore();
 
 // 管理 Tab 仅 owner/admin 可用；member 落到此页给出说明（Tab 由 me 页角色提示引导）
@@ -11,12 +14,12 @@ onShow(() => {
   ensureReady();
 });
 
-const items = [
-  { key: 'devices', title: '设备管理', sub: '添加（配对码）· 编辑 · 删除', url: '/pages/manage/devices' },
-  { key: 'alert-rules', title: '告警规则', sub: '遥测/离线 · 分级 · 冷却 · 恢复通知', url: '/pages/manage/alert-rules' },
-  { key: 'channels', title: '通知渠道', sub: '查看 · 一键测试', url: '/pages/manage/channels' },
-  { key: 'automations', title: '自动化', sub: '查看 · 启停 · 删除', url: '/pages/manage/automations' },
-];
+const items = computed(() => [
+  { key: 'devices', title: t('manage.devices'), sub: t('manage.devicesSub'), url: '/pages/manage/devices' },
+  { key: 'alert-rules', title: t('manage.rules'), sub: t('manage.rulesSub'), url: '/pages/manage/alert-rules' },
+  { key: 'channels', title: t('manage.channels'), sub: t('manage.channelsSub'), url: '/pages/manage/channels' },
+  { key: 'automations', title: t('manage.automations'), sub: t('manage.automationsSub'), url: '/pages/manage/automations' },
+]);
 
 function open(url: string) {
   uni.navigateTo({ url });
@@ -25,7 +28,7 @@ function open(url: string) {
 
 <template>
   <view class="page">
-    <PageHeader title="管理" :subtitle="auth.canManage ? '设备与规则管理' : '仅管理员可用'" />
+    <PageHeader :title="t('manage.title')" :subtitle="auth.canManage ? t('manage.subtitle') : t('manage.memberOnly')" />
 
     <view v-if="auth.canManage" class="menu">
       <view v-for="it in items" :key="it.key" class="item" @tap="open(it.url)">
@@ -39,8 +42,8 @@ function open(url: string) {
     </view>
 
     <view v-else class="notice">
-      <text>你当前是家庭成员，暂无管理权限。</text>
-      <text class="sub">如需管理设备或告警规则，请让户主把你设为管理员。</text>
+      <text>{{ t('manage.noPermTitle') }}</text>
+      <text class="sub">{{ t('manage.noPermSub') }}</text>
     </view>
   </view>
 </template>

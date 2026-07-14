@@ -2,11 +2,13 @@
 import { onLaunch } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
+import { useLocaleStore } from '@/stores/locale';
 import { registerPush, setupPushListener } from '@/utils/push';
 
 // 启动即恢复本地持久化的服务器配置与登录态；无当前服务器或未登录时，
 // 各页面 onShow 的守卫会把用户导向服务器列表 / 登录页。
 onLaunch(() => {
+  useLocaleStore().restore();
   useServerStore().restore();
   const auth = useAuthStore();
   auth.restore();

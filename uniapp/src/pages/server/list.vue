@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 import { parseServerQr, parseInviteQr } from '@/utils/qrcode';
 import { toast } from '@/utils/guard';
 
+const { t } = useI18n();
 const server = useServerStore();
 const auth = useAuthStore();
 const servers = ref(server.servers);
@@ -27,7 +29,7 @@ function afterPick(id: string) {
 
 function onScan() {
   // #ifdef H5
-  toast('H5 端请使用手动添加');
+  toast(t('server.scanH5Hint'));
   goManual();
   return;
   // #endif
@@ -43,13 +45,13 @@ function onScan() {
       }
       const parsed = parseServerQr(r.result);
       if (!parsed) {
-        toast('二维码格式无法识别');
+        toast(t('server.scan'));
         return;
       }
       const id = server.upsert(parsed.name || parsed.url, parsed.url);
       afterPick(id);
     },
-    fail: () => toast('已取消扫码'),
+    fail: () => { /* 用户取消扫码，静默 */ },
   });
 }
 
@@ -63,8 +65,8 @@ function onSwitch(id: string) {
 
 function onRemove(id: string) {
   uni.showModal({
-    title: '删除服务器',
-    content: '确定移除该服务器配置？本地登录态一并清除。',
+    title: t('server.removeTitle'),
+    content: t('server.removeConfirm'),
     success: (r) => {
       if (r.confirm) {
         server.remove(id);
@@ -78,8 +80,8 @@ function onRemove(id: string) {
 <template>
   <view class="page">
     <view class="head">
-      <text class="title">选择服务器</text>
-      <text class="sub">Home Guardian 支持连接多台自托管服务器</text>
+      <text class="title">{{ t('server.title') }}</text>
+      <text class="sub">{{ t('server.subtitle') }}</text>
     </view>
 
     <view v-if="servers.length" class="list">
@@ -89,18 +91,18 @@ function onRemove(id: string) {
           <text class="srv-name">{{ s.name }}</text>
           <text class="srv-url">{{ s.url }}</text>
         </view>
-        <text v-if="s.id === server.currentId" class="srv-cur">当前</text>
-        <text class="srv-del" @tap.stop="onRemove(s.id)">删除</text>
+        <text v-if="s.id === server.currentId" class="srv-cur">{{ t('server.current') }}</text>
+        <text class="srv-del" @tap.stop="onRemove(s.id)">{{ t('common.delete') }}</text>
       </view>
     </view>
 
     <view v-else class="empty">
-      <text>还没有服务器，先添加一个</text>
+      <text>{{ t('server.empty') }}</text>
     </view>
 
     <view class="actions">
-      <button class="btn btn-primary" @tap="onScan">扫码添加</button>
-      <button class="btn btn-ghost" @tap="goManual">手动添加</button>
+      <button class="btn btn-primary" @tap="onScan">{{ t('server.scan') }}</button>
+      <button class="btn btn-ghost" @tap="goManual">{{ t('server.manual') }}</button>
     </view>
   </view>
 </template>

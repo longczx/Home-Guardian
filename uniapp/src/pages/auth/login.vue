@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
@@ -7,6 +8,7 @@ import { login, toAuthUser } from '@/api/auth';
 import { registerPush } from '@/utils/push';
 import { toast } from '@/utils/guard';
 
+const { t } = useI18n();
 const server = useServerStore();
 const auth = useAuthStore();
 const username = ref('');
@@ -23,7 +25,7 @@ onShow(() => {
 
 async function onLogin() {
   if (!username.value || !password.value) {
-    toast('请输入用户名和密码');
+    toast(t('auth.username') + ' / ' + t('auth.password'));
     return;
   }
   loading.value = true;
@@ -31,10 +33,10 @@ async function onLogin() {
     const res = await login(username.value.trim(), password.value);
     auth.setSession(res.access_token, res.refresh_token, toAuthUser(res.user));
     registerPush();
-    toast('登录成功', 'success');
+    toast(t('auth.loginSuccess'), 'success');
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
-    toast((e as Error).message || '登录失败');
+    toast((e as Error).message || t('auth.login'));
   } finally {
     loading.value = false;
   }
@@ -51,25 +53,25 @@ async function onLogin() {
 
     <view class="card">
       <view class="field">
-        <input v-model="username" class="input" placeholder="用户名" placeholder-class="ph" />
+        <input v-model="username" class="input" :placeholder="t('auth.username')" placeholder-class="ph" />
       </view>
       <view class="field">
         <input
           v-model="password"
           class="input"
           password
-          placeholder="密码"
+          :placeholder="t('auth.password')"
           placeholder-class="ph"
           @confirm="onLogin"
         />
       </view>
     </view>
 
-    <button class="btn btn-primary" :loading="loading" @tap="onLogin">登 录</button>
+    <button class="btn btn-primary" :loading="loading" @tap="onLogin">{{ t('auth.loginBtn') }}</button>
 
     <view class="links">
-      <text class="link" @tap="uni.navigateTo({ url: '/pages/auth/register' })">有邀请码？立即注册</text>
-      <text class="link" @tap="uni.reLaunch({ url: '/pages/server/list' })">切换服务器</text>
+      <text class="link" @tap="uni.navigateTo({ url: '/pages/auth/register' })">{{ t('auth.toRegister') }}</text>
+      <text class="link" @tap="uni.reLaunch({ url: '/pages/server/list' })">{{ t('auth.switchServer') }}</text>
     </view>
   </view>
 </template>

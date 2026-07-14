@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useServerStore } from '@/stores/server';
 import { toast } from '@/utils/guard';
 
+const { t } = useI18n();
 const server = useServerStore();
 const name = ref('');
 const url = ref('');
@@ -10,11 +12,11 @@ const url = ref('');
 function save() {
   const u = url.value.trim();
   if (!/^https?:\/\/.+/i.test(u)) {
-    toast('请输入完整地址，如 http://192.168.1.10:8787');
+    toast(t('server.urlPlaceholder'));
     return;
   }
   server.upsert(name.value.trim() || u, u);
-  toast('已保存', 'success');
+  toast(t('common.save'), 'success');
   uni.reLaunch({ url: '/pages/auth/login' });
 }
 </script>
@@ -23,21 +25,21 @@ function save() {
   <view class="page">
     <view class="card">
       <view class="field">
-        <text class="label">名称</text>
-        <input v-model="name" class="input" placeholder="如 家里服务器（可选）" placeholder-class="ph" />
+        <text class="label">{{ t('server.name') }}</text>
+        <input v-model="name" class="input" :placeholder="t('server.namePh')" placeholder-class="ph" />
       </view>
       <view class="field">
-        <text class="label">服务器地址</text>
+        <text class="label">{{ t('server.url') }}</text>
         <input
           v-model="url"
           class="input"
-          placeholder="http://192.168.1.10:8787"
+          :placeholder="t('server.urlPlaceholder')"
           placeholder-class="ph"
         />
       </view>
-      <text class="hint">填写后端的地址（含端口），不含 /api。局域网直接填内网 IP 即可。</text>
+      <text class="hint">{{ t('server.urlHint') }}</text>
     </view>
-    <button class="btn btn-primary" @tap="save">保存并登录</button>
+    <button class="btn btn-primary" @tap="save">{{ t('server.saveLogin') }}</button>
   </view>
 </template>
 

@@ -42,10 +42,25 @@ npm run dev:mp-weixin
 ## 构建
 
 ```bash
-npm run build:h5          # 产物 dist/build/h5，部署到后端 /app/
+npm run build:h5          # 产物直接输出到 ../public/app（供 nginx /app/ 路由）
+npm run build:h5:local    # 产物在 dist/build/h5（本地调试用）
 npm run build:app         # App 资源，交 HBuilderX 云打包出 APK
 npm run build:mp-weixin   # 小程序产物
 ```
+
+### H5 部署到服务器 `/app/`
+
+nginx 已配置 `location /app/ → /app/public/app/`（见 `docker/nginx/default.conf`）。
+
+```bash
+cd uniapp && npm install && npm run build:h5   # 产物落到 public/app/
+# 生产镜像把 public 烤进镜像：重建 webman 镜像 + 重启即可
+docker compose -f docker-compose.yml up -d --build
+```
+
+部署后浏览器访问 `http(s)://<服务器>/app/` 即可使用完整客户端。
+
+> `/`（根路径）当前仍重定向到 `/mobile/`（React 体验版）。待 `/app/` 稳定后，某个大版本再把默认入口切到 `/app/`。
 
 ## 多服务器接入
 
@@ -75,7 +90,19 @@ npm run build:mp-weixin   # 小程序产物
 - 登录/启动后上报 cid，退出注销；「我的 → 推送设置」开关 + 级别阈值（提醒/警告/严重）
 - 点击通知栏跳告警中心；后端 `unipush` 通知渠道按家庭 + 级别定向推送
 
-小程序适配 + H5 部署见后续 PR4。
+**PR4** H5 部署（nginx `/app/`）+ i18n 中英双语（跟随系统/手选，「我的→语言」切换）+ 小程序适配。
+
+## 多语言 (i18n)
+
+- 中英双语，默认跟随系统，「我的 → 语言」可手动切换并持久化。
+- 覆盖首屏 / 登录注册 / 服务器 / 告警 / 管理入口 / 我的 / 推送设置；管理详情表单（设备/规则/渠道/自动化编辑）后续增量补齐。
+- 自定义 `messageCompiler` 做纯字符串插值，规避微信小程序禁用 eval 的限制，全端可用。
+
+## 微信小程序
+
+- `src/manifest.json` → `mp-weixin.appid` 填入你的小程序 AppID。
+- **生产限制**：小程序正式版只能请求「HTTPS + 已备案域名」，不能用 IP / http。自托管局域网用户请以 **Android App** 为主；小程序适合有备案域名的部署。
+- 开发期 `mp-weixin.setting.urlCheck` 已设为 false，用微信开发者工具勾选「不校验合法域名」即可连本地后端。
 
 ## uniPush 推送配置（PR3）
 

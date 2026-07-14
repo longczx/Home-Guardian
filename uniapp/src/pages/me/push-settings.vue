@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
 import { getPushSettings, updatePushSettings } from '@/api/push';
 import { registerPush } from '@/utils/push';
 import { toast } from '@/utils/guard';
 
+const { t } = useI18n();
 const enabled = ref(true);
 const minSeverity = ref('warning');
 const registered = ref(false);
 
-const LEVELS = [
-  { value: 'info', label: '全部（含提醒）' },
-  { value: 'warning', label: '警告及以上' },
-  { value: 'critical', label: '仅严重' },
-];
+const LEVELS = computed(() => [
+  { value: 'info', label: t('push.levelInfo') },
+  { value: 'warning', label: t('push.levelWarning') },
+  { value: 'critical', label: t('push.levelCritical') },
+]);
 
 async function load() {
   try {
@@ -53,15 +55,15 @@ onShow(load);
     <view class="card">
       <view class="row">
         <view>
-          <text class="t">接收告警推送</text>
-          <text class="s">关闭后该账号所有设备不再收到推送</text>
+          <text class="t">{{ t('push.receive') }}</text>
+          <text class="s">{{ t('push.receiveSub') }}</text>
         </view>
         <switch :checked="enabled" color="#2b6fe3" @change="onToggle" />
       </view>
     </view>
 
     <view v-if="enabled" class="card">
-      <text class="ct">推送级别</text>
+      <text class="ct">{{ t('push.level') }}</text>
       <view
         v-for="l in LEVELS"
         :key="l.value"
@@ -74,8 +76,8 @@ onShow(load);
     </view>
 
     <view class="tip">
-      <text v-if="!registered">当前设备尚未登记推送（仅 App 端支持，H5/小程序不接收）。</text>
-      <text v-else>App 端在锁屏 / 后台也能收到严重告警通知。</text>
+      <text v-if="!registered">{{ t('push.notRegistered') }}</text>
+      <text v-else>{{ t('push.registered') }}</text>
     </view>
   </view>
 </template>
