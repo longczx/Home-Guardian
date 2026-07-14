@@ -1,0 +1,70 @@
+{extend name="admin/layout" /}
+{block name="content"}
+<div class="layui-card">
+    <div class="layui-card-header">移动端接入</div>
+    <div class="layui-card-body" style="padding:24px;">
+        <div class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label" style="width:110px;">服务器地址</label>
+                <div class="layui-input-block" style="margin-left:140px;max-width:520px;">
+                    <input type="text" id="server-url" value="{{$guessUrl}}" class="layui-input">
+                    <div class="layui-word-aux" style="margin-top:6px;">
+                        App 需要能访问到的地址（含端口，不含 /api）。局域网用户填内网 IP，如 http://192.168.1.10:8787。
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label" style="width:110px;">配置名称</label>
+                <div class="layui-input-block" style="margin-left:140px;max-width:520px;">
+                    <input type="text" id="server-name" value="家里服务器" class="layui-input">
+                </div>
+            </div>
+        </div>
+
+        <fieldset class="layui-elem-field layui-field-title" style="margin-top:20px;">
+            <legend>接入深链（hg://server）</legend>
+        </fieldset>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <code id="deep-link" style="flex:1;min-width:280px;background:#f5f6fa;padding:12px 14px;border-radius:6px;font-size:14px;word-break:break-all;"></code>
+            <button class="layui-btn" onclick="copyLink()">复制深链</button>
+        </div>
+
+        <div class="layui-collapse" style="margin-top:24px;">
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">接入步骤</h2>
+                <div class="layui-colla-content layui-show" style="line-height:2;">
+                    1. 打开 <b>Home Guardian App</b>，进入「服务器 → 添加服务器」。<br>
+                    2. 选「手动添加」，把上面的<b>服务器地址</b>粘进去（或名称+地址）。<br>
+                    3. 用注册好的账号登录；家人可用<a href="/admin/invite-codes">邀请码</a>在 App 注册页自助加入。<br>
+                    <span class="layui-word-aux">提示：扫码添加会在后续版本随 App 一起提供图形二维码；当前用「手动添加」即可完成接入。深链格式 <code>hg://server?url=…&name=…</code> 已是 App 扫码解析的标准格式。</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+function buildLink() {
+    var url = document.getElementById('server-url').value.trim().replace(/\/+$/, '');
+    var name = document.getElementById('server-name').value.trim();
+    var link = 'hg://server?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name);
+    document.getElementById('deep-link').textContent = link;
+    return link;
+}
+function copyLink() {
+    var link = buildLink();
+    var ta = document.createElement('textarea');
+    ta.value = link;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); layui.layer.msg('已复制'); }
+    catch (e) { layui.layer.msg('复制失败，请手动选择'); }
+    document.body.removeChild(ta);
+}
+document.getElementById('server-url').addEventListener('input', buildLink);
+document.getElementById('server-name').addEventListener('input', buildLink);
+buildLink();
+</script>
+{/block}

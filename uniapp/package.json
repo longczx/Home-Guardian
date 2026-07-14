@@ -1,0 +1,40 @@
+{
+  "name": "home-guardian-uniapp",
+  "version": "1.0.0",
+  "description": "Home Guardian 多端客户端（Android App / 微信小程序 / H5），基于 uni-app + Vue 3 + TS",
+  "private": true,
+  "scripts": {
+    "dev:h5": "uni",
+    "dev:app": "uni -p app",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:h5": "uni build",
+    "build:app": "uni build -p app",
+    "build:mp-weixin": "uni build -p mp-weixin",
+    "type-check": "vue-tsc --noEmit",
+    "lint": "eslint . --ext .vue,.ts,.js"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-4060620250520001",
+    "@dcloudio/uni-app-plus": "3.0.0-4060620250520001",
+    "@dcloudio/uni-components": "3.0.0-4060620250520001",
+    "@dcloudio/uni-h5": "3.0.0-4060620250520001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-4060620250520001",
+    "pinia": "2.0.36",
+    "vue": "3.4.21",
+    "vue-i18n": "9.14.0"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "3.4.8",
+    "@dcloudio/uni-automator": "3.0.0-4060620250520001",
+    "@dcloudio/uni-cli-shared": "3.0.0-4060620250520001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-4060620250520001",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "eslint": "8.57.1",
+    "eslint-plugin-vue": "9.33.0",
+    "sass": "1.77.8",
+    "typescript": "5.4.5",
+    "vite": "5.2.8",
+    "vue-tsc": "2.0.29"
+  }
+}

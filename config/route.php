@@ -109,6 +109,9 @@ Route::group('/admin', function () {
     // 系统管理
     Route::get('/system', [app\controller\admin\SystemController::class, 'index']);
 
+    // 移动端接入（App 服务器配置深链）
+    Route::get('/app-access', [app\controller\admin\AppAccessController::class, 'index']);
+
     // 指标定义
     Route::get('/metric-definitions', [app\controller\admin\MetricDefinitionController::class, 'index']);
     Route::get('/metric-definitions/create', [app\controller\admin\MetricDefinitionController::class, 'create']);

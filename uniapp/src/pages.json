@@ -1,0 +1,100 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "我的家",
+        "enablePullDownRefresh": true,
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/alerts/alerts",
+      "style": {
+        "navigationBarTitleText": "告警中心",
+        "enablePullDownRefresh": true,
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/manage/manage",
+      "style": {
+        "navigationBarTitleText": "管理",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/me/me",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/device/detail",
+      "style": {
+        "navigationBarTitleText": "设备详情"
+      }
+    },
+    {
+      "path": "pages/device/telemetry",
+      "style": {
+        "navigationBarTitleText": "遥测趋势"
+      }
+    },
+    {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/auth/register",
+      "style": {
+        "navigationBarTitleText": "邀请码注册"
+      }
+    },
+    {
+      "path": "pages/server/list",
+      "style": {
+        "navigationBarTitleText": "服务器"
+      }
+    },
+    {
+      "path": "pages/server/edit",
+      "style": {
+        "navigationBarTitleText": "添加服务器"
+      }
+    }
+  ],
+  "tabBar": {
+    "color": "#7A8299",
+    "selectedColor": "#2B6FE3",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/alerts/alerts",
+        "text": "告警"
+      },
+      {
+        "pagePath": "pages/manage/manage",
+        "text": "管理"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Home Guardian",
+    "navigationBarBackgroundColor": "#F2F4F8",
+    "backgroundColor": "#F2F4F8"
+  }
+}
