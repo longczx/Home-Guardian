@@ -4,6 +4,7 @@ import { onLoad } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 import { register, toAuthUser } from '@/api/auth';
+import { registerPush } from '@/utils/push';
 import { toast } from '@/utils/guard';
 
 const server = useServerStore();
@@ -36,6 +37,7 @@ async function onRegister() {
     });
     // 注册即登录：后端直接返回 token
     auth.setSession(res.access_token, res.refresh_token, toAuthUser(res.user));
+    registerPush();
     toast('注册成功', 'success');
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {

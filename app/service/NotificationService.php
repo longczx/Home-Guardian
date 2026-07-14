@@ -12,6 +12,7 @@
 namespace app\service;
 
 use app\model\NotificationChannel;
+use app\model\UserPushDevice;
 use support\Log;
 
 class NotificationService
@@ -44,6 +45,7 @@ class NotificationService
                     NotificationChannel::TYPE_WECHAT_WORK => self::sendWechatWork($channel->config, $title, $content),
                     NotificationChannel::TYPE_DINGTALK    => self::sendDingtalk($channel->config, $title, $content),
                     NotificationChannel::TYPE_IN_APP      => self::sendInApp($title, $content, $extra),
+                    NotificationChannel::TYPE_UNIPUSH     => self::sendUniPush($channel, $title, $content, $extra),
                     default => Log::warning("未知的通知渠道类型: {$channel->type}"),
                 };
             } catch (\Throwable $e) {
@@ -243,6 +245,42 @@ class NotificationService
         }
 
         Log::info("站内通知已推送: {$title}");
+    }
+
+    /**
+     * uniPush App 推送
+     *
+     * 向渠道所属家庭的推送设备下发通知，按各设备的 push_enabled + min_severity 过滤。
+     * cid 来自 user_push_devices（App 端登录后上报）。
+     *
+     * @param NotificationChannel $channel unipush 渠道（config: app_id/app_key/master_secret）
+     * @param array               $extra   附加数据，其中 severity 用于级别过滤、alert 相关字段透传
+     */
+    private static function sendUniPush(NotificationChannel $channel, string $title, string $content, array $extra = []): void
+    {
+        $config = $channel->config ?? [];
+        if (empty($config['app_id']) || empty($config['app_key']) || empty($config['master_secret'])) {
+            Log::warning("[uniPush] 渠道 {$channel->name} 未配置 app_id/app_key/master_secret");
+            return;
+        }
+
+        $severity = $extra['severity'] ?? 'warning';
+
+        // 按家庭取推送设备，逐台判断是否接收该级别
+        $devices = UserPushDevice::where('home_id', $channel->home_id)->get();
+        $cids = $devices->filter(fn ($d) => $d->acceptsSeverity($severity))->pluck('cid')->all();
+
+        if (empty($cids)) {
+            return;
+        }
+
+        $payload = [];
+        if (isset($extra['alert_id'])) {
+            $payload = ['type' => 'alert', 'alert_id' => $extra['alert_id']];
+        }
+
+        UniPushService::push($config, $cids, $title, $content, $payload);
+        Log::info("uniPush 已推送: {$title} → " . count($cids) . ' 台设备');
     }
 
     /**

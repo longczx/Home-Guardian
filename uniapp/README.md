@@ -71,4 +71,21 @@ npm run build:mp-weixin   # 小程序产物
 - 自动化：列表 + 启停 + 删除
 - 邀请家人：生成邀请码 + uQRCode 二维码（`hg://invite`，扫码直达注册）
 
-uniPush 推送、小程序适配 + H5 部署见后续 PR3/PR4。
+**PR3** 告警推送（uniPush / 个推，仅 App 端）：
+- 登录/启动后上报 cid，退出注销；「我的 → 推送设置」开关 + 级别阈值（提醒/警告/严重）
+- 点击通知栏跳告警中心；后端 `unipush` 通知渠道按家庭 + 级别定向推送
+
+小程序适配 + H5 部署见后续 PR4。
+
+## uniPush 推送配置（PR3）
+
+App 推送走个推（GeTui）通道，自托管用户需自备凭证：
+
+1. HBuilderX 项目 → manifest.json → App 模块权限勾选 **Push(消息推送)**，开通 uniPush 2.0，得到 **AppID / AppKey / MasterSecret**（DCloud 开发者中心绑定个推）。
+2. 后台「通知渠道」新建一个 `App 推送 (uniPush)` 渠道，config 填：
+   ```json
+   { "app_id": "...", "app_key": "...", "master_secret": "..." }
+   ```
+3. 在告警规则的「通知渠道」里勾选该渠道即可。推送只发给**已登录 App 且开启推送**的家庭成员设备，并按各自的级别阈值过滤。
+
+> H5 / 小程序不接收 uniPush；App 端在后台/锁屏也能收到。
