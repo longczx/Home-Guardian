@@ -22,11 +22,17 @@
         </div>
 
         <fieldset class="layui-elem-field layui-field-title" style="margin-top:20px;">
-            <legend>接入深链（hg://server）</legend>
+            <legend>接入二维码（App 扫码添加）</legend>
         </fieldset>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <code id="deep-link" style="flex:1;min-width:280px;background:#f5f6fa;padding:12px 14px;border-radius:6px;font-size:14px;word-break:break-all;"></code>
-            <button class="layui-btn" onclick="copyLink()">复制深链</button>
+        <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+            <div style="background:#fff;padding:12px;border:1px solid #e6e6e6;border-radius:8px;">
+                <canvas id="qr" width="220" height="220" style="display:block;width:220px;height:220px;"></canvas>
+            </div>
+            <div style="flex:1;min-width:280px;">
+                <div class="layui-word-aux" style="margin-bottom:8px;">用 Home Guardian App「服务器 → 扫码添加」扫描此码即可接入。</div>
+                <code id="deep-link" style="display:block;background:#f5f6fa;padding:12px 14px;border-radius:6px;font-size:14px;word-break:break-all;"></code>
+                <button class="layui-btn" style="margin-top:12px;" onclick="copyLink()">复制深链</button>
+            </div>
         </div>
 
         <div class="layui-collapse" style="margin-top:24px;">
@@ -34,9 +40,9 @@
                 <h2 class="layui-colla-title">接入步骤</h2>
                 <div class="layui-colla-content layui-show" style="line-height:2;">
                     1. 打开 <b>Home Guardian App</b>，进入「服务器 → 添加服务器」。<br>
-                    2. 选「手动添加」，把上面的<b>服务器地址</b>粘进去（或名称+地址）。<br>
+                    2. 「扫码添加」扫描上方二维码，或「手动添加」把<b>服务器地址</b>粘进去。<br>
                     3. 用注册好的账号登录；家人可用<a href="/admin/invite-codes">邀请码</a>在 App 注册页自助加入。<br>
-                    <span class="layui-word-aux">提示：扫码添加会在后续版本随 App 一起提供图形二维码；当前用「手动添加」即可完成接入。深链格式 <code>hg://server?url=…&name=…</code> 已是 App 扫码解析的标准格式。</span>
+                    <span class="layui-word-aux">深链格式 <code>hg://server?url=…&name=…</code>，App 扫码即解析并填好服务器配置。</span>
                 </div>
             </div>
         </div>
@@ -45,12 +51,28 @@
 {/block}
 
 {block name="script"}
+<script src="/static/lib/uqrcode/uqrcode.js"></script>
 <script>
+function renderQr(link) {
+    if (typeof UQRCode === 'undefined') return;
+    try {
+        var qr = new UQRCode();
+        qr.data = link;
+        qr.size = 220;
+        qr.make();
+        var canvas = document.getElementById('qr');
+        qr.canvasContext = canvas.getContext('2d');
+        qr.drawCanvas();
+    } catch (e) {
+        console.error('二维码渲染失败', e);
+    }
+}
 function buildLink() {
     var url = document.getElementById('server-url').value.trim().replace(/\/+$/, '');
     var name = document.getElementById('server-name').value.trim();
     var link = 'hg://server?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name);
     document.getElementById('deep-link').textContent = link;
+    renderQr(link);
     return link;
 }
 function copyLink() {
