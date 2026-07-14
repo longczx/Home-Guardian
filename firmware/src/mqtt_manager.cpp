@@ -6,7 +6,7 @@ MqttManager* MqttManager::_instance = nullptr;
 bool MqttManager::begin(const char* host, uint16_t port,
                         const char* gatewayUid, const char* password) {
     _instance = this;
-    _host = host;
+    _host = host;              // String 拷贝
     _port = port;
     _gatewayUid = gatewayUid;
     _password = password;
@@ -17,7 +17,7 @@ bool MqttManager::begin(const char* host, uint16_t port,
     snprintf(_gatewayCommandReply, sizeof(_gatewayCommandReply), "home/upstream/%s/command/reply",  gatewayUid);
 
     _mqtt.setClient(_wifiClient);
-    _mqtt.setServer(host, port);
+    _mqtt.setServer(_host.c_str(), port);
     _mqtt.setCallback(_mqttCallback);
     _mqtt.setBufferSize(512);
 
@@ -26,12 +26,12 @@ bool MqttManager::begin(const char* host, uint16_t port,
 }
 
 void MqttManager::connect() {
-    Serial.printf("[MQTT] 连接 %s:%d (gateway=%s)...\n", _host, _port, _gatewayUid);
+    Serial.printf("[MQTT] 连接 %s:%d (gateway=%s)...\n", _host.c_str(), _port, _gatewayUid.c_str());
 
     bool ok = _mqtt.connect(
-        _gatewayUid,              // client id
-        _gatewayUid,              // username (网关的 device_uid)
-        _password,                // password
+        _gatewayUid.c_str(),      // client id
+        _gatewayUid.c_str(),      // username (网关的 device_uid)
+        _password.c_str(),        // password
         _gatewayStateTopic,       // will topic (网关的 state)
         1,                        // will QoS
         false,                    // will retain

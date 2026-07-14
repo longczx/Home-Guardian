@@ -3,12 +3,12 @@
 #include <Arduino.h>
 
 void WifiManager::begin(const char* ssid, const char* password) {
-    _ssid = ssid;
+    _ssid = ssid;          // String 拷贝
     _password = password;
 
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
-    WiFi.begin(ssid, password);
+    WiFi.begin(_ssid.c_str(), _password.c_str());
 
     Serial.printf("[WiFi] 正在连接 %s", ssid);
 

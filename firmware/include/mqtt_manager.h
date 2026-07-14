@@ -1,6 +1,7 @@
 #ifndef MQTT_MANAGER_H
 #define MQTT_MANAGER_H
 
+#include <Arduino.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 
@@ -31,10 +32,11 @@ private:
     char _gatewayStateTopic[80];
     char _gatewayCommandSub[80];
     char _gatewayCommandReply[80];
-    const char* _host = nullptr;
+    // 存 String 拷贝：凭证来自运行期(NVS)的临时 buffer，不能存裸指针
+    String _host;
     uint16_t _port = 1883;
-    const char* _gatewayUid = nullptr;
-    const char* _password = nullptr;
+    String _gatewayUid;
+    String _password;
     unsigned long _lastReconnect = 0;
     unsigned long _reconnectInterval = 5000;
     CommandCallback _commandCb = nullptr;
