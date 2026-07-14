@@ -43,6 +43,38 @@
       }
     },
     {
+      "path": "pages/manage/devices",
+      "style": { "navigationBarTitleText": "设备管理" }
+    },
+    {
+      "path": "pages/manage/device-add",
+      "style": { "navigationBarTitleText": "添加设备" }
+    },
+    {
+      "path": "pages/manage/device-edit",
+      "style": { "navigationBarTitleText": "编辑设备" }
+    },
+    {
+      "path": "pages/manage/alert-rules",
+      "style": { "navigationBarTitleText": "告警规则" }
+    },
+    {
+      "path": "pages/manage/alert-rule-edit",
+      "style": { "navigationBarTitleText": "告警规则" }
+    },
+    {
+      "path": "pages/manage/channels",
+      "style": { "navigationBarTitleText": "通知渠道" }
+    },
+    {
+      "path": "pages/manage/automations",
+      "style": { "navigationBarTitleText": "自动化" }
+    },
+    {
+      "path": "pages/manage/invite",
+      "style": { "navigationBarTitleText": "邀请家人" }
+    },
+    {
       "path": "pages/auth/login",
       "style": {
         "navigationBarTitleText": "登录"

@@ -2,7 +2,7 @@
 import { onShow } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { useAuthStore } from '@/stores/auth';
-import { ensureReady, toast } from '@/utils/guard';
+import { ensureReady } from '@/utils/guard';
 
 const auth = useAuthStore();
 
@@ -12,14 +12,14 @@ onShow(() => {
 });
 
 const items = [
-  { key: 'devices', title: '设备管理', sub: '添加（扫码配网）· 编辑 · 删除' },
-  { key: 'alert-rules', title: '告警规则', sub: '遥测/离线 · 分级 · 冷却 · 恢复通知' },
-  { key: 'channels', title: '通知渠道', sub: '邮件 / Webhook · 一键测试' },
-  { key: 'automations', title: '自动化', sub: '查看 · 启停 · 删除' },
+  { key: 'devices', title: '设备管理', sub: '添加（配对码）· 编辑 · 删除', url: '/pages/manage/devices' },
+  { key: 'alert-rules', title: '告警规则', sub: '遥测/离线 · 分级 · 冷却 · 恢复通知', url: '/pages/manage/alert-rules' },
+  { key: 'channels', title: '通知渠道', sub: '查看 · 一键测试', url: '/pages/manage/channels' },
+  { key: 'automations', title: '自动化', sub: '查看 · 启停 · 删除', url: '/pages/manage/automations' },
 ];
 
-function open() {
-  toast('该管理功能将在 PR2 提供');
+function open(url: string) {
+  uni.navigateTo({ url });
 }
 </script>
 
@@ -28,7 +28,7 @@ function open() {
     <PageHeader title="管理" :subtitle="auth.canManage ? '设备与规则管理' : '仅管理员可用'" />
 
     <view v-if="auth.canManage" class="menu">
-      <view v-for="it in items" :key="it.key" class="item" @tap="open">
+      <view v-for="it in items" :key="it.key" class="item" @tap="open(it.url)">
         <view class="ic">{{ it.title.slice(0, 1) }}</view>
         <view class="mid">
           <text class="t">{{ it.title }}</text>

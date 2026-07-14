@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
-import { parseServerQr } from '@/utils/qrcode';
+import { parseServerQr, parseInviteQr } from '@/utils/qrcode';
 import { toast } from '@/utils/guard';
 
 const server = useServerStore();
@@ -34,6 +34,13 @@ function onScan() {
   // eslint-disable-next-line no-unreachable
   uni.scanCode({
     success: (r) => {
+      // 邀请二维码：带服务器地址 + 邀请码，扫码即配服务器并进注册页
+      const invite = parseInviteQr(r.result);
+      if (invite) {
+        if (invite.url) server.upsert(invite.name || invite.url, invite.url);
+        uni.navigateTo({ url: `/pages/auth/register?code=${invite.code}` });
+        return;
+      }
       const parsed = parseServerQr(r.result);
       if (!parsed) {
         toast('二维码格式无法识别');
