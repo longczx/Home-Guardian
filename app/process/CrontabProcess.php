@@ -12,9 +12,12 @@ namespace app\process;
 
 use app\model\Automation;
 use app\service\AutomationService;
+use app\service\AlertService;
+use app\service\DeviceService;
 use Cron\CronExpression;
 use Workerman\Timer;
 use support\Log;
+use support\Redis;
 
 class CrontabProcess
 {
@@ -32,6 +35,9 @@ class CrontabProcess
 
         // 每 60 秒扫描一次定时自动化规则
         Timer::add(60, [$this, 'processScheduledAutomations']);
+
+        // 每 60 秒做一次设备心跳超时扫描（兜底 LWT 未触发的静默离线）
+        Timer::add(60, [$this, 'sweepOfflineDevices']);
 
         Log::info('CrontabProcess 定时自动化进程已启动');
     }
@@ -104,6 +110,46 @@ class CrontabProcess
             if (str_contains($e->getMessage(), 'Redis') || str_contains($e->getMessage(), 'Connection')) {
                 $this->initRedis();
             }
+        }
+    }
+
+    /**
+     * 设备心跳超时扫描
+     *
+     * 把 last_seen 超过 DEVICE_OFFLINE_TIMEOUT（默认 180s）仍在线的设备置离线，
+     * 并推 WS 让前端实时更新 + 触发离线告警闭环。
+     */
+    public function sweepOfflineDevices(): void
+    {
+        try {
+            $timeout = (int)(getenv('DEVICE_OFFLINE_TIMEOUT') ?: 180);
+            $offline = DeviceService::sweepOfflineDevices($timeout);
+
+            foreach ($offline as $dev) {
+                try {
+                    Redis::connection('pubsub')->publish('ws:broadcast', json_encode([
+                        'type'            => 'device_status',
+                        'device_id'       => $dev['id'],
+                        'device_uid'      => $dev['device_uid'],
+                        'device_location' => $dev['location'],
+                        'is_online'       => false,
+                    ], JSON_UNESCAPED_UNICODE));
+                } catch (\Throwable $e) {
+                    Log::error("离线扫描 WS 推送失败: {$e->getMessage()}");
+                }
+
+                try {
+                    AlertService::triggerOfflineAlerts($dev['id']);
+                } catch (\Throwable $e) {
+                    Log::error("离线扫描告警失败: {$e->getMessage()}");
+                }
+            }
+
+            if ($offline) {
+                Log::info('设备心跳扫描：置离线 ' . count($offline) . ' 台');
+            }
+        } catch (\Throwable $e) {
+            Log::error("设备心跳扫描异常: {$e->getMessage()}");
         }
     }
 

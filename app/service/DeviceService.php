@@ -124,6 +124,37 @@ class DeviceService
     }
 
     /**
+     * 心跳超时扫描：把 last_seen 过期但仍标记在线的设备置为离线
+     *
+     * 兜底 MQTT LWT 未触发的「静默死亡」（断电/崩溃/掉网）——仅靠 LWT 时
+     * 这类设备会一直显示在线。由 CrontabProcess 每 60s 调用。
+     *
+     * @param  int $timeoutSec 超时秒数（last_seen 早于 now-timeout 视为离线）
+     * @return array 被置离线的设备 [{id, device_uid, location}]，供调用方推 WS / 触发告警
+     */
+    public static function sweepOfflineDevices(int $timeoutSec): array
+    {
+        $threshold = now()->subSeconds($timeoutSec);
+
+        $stale = Device::where('is_online', true)
+            ->whereNotNull('last_seen')
+            ->where('last_seen', '<', $threshold)
+            ->get(['id', 'device_uid', 'location']);
+
+        if ($stale->isEmpty()) {
+            return [];
+        }
+
+        Device::whereIn('id', $stale->pluck('id'))->update(['is_online' => false]);
+
+        return $stale->map(fn ($d) => [
+            'id'         => $d->id,
+            'device_uid' => $d->device_uid,
+            'location'   => $d->location,
+        ])->all();
+    }
+
+    /**
      * 批量设置设备属性（EAV 模式）
      *
      * 使用 upsert 模式：属性存在则更新，不存在则创建。
