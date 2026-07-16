@@ -116,6 +116,8 @@
     "selectedColor": "#2B6FE3",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
+    "fontSize": "16px",
+    "height": "54px",
     "list": [
       {
         "pagePath": "pages/index/index",

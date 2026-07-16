@@ -36,4 +36,11 @@ view,
 text {
   box-sizing: border-box;
 }
+
+/* H5 端 tabBar 文字放大（pages.json 的 fontSize 主要对 App/小程序生效） */
+/* #ifdef H5 */
+.uni-tabbar__label {
+  font-size: 16px !important;
+}
+/* #endif */
 </style>
