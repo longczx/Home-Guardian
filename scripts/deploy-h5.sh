@@ -45,7 +45,16 @@ docker compose -f "$COMPOSE_FILE" build webman
 log "重建容器…"
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate webman nginx
 
-# ── 3. 健康检查 ───────────────────────────────────────────────
+# ── 3. 数据库迁移（后端有新迁移时自动补跑）────────────────────
+log "执行数据库迁移…"
+# 等 webman 起来再迁移
+for i in $(seq 1 15); do
+  docker compose -f "$COMPOSE_FILE" exec -T webman php -r 'exit(0);' >/dev/null 2>&1 && break
+  sleep 2
+done
+docker compose -f "$COMPOSE_FILE" exec -T webman php webman migrate:run || die "数据库迁移失败"
+
+# ── 4. 健康检查 ───────────────────────────────────────────────
 log "等待服务就绪…"
 ok=0
 for i in $(seq 1 20); do
