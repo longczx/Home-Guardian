@@ -33,12 +33,31 @@ const thresholdText = ref('0');
 const isBetween = computed(() => form.value.condition === 'BETWEEN' || form.value.condition === 'NOT_BETWEEN');
 const isOffline = computed(() => form.value.trigger_type === 'offline');
 
-const deviceIndex = computed(() => devices.value.findIndex((d) => d.id === form.value.device_id));
-const conditionIndex = computed(() => CONDITIONS.findIndex((c) => c.value === form.value.condition));
-const severityIndex = computed(() => SEVERITIES.findIndex((s) => s.value === form.value.severity));
-
 const currentDevice = computed(() => devices.value.find((d) => d.id === form.value.device_id));
 const metricOptions = computed(() => currentDevice.value?.metric_fields ?? []);
+const conditionLabel = computed(() => CONDITIONS.find((c) => c.value === form.value.condition)?.label ?? '请选择');
+const severityLabel = computed(() => SEVERITIES.find((s) => s.value === form.value.severity)?.label ?? '警告');
+
+// 用 actionSheet 选择，规避 uni <picker> 在 range 由空变有时的渲染崩溃
+function chooseDevice() {
+  if (!devices.value.length) return toast('暂无设备');
+  uni.showActionSheet({
+    itemList: devices.value.map((d) => d.name),
+    success: (r) => { form.value.device_id = devices.value[r.tapIndex]?.id; },
+  });
+}
+function chooseCondition() {
+  uni.showActionSheet({
+    itemList: CONDITIONS.map((c) => c.label),
+    success: (r) => { form.value.condition = CONDITIONS[r.tapIndex].value; },
+  });
+}
+function chooseSeverity() {
+  uni.showActionSheet({
+    itemList: SEVERITIES.map((s) => s.label),
+    success: (r) => { form.value.severity = SEVERITIES[r.tapIndex].value as AlertRuleInput['severity']; },
+  });
+}
 
 async function loadRefs() {
   try {
@@ -50,15 +69,6 @@ async function loadRefs() {
   }
 }
 
-function onDevice(e: { detail: { value: number } }) {
-  form.value.device_id = devices.value[e.detail.value]?.id;
-}
-function onCondition(e: { detail: { value: number } }) {
-  form.value.condition = CONDITIONS[e.detail.value].value;
-}
-function onSeverity(e: { detail: { value: number } }) {
-  form.value.severity = SEVERITIES[e.detail.value].value as AlertRuleInput['severity'];
-}
 function pickMetric(key: string) {
   form.value.telemetry_key = key;
 }
@@ -139,9 +149,7 @@ onLoad(async (q) => {
 
       <view class="field">
         <text class="label">关联设备</text>
-        <picker :range="devices" range-key="name" :value="deviceIndex" @change="onDevice">
-          <view class="picker">{{ currentDevice ? currentDevice.name : '请选择设备' }}</view>
-        </picker>
+        <view class="picker" @tap="chooseDevice">{{ currentDevice ? currentDevice.name : '请选择设备 ›' }}</view>
       </view>
 
       <view class="field">
@@ -154,9 +162,7 @@ onLoad(async (q) => {
 
       <view class="field">
         <text class="label">告警级别</text>
-        <picker :range="SEVERITIES" range-key="label" :value="severityIndex" @change="onSeverity">
-          <view class="picker">{{ SEVERITIES[severityIndex]?.label }}</view>
-        </picker>
+        <view class="picker" @tap="chooseSeverity">{{ severityLabel }} ›</view>
       </view>
     </view>
 
@@ -177,9 +183,7 @@ onLoad(async (q) => {
       </view>
       <view class="field">
         <text class="label">比较条件</text>
-        <picker :range="CONDITIONS" range-key="label" :value="conditionIndex" @change="onCondition">
-          <view class="picker">{{ CONDITIONS[conditionIndex]?.label }}</view>
-        </picker>
+        <view class="picker" @tap="chooseCondition">{{ conditionLabel }} ›</view>
       </view>
       <view class="field">
         <text class="label">阈值{{ isBetween ? '（两个，逗号分隔）' : '' }}</text>

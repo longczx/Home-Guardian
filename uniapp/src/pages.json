@@ -71,6 +71,14 @@
       "style": { "navigationBarTitleText": "自动化" }
     },
     {
+      "path": "pages/manage/automation-edit",
+      "style": { "navigationBarTitleText": "自动化" }
+    },
+    {
+      "path": "pages/manage/channel-edit",
+      "style": { "navigationBarTitleText": "通知渠道" }
+    },
+    {
       "path": "pages/manage/invite",
       "style": { "navigationBarTitleText": "邀请家人" }
     },

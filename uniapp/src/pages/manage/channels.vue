@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { getChannels, testChannel, type NotificationChannel } from '@/api/channel';
+import { getChannels, testChannel, deleteChannel, type NotificationChannel } from '@/api/channel';
 import { ensureReady, toast } from '@/utils/guard';
 
 const channels = ref<NotificationChannel[]>([]);
@@ -40,6 +40,28 @@ async function test(c: NotificationChannel) {
     testing.value = 0;
   }
 }
+function add() {
+  uni.navigateTo({ url: '/pages/manage/channel-edit' });
+}
+function edit(c: NotificationChannel) {
+  uni.navigateTo({ url: `/pages/manage/channel-edit?id=${c.id}` });
+}
+function remove(c: NotificationChannel) {
+  uni.showModal({
+    title: '删除渠道',
+    content: `确定删除「${c.name}」？关联的告警规则将失去该通知渠道。`,
+    success: async (r) => {
+      if (!r.confirm) return;
+      try {
+        await deleteChannel(c.id);
+        channels.value = channels.value.filter((x) => x.id !== c.id);
+        toast('已删除', 'success');
+      } catch (e) {
+        toast((e as Error).message);
+      }
+    },
+  });
+}
 onShow(load);
 </script>
 
@@ -47,7 +69,7 @@ onShow(load);
   <view class="page">
     <view class="list">
       <view v-for="c in channels" :key="c.id" class="row">
-        <view class="mid">
+        <view class="mid" @tap="edit(c)">
           <text class="name">{{ c.name }}</text>
           <text class="meta">
             {{ TYPE_LABEL[c.type] || c.type }}
@@ -55,22 +77,29 @@ onShow(load);
           </text>
         </view>
         <button class="test" :loading="testing === c.id" @tap="test(c)">测试</button>
+        <text class="del" @tap="remove(c)">删除</text>
       </view>
     </view>
-    <view v-if="!loading && !channels.length" class="empty">
-      还没有通知渠道。渠道的新建/编辑请在后台管理面板完成，App 端可查看与测试。
-    </view>
+    <view v-if="!loading && !channels.length" class="empty">还没有通知渠道，点下方新建</view>
+    <view class="fab" @tap="add">＋ 新建渠道</view>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.page { padding: 24rpx 32rpx; }
+.page { padding: 24rpx 32rpx 160rpx; }
 .list { display: flex; flex-direction: column; gap: 16rpx; }
 .row {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 16rpx;
   background: $hg-card; border-radius: $hg-radius; padding: 26rpx 24rpx; box-shadow: $hg-shadow;
 }
-.mid { flex: 1; }
+.mid { flex: 1; min-width: 0; }
+.del { font-size: 24rpx; color: $hg-crit; }
+.fab {
+  position: fixed; left: 32rpx; right: 32rpx; bottom: 40rpx;
+  height: 88rpx; line-height: 88rpx; text-align: center;
+  background: $hg-accent; color: #fff; font-size: 30rpx; border-radius: $hg-radius-s;
+  box-shadow: 0 6rpx 20rpx rgba(43, 111, 227, 0.35);
+}
 .name { font-size: 30rpx; font-weight: 600; color: $hg-fg; }
 .meta { display: block; font-size: 22rpx; color: $hg-muted; margin-top: 4rpx; }
 .off { color: $hg-crit; }
