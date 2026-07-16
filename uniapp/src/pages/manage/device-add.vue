@@ -24,6 +24,9 @@ async function generate() {
     expiresIn.value = res.expires_in;
     status.value = 'pending';
 
+    // 生成即自动复制，方便粘贴到设备配网页
+    copyCode(true);
+
     ticker = setInterval(() => {
       expiresIn.value = Math.max(0, expiresIn.value - 1);
       if (expiresIn.value === 0) { status.value = 'expired'; stop(); }
@@ -45,6 +48,17 @@ async function generate() {
   } catch (e) {
     toast((e as Error).message);
   }
+}
+
+function copyCode(silent = false) {
+  if (!code.value) return;
+  uni.setClipboardData({
+    data: code.value,
+    success: () => { if (!silent) toast('已复制', 'success'); },
+    fail: () => { if (!silent) toast('复制失败'); },
+  });
+  // 部分平台 setClipboardData 自带提示；这里统一给一次「已复制」
+  if (silent) toast('配对码已复制', 'success');
 }
 
 function done() {
@@ -70,8 +84,9 @@ onUnmounted(stop);
 
     <view v-else class="card center">
       <template v-if="status === 'pending'">
-        <text class="code">{{ code }}</text>
+        <text class="code" @tap="copyCode()">{{ code }}</text>
         <text class="hint">在设备配网页填入此码 · {{ expiresIn }}s 后过期</text>
+        <button class="btn btn-copy" @tap="copyCode()">复制配对码</button>
         <view class="waiting">
           <text class="spinner-txt">等待设备上线…</text>
         </view>
@@ -185,6 +200,10 @@ onUnmounted(stop);
 .btn-primary {
   background: $hg-accent;
   color: #fff;
+}
+.btn-copy {
+  background: $hg-accent-soft;
+  color: $hg-accent;
 }
 .btn-ghost {
   background: $hg-card-2;
