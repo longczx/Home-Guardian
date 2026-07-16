@@ -1,5 +1,4 @@
 import request from './request';
-import type { Paginated } from './types';
 
 export interface NotificationChannel {
   id: number;
@@ -16,8 +15,9 @@ export interface ChannelInput {
   is_enabled: boolean;
 }
 
+// 后端该接口返回普通数组（非分页）
 export function getChannels(params?: Record<string, string | number>) {
-  return request.get<Paginated<NotificationChannel>>('/notification-channels', params);
+  return request.get<NotificationChannel[]>('/notification-channels', params);
 }
 
 export function getChannel(id: number) {
