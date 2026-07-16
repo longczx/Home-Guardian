@@ -43,8 +43,8 @@ const metricOptions = computed(() => triggerDevice.value?.metric_fields ?? []);
 async function loadRefs() {
   try {
     const [dev, ch] = await Promise.all([getDevices({ per_page: 100 }), getChannels({ per_page: 100 })]);
-    devices.value = dev.items;
-    channels.value = ch.items;
+    devices.value = dev.items ?? [];
+    channels.value = Array.isArray(ch) ? ch : [];
   } catch (e) {
     toast((e as Error).message);
   }

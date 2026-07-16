@@ -21,7 +21,8 @@ async function load() {
   if (!ensureReady()) return;
   loading.value = true;
   try {
-    channels.value = (await getChannels({ per_page: 100 })).items;
+    const list = await getChannels({ per_page: 100 });
+    channels.value = Array.isArray(list) ? list : [];
   } catch (e) {
     toast((e as Error).message);
   } finally {

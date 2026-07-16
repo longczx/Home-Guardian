@@ -139,6 +139,11 @@
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "Home Guardian",
     "navigationBarBackgroundColor": "#F2F4F8",
-    "backgroundColor": "#F2F4F8"
+    "backgroundColor": "#F2F4F8",
+    "backgroundColorContent": "#F2F4F8",
+    "app-plus": {
+      "background": "#F2F4F8",
+      "bounce": "none"
+    }
   }
 }
