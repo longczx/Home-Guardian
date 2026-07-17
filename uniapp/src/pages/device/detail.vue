@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { onLoad, onShow } from '@dcloudio/uni-app';
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
 import { getDevice, getLatestTelemetry, sendCommand } from '@/api/device';
 import type { Device, ControlPoint, LatestMetric } from '@/api/types';
 import { toast } from '@/utils/guard';
 import { timeAgo } from '@/utils/format';
+import { onWs } from '@/utils/ws';
 
 const id = ref(0);
 const device = ref<Device | null>(null);
@@ -73,10 +74,39 @@ function goTelemetry() {
   });
 }
 
+// 实时：本设备的遥测/状态/在线更新
+let unsubs: Array<() => void> = [];
+function mine(m: Record<string, unknown>): boolean {
+  return Number(m.device_id) === id.value;
+}
+function subscribe() {
+  unsubs = [
+    onWs('telemetry', (m) => {
+      if (!mine(m) || !m.data || typeof m.data !== 'object') return;
+      const data = m.data as Record<string, unknown>;
+      Object.entries(data).forEach(([k, v]) => {
+        const idx = latest.value.findIndex((x) => x.metric_key === k);
+        if (idx >= 0) latest.value[idx] = { ...latest.value[idx], value: v, ts: String(m.ts ?? '') };
+        else latest.value.push({ metric_key: k, value: v, ts: String(m.ts ?? '') });
+      });
+      if (device.value) device.value.is_online = true;
+    }),
+    onWs('device_state', (m) => {
+      if (mine(m) && device.value && m.state && typeof m.state === 'object') {
+        device.value.state = { ...(device.value.state || {}), ...(m.state as Record<string, unknown>) };
+      }
+    }),
+    onWs('device_status', (m) => {
+      if (mine(m) && device.value) device.value.is_online = !!m.is_online;
+    }),
+  ];
+}
+
 onLoad((q) => {
   id.value = Number(q?.id || 0);
 });
-onShow(load);
+onShow(() => { load(); subscribe(); });
+onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 </script>
 
 <template>

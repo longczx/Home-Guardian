@@ -6,6 +6,7 @@ import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 import { login, toAuthUser } from '@/api/auth';
 import { registerPush } from '@/utils/push';
+import { connectWs } from '@/utils/ws';
 import { toast } from '@/utils/guard';
 
 const { t } = useI18n();
@@ -33,6 +34,7 @@ async function onLogin() {
     const res = await login(username.value.trim(), password.value);
     auth.setSession(res.access_token, res.refresh_token, toAuthUser(res.user));
     registerPush();
+    connectWs();
     toast(t('auth.loginSuccess'), 'success');
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {

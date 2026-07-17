@@ -170,7 +170,7 @@ onLoad(async (q) => {
     <view v-if="!isOffline" class="card">
       <view class="field">
         <text class="label">遥测指标</text>
-        <input v-model="form.telemetry_key" class="input" placeholder="如 temperature" placeholder-class="ph" />
+        <!-- 设备已定义指标：只能从中选，避免手填错 key 致规则永不触发 -->
         <view v-if="metricOptions.length" class="metric-chips">
           <text
             v-for="m in metricOptions"
@@ -180,6 +180,8 @@ onLoad(async (q) => {
             @tap="pickMetric(m.key)"
           >{{ m.label }}</text>
         </view>
+        <!-- 设备未定义指标时才允许手填 -->
+        <input v-else v-model="form.telemetry_key" class="input" placeholder="如 temperature" placeholder-class="ph" />
       </view>
       <view class="field">
         <text class="label">比较条件</text>

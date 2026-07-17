@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { onLoad, onReady } from '@dcloudio/uni-app';
+import { onLoad, onReady, onUnload } from '@dcloudio/uni-app';
 import { getAggregatedTelemetry } from '@/api/device';
 import type { AggregatedPoint } from '@/api/types';
 import { toast } from '@/utils/guard';
+import { onWs } from '@/utils/ws';
 
 const RANGES = [
   { key: '24h', label: '24小时', hours: 24 },
@@ -102,6 +103,18 @@ onReady(() => {
     },
   });
 });
+
+// 实时：本设备该指标有新遥测时，追加一个数据点即时重绘
+const unsub = onWs('telemetry', (m) => {
+  if (Number(m.device_id) !== deviceId.value || !m.data || typeof m.data !== 'object') return;
+  const v = (m.data as Record<string, unknown>)[metric.value];
+  if (v === undefined || v === null || Number.isNaN(Number(v))) return;
+  const val = Number(v);
+  points.value.push({ bucket: String(m.ts ?? ''), avg_value: val, min_value: val, max_value: val, sample_count: 1 });
+  if (points.value.length > 240) points.value.shift(); // 限长防内存膨胀
+  draw();
+});
+onUnload(() => unsub());
 </script>
 
 <template>

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
+import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { getAlertLogs, acknowledgeAlert, resolveAlert } from '@/api/alert';
 import type { AlertLog } from '@/api/types';
 import { ensureReady, toast } from '@/utils/guard';
 import { timeAgo, severityColor } from '@/utils/format';
+import { onWs } from '@/utils/ws';
 
 const { t } = useI18n();
 const FILTERS = computed(() => [
@@ -66,7 +67,16 @@ async function onResolve(l: AlertLog) {
   }
 }
 
-onShow(load);
+// 实时：新告警/告警恢复时刷新列表
+let unsubs: Array<() => void> = [];
+onShow(() => {
+  load();
+  unsubs = [
+    onWs('alert', load),
+    onWs('alert_resolved', load),
+  ];
+});
+onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 onPullDownRefresh(async () => {
   await load();
   uni.stopPullDownRefresh();
