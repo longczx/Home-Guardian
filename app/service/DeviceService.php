@@ -250,8 +250,23 @@ class DeviceService
         }
 
         if ($action === 'subscribe') {
-            // 设备只能订阅自己的 downstream 主题
-            return str_starts_with($topic, "home/downstream/{$uid}/");
+            // 设备可订阅自己的 downstream 主题
+            if (str_starts_with($topic, "home/downstream/{$uid}/")) {
+                return true;
+            }
+
+            // 网关代其下子设备接收指令：允许订阅子设备的 downstream
+            // （子设备不直连 MQTT，指令经网关下发；缺此项子执行器收不到指令）
+            if ($device->type === 'gateway') {
+                $sensorUids = Device::where('gateway_uid', $uid)->pluck('device_uid')->toArray();
+                foreach ($sensorUids as $sensorUid) {
+                    if (str_starts_with($topic, "home/downstream/{$sensorUid}/")) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         return false;

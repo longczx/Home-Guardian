@@ -163,9 +163,12 @@ Route::get('/api/health', function () {
 |--------------------------------------------------------------------------
 */
 Route::group('/api/auth', function () {
-    Route::post('/login', [app\controller\AuthController::class, 'login']);
-    Route::post('/refresh', [app\controller\AuthController::class, 'refresh']);
-    Route::post('/register', [app\controller\AuthController::class, 'register']);
+    Route::post('/login', [app\controller\AuthController::class, 'login'])
+        ->middleware([new app\middleware\RateLimitMiddleware('login', 10, 60)]);
+    Route::post('/refresh', [app\controller\AuthController::class, 'refresh'])
+        ->middleware([new app\middleware\RateLimitMiddleware('refresh', 30, 60)]);
+    Route::post('/register', [app\controller\AuthController::class, 'register'])
+        ->middleware([new app\middleware\RateLimitMiddleware('register', 5, 60)]);
 });
 
 /*
@@ -184,7 +187,8 @@ Route::group('/api/mqtt', function () {
 |--------------------------------------------------------------------------
 */
 Route::group('/api/provisioning', function () {
-    Route::post('/register', [app\controller\ProvisioningController::class, 'register']);
+    Route::post('/register', [app\controller\ProvisioningController::class, 'register'])
+        ->middleware([new app\middleware\RateLimitMiddleware('provision_register', 20, 60)]);
 });
 
 /*
