@@ -8,6 +8,7 @@ import { useServerStore } from '@/stores/server';
 import { useLocaleStore, type Lang } from '@/stores/locale';
 import { ensureReady, toast } from '@/utils/guard';
 import { unregisterPush } from '@/utils/push';
+import { closeWs } from '@/utils/ws';
 
 const { t } = useI18n();
 const auth = useAuthStore();
@@ -47,6 +48,7 @@ function onLogout() {
     success: async (r) => {
       if (r.confirm) {
         await unregisterPush(); // 先注销 cid（趁 token 还在）
+        closeWs();
         auth.logout();
         uni.reLaunch({ url: '/pages/auth/login' });
       }

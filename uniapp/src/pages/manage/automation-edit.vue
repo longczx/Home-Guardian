@@ -26,7 +26,9 @@ const f = ref({
   condition: 'GREATER_THAN',
   value: 0,
   // schedule
-  cron: '0 22 * * *',
+  cronMode: 'daily' as 'daily' | 'hourly' | 'weekday' | 'custom',
+  cronTime: '22:00', // HH:MM，用于 daily/weekday
+  cron: '0 22 * * *', // custom 模式的原始表达式
   // action
   actionType: 'device_command' as 'device_command' | 'notify',
   actDeviceId: undefined as number | undefined,
@@ -37,6 +39,14 @@ const f = ref({
 
 const triggerDevice = computed(() => devices.value.find((d) => d.id === f.value.deviceId));
 const actionDevice = computed(() => devices.value.find((d) => d.id === f.value.actDeviceId));
+// 执行设备的可用指令（来自 capability.controls）：优先选择，避免手打错指令名
+const actCommands = computed(() => {
+  const ctrls = actionDevice.value?.capability?.controls ?? [];
+  const seen = new Set<string>();
+  return ctrls
+    .filter((c) => c.command && !seen.has(c.command) && seen.add(c.command))
+    .map((c) => ({ command: c.command, label: c.label || c.command }));
+});
 const conditionLabel = computed(() => CONDITIONS.find((c) => c.value === f.value.condition)?.label ?? '请选择');
 const metricOptions = computed(() => triggerDevice.value?.metric_fields ?? []);
 
@@ -67,6 +77,24 @@ function chooseCondition() {
     success: (r) => { f.value.condition = CONDITIONS[r.tapIndex].value; },
   });
 }
+// 由模式 + 时间生成 cron；custom 模式用原始输入
+function effectiveCron(): string {
+  if (f.value.cronMode === 'custom') return f.value.cron.trim();
+  if (f.value.cronMode === 'hourly') return '0 * * * *';
+  const [hh, mm] = f.value.cronTime.split(':');
+  const h = Number(hh) || 0;
+  const m = Number(mm) || 0;
+  return f.value.cronMode === 'weekday' ? `${m} ${h} * * 1-5` : `${m} ${h} * * *`;
+}
+const cronPreview = computed(() => effectiveCron());
+
+function chooseActCommand() {
+  if (!actCommands.value.length) return;
+  uni.showActionSheet({
+    itemList: actCommands.value.map((c) => `${c.label} (${c.command})`),
+    success: (r) => { f.value.actName = actCommands.value[r.tapIndex].command; },
+  });
+}
 function toggleChannel(id: number) {
   f.value.channelIds = f.value.channelIds.includes(id)
     ? f.value.channelIds.filter((x) => x !== id)
@@ -87,8 +115,9 @@ function buildPayload(): AutomationInput | null {
       value: Number(f.value.value),
     };
   } else {
-    if (!f.value.cron.trim()) { toast('请填写 cron 表达式'); return null; }
-    trigger_config = { cron: f.value.cron.trim(), timezone: 'Asia/Shanghai' };
+    const cron = effectiveCron();
+    if (!cron) { toast('请填写 cron 表达式'); return null; }
+    trigger_config = { cron, timezone: 'Asia/Shanghai' };
   }
 
   let action;
@@ -143,6 +172,8 @@ onLoad(async (q) => {
         metricKey: (tc.metric_key as string) || '',
         condition: (tc.condition as string) || 'GREATER_THAN',
         value: (tc.value as number) ?? 0,
+        cronMode: tc.cron ? 'custom' : 'daily',
+        cronTime: '22:00',
         cron: (tc.cron as string) || '0 22 * * *',
         actionType: act?.type === 'notify' ? 'notify' : 'device_command',
         actDeviceId: act?.device_id,
@@ -197,10 +228,26 @@ onLoad(async (q) => {
       </template>
 
       <template v-else>
-        <view class="field"><text class="label">Cron 表达式</text>
-          <input v-model="f.cron" class="input" placeholder="0 22 * * *（每晚 22:00）" placeholder-class="ph" />
-          <text class="hint">格式：分 时 日 月 周。示例 0 22 * * * = 每天 22:00</text>
+        <view class="field"><text class="label">频率</text>
+          <view class="seg wrap">
+            <view class="seg-btn" :class="{ on: f.cronMode === 'daily' }" @tap="f.cronMode = 'daily'">每天</view>
+            <view class="seg-btn" :class="{ on: f.cronMode === 'weekday' }" @tap="f.cronMode = 'weekday'">工作日</view>
+            <view class="seg-btn" :class="{ on: f.cronMode === 'hourly' }" @tap="f.cronMode = 'hourly'">每小时</view>
+            <view class="seg-btn" :class="{ on: f.cronMode === 'custom' }" @tap="f.cronMode = 'custom'">自定义</view>
+          </view>
         </view>
+        <view v-if="f.cronMode === 'daily' || f.cronMode === 'weekday'" class="field">
+          <text class="label">时间</text>
+          <picker mode="time" :value="f.cronTime" @change="f.cronTime = $event.detail.value">
+            <view class="picker">{{ f.cronTime }} ›</view>
+          </picker>
+        </view>
+        <view v-else-if="f.cronMode === 'custom'" class="field">
+          <text class="label">Cron 表达式</text>
+          <input v-model="f.cron" class="input" placeholder="0 22 * * *" placeholder-class="ph" />
+          <text class="hint">格式：分 时 日 月 周</text>
+        </view>
+        <text class="hint" style="padding-left:0;">将执行：<text style="font-family:monospace;">{{ cronPreview }}</text></text>
       </template>
     </view>
 
@@ -216,8 +263,11 @@ onLoad(async (q) => {
         <view class="field"><text class="label">目标设备</text>
           <view class="picker" @tap="chooseDevice('action')">{{ actionDevice ? actionDevice.name : '请选择设备 ›' }}</view>
         </view>
-        <view class="field"><text class="label">指令名</text>
-          <input v-model="f.actName" class="input" placeholder="如 turn_on / turn_off" placeholder-class="ph" />
+        <view class="field"><text class="label">指令</text>
+          <view v-if="actCommands.length" class="picker" @tap="chooseActCommand">
+            {{ f.actName || '请选择指令 ›' }}
+          </view>
+          <input v-else v-model="f.actName" class="input" placeholder="如 turn_on / turn_off" placeholder-class="ph" />
         </view>
       </template>
 
@@ -256,6 +306,8 @@ onLoad(async (q) => {
 .ph { color: #b6bccb; }
 .picker { font-size: 30rpx; color: $hg-fg; }
 .seg { display: flex; gap: 12rpx; margin: 12rpx 0; }
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap .seg-btn { flex: 1 1 40%; }
 .seg-btn { flex: 1; text-align: center; padding: 16rpx 0; border-radius: $hg-radius-s; border: 1rpx solid $hg-line; background: $hg-card-2; color: $hg-muted; font-size: 26rpx; }
 .seg-btn.on { background: $hg-accent-soft; border-color: $hg-accent; color: $hg-accent; font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
