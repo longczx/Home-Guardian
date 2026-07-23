@@ -104,6 +104,18 @@ class DeviceService
             throw new BusinessException('设备不存在', 404, 2001);
         }
 
+        // 网关须先删空其下子设备，避免子设备失去所属网关成为"孤儿"
+        if ($device->type === 'gateway') {
+            $childCount = Device::where('gateway_uid', $device->device_uid)->count();
+            if ($childCount > 0) {
+                throw new BusinessException(
+                    "该网关下还挂着 {$childCount} 个子设备，请先删除或迁移这些设备后再删网关",
+                    409,
+                    2003
+                );
+            }
+        }
+
         $device->delete();
     }
 
