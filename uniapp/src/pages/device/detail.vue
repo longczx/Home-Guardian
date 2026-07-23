@@ -46,7 +46,16 @@ async function load() {
   }
 }
 
+// 依赖联动：depends_on 的每个字段都需匹配当前 state，否则该控件禁用（灰）
+function disabled(ctrl: ControlPoint): boolean {
+  const dep = ctrl.depends_on;
+  if (!dep) return false;
+  const state = device.value?.state ?? {};
+  return Object.entries(dep).some(([k, v]) => state[k] !== v);
+}
+
 async function send(ctrl: ControlPoint, value: unknown) {
+  if (disabled(ctrl)) return;
   const prev = stateVal(ctrl);
   setLocal(ctrl, value);
   try {
@@ -65,6 +74,15 @@ function onSlider(ctrl: ControlPoint, e: { detail: { value: number } }) {
 }
 function onEnum(ctrl: ControlPoint, value: string | number) {
   send(ctrl, value);
+}
+// 步进器：在 [min,max] 内按 step 加减
+function onStep(ctrl: ControlPoint, dir: 1 | -1) {
+  const step = ctrl.step ?? 1;
+  const cur = Number(stateVal(ctrl) ?? ctrl.default ?? ctrl.min ?? 0);
+  let next = cur + dir * step;
+  if (ctrl.min != null) next = Math.max(ctrl.min, next);
+  if (ctrl.max != null) next = Math.min(ctrl.max, next);
+  if (next !== cur) send(ctrl, next);
 }
 
 function goTelemetry() {
@@ -133,7 +151,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 
     <!-- 动态控制 -->
     <view v-if="controls.length" class="ctl-card">
-      <view v-for="ctrl in controls" :key="ctrl.key" class="ctl-row">
+      <view v-for="ctrl in controls" :key="ctrl.key" class="ctl-row" :class="{ disabled: disabled(ctrl) }">
         <view class="ctl-head">
           <text class="ctl-label">{{ ctrl.label }}</text>
           <text class="ctl-sub">{{ ctrl.command }} · 经网关下发</text>
@@ -156,6 +174,13 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
             :class="{ on: stateVal(ctrl) === op.value }"
             @tap="onEnum(ctrl, op.value)"
           >{{ op.label }}</view>
+        </view>
+
+        <!-- stepper → − 值 ＋ -->
+        <view v-else-if="ctrl.widget === 'stepper'" class="stepper">
+          <view class="step-btn" @tap="onStep(ctrl, -1)">−</view>
+          <text class="step-val">{{ Number(stateVal(ctrl) ?? ctrl.default ?? ctrl.min ?? 0) }}{{ ctrl.unit || '' }}</text>
+          <view class="step-btn" @tap="onStep(ctrl, 1)">＋</view>
         </view>
 
         <!-- slider -->
@@ -333,6 +358,38 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 }
 .slider-wrap {
   margin-top: 10rpx;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-top: 20rpx;
+}
+.step-btn {
+  width: 72rpx;
+  height: 72rpx;
+  line-height: 68rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: $hg-accent-soft;
+  color: $hg-accent;
+  font-size: 44rpx;
+  font-weight: 700;
+}
+.step-val {
+  min-width: 120rpx;
+  text-align: center;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: $hg-fg;
+}
+.ctl-row.disabled {
+  opacity: 0.4;
+}
+.ctl-row.disabled .sw,
+.ctl-row.disabled .seg-btn,
+.ctl-row.disabled .step-btn {
+  pointer-events: none;
 }
 .mini-btn {
   margin-top: 20rpx;

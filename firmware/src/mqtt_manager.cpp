@@ -78,6 +78,10 @@ bool MqttManager::publishGatewayState(bool online) {
     return _mqtt.publish(_gatewayStateTopic, payload, true);
 }
 
+bool MqttManager::publishGatewayStateJson(const char* json) {
+    return _mqtt.publish(_gatewayStateTopic, json);
+}
+
 bool MqttManager::publishSensorTelemetry(const char* sensorUid, const char* json) {
     char topic[80];
     snprintf(topic, sizeof(topic), "home/upstream/%s/telemetry/post", sensorUid);

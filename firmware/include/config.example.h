@@ -31,6 +31,21 @@
 // #define SENSOR_DHT11_UID    "sensor-temp-01"
 // #define SENSOR_SOUND_UID    "sensor-sound-01"
 
+// ─── 红外空调执行器（可选）──────────────────────────
+//  接一个红外发射管到 IR_LED_PIN，即可把本设备变成"空调万能遥控器"：
+//  收到后台/App 下发的 set_state 指令（全量 电源/模式/温度/风速/扫风）后，
+//  用 IRremoteESP8266 合成对应品牌的红外帧发射出去。完整接入见
+//  docs/guide/ac-ir-control.md。
+//
+//  ⚠️ 红外是开环（只发不收）——发完不保证空调真的执行了。建议本机同时接
+//     DHT11（上面的传感器模块），用真实室温做闭环展示与自动化。
+#define AC_IR_ENABLED          0                     // 置 1 启用红外空调执行器
+#define IR_LED_PIN             25                    // 红外发射管 GPIO（需经三极管驱动，勿直连）
+//  你的空调红外协议：先用库自带的 IRrecvDumpV3 例程对着实体遥控识别 Protocol，
+//  再填到这里。常见：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …
+//  海信机型多数落在 COOLIX 或 HITACHI 系；识别不出就走原始码学习（见文档）。
+#define AC_PROTOCOL            decode_type_t::COOLIX
+
 // =====================================================================
 //  运行期配置（WiFi / MQTT 身份）
 // =====================================================================
