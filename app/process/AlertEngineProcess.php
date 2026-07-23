@@ -10,7 +10,8 @@
  * 性能特点：
  *   - 告警规则在内存中缓存，变更时通过 Redis Pub/Sub 通知刷新
  *   - 匹配过程纯内存计算，不查库
- *   - 使用 Redis 实现防抖（trigger_duration_sec）
+ *   - 使用 Redis 实现双向迟滞防抖（trigger_duration_sec）：触发要持续满足 N 秒，
+ *     恢复也要持续正常 N 秒，抑制阈值边缘抖动引发的告警/恢复通知风暴
  *
  * 还额外处理：
  *   - 通知队列消费（notify:queue → NotificationService）
@@ -188,14 +189,19 @@ class AlertEngineProcess
 
                     // 评估条件
                     if ($rule->evaluate($numericValue)) {
+                        // 条件满足：清"恢复计时"（防止半途抖回被误判恢复），走触发防抖
+                        $this->clearResolveTimer($rule);
                         // 防抖通过则触发（AlertService 内部按"激活标记"去重，持续满足不会重复告警）
                         if ($this->checkDebounce($rule)) {
                             AlertService::triggerAlert($rule, $deviceId, $numericValue);
                         }
                     } else {
-                        // 条件不再满足：清防抖 + 自动恢复(resolve)激活告警(内部无激活则快速返回)
+                        // 条件不再满足：清触发防抖；恢复方向同样需持续满足 trigger_duration_sec 秒
+                        // 才真正 resolve —— 双向迟滞，抑制阈值边缘抖动导致的"日志/恢复通知风暴"
                         $this->clearDebounce($rule);
-                        AlertService::resolveActive($rule, $deviceId, $numericValue);
+                        if ($this->checkResolveDebounce($rule)) {
+                            AlertService::resolveActive($rule, $deviceId, $numericValue);
+                        }
                     }
                 }
 
@@ -249,15 +255,67 @@ class AlertEngineProcess
     }
 
     /**
-     * 清除防抖计时
+     * 清除触发防抖计时
      *
-     * 当条件不再满足时，重置防抖状态。
+     * 当条件不再满足时，重置触发防抖状态。
      *
      * @param AlertRule $rule 告警规则
      */
     private function clearDebounce(AlertRule $rule): void
     {
         $key = "hg:alert:debounce:{$rule->id}";
+        $this->redisCache->del($key);
+    }
+
+    /**
+     * 恢复防抖检查（触发防抖的镜像）
+     *
+     * 条件跌回正常后，需持续 trigger_duration_sec 秒才真正判定为恢复。
+     * 这段时间内若再次越阈值，会 clearResolveTimer 取消恢复，告警保持激活——
+     * 从而在阈值边缘抖动时不反复 resolve/re-trigger，避免"日志风暴 + 恢复通知风暴"。
+     *
+     * trigger_duration_sec<=0（立即触发）时也立即恢复，保持向后兼容。
+     *
+     * @param  AlertRule $rule 告警规则
+     * @return bool 是否应判定为恢复
+     */
+    private function checkResolveDebounce(AlertRule $rule): bool
+    {
+        $durationSec = $rule->trigger_duration_sec ?? 0;
+
+        // 无防抖要求，立即恢复（原行为）
+        if ($durationSec <= 0) {
+            return true;
+        }
+
+        $key = "hg:alert:resolve:{$rule->id}";
+        $firstClear = $this->redisCache->get($key);
+
+        if (!$firstClear) {
+            // 首次跌回正常，记录时间；尚不判定恢复
+            $this->redisCache->setEx($key, $durationSec + 60, time());
+            return false;
+        }
+
+        // 持续正常够久 → 判定恢复并清计时
+        if (time() - (int)$firstClear >= $durationSec) {
+            $this->redisCache->del($key);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 清除恢复防抖计时
+     *
+     * 条件再次满足时调用，取消进行中的"恢复判定"，使告警保持激活。
+     *
+     * @param AlertRule $rule 告警规则
+     */
+    private function clearResolveTimer(AlertRule $rule): void
+    {
+        $key = "hg:alert:resolve:{$rule->id}";
         $this->redisCache->del($key);
     }
 
