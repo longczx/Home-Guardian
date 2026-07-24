@@ -17,6 +17,10 @@ public:
     // 网关自身状态
     bool publishGatewayState(bool online);
 
+    // 网关级完整状态上报（执行器用）：发布到 home/upstream/{uid}/state/post，
+    // 后端 state 字段落库并推 WS（reported=true）。json 形如 {"status":"online","state":{...}}
+    bool publishGatewayStateJson(const char* json);
+
     // 传感器级发布（用传感器自己的 device_uid 构建主题）
     bool publishSensorTelemetry(const char* sensorUid, const char* json);
     bool publishSensorState(const char* sensorUid, bool online);

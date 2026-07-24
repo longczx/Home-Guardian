@@ -28,6 +28,9 @@
 #if SENSOR_SOUND_ENABLED
 #include "sensor_sound.h"
 #endif
+#if AC_IR_ENABLED
+#include "ac_ir.h"
+#endif
 
 #ifndef FACTORY_RESET_PIN
 #define FACTORY_RESET_PIN 0   // BOOT 键
@@ -39,6 +42,9 @@ SensorRegistry sensors;
 CommandHandler commands;
 ConfigStore  store;
 Provisioning provisioning;
+#if AC_IR_ENABLED
+AcIr acIr(IR_LED_PIN, AC_PROTOCOL);
+#endif
 
 enum Mode { MODE_PROVISION, MODE_NORMAL };
 Mode mode = MODE_NORMAL;
@@ -69,6 +75,25 @@ bool handleReboot(const JsonObject& params, JsonObject& response) {
     ESP.restart();
     return true;
 }
+
+#if AC_IR_ENABLED
+// 红外空调：全量状态发射红外，回执带当前状态，并主动上报 state/post
+bool handleSetState(const JsonObject& params, JsonObject& response) {
+    bool ok = acIr.apply(params, response);
+
+    // 主动上报完整状态（reported=true），让多端展示与真实一致
+    if (mqtt.isConnected()) {
+        JsonDocument postDoc;
+        postDoc["status"] = "online";
+        JsonObject st = postDoc["state"].to<JsonObject>();
+        acIr.fillState(st);
+        char buf[256];
+        serializeJson(postDoc, buf, sizeof(buf));
+        mqtt.publishGatewayStateJson(buf);
+    }
+    return ok;
+}
+#endif
 
 // ─── 传感器注册（uid 优先用 config.h 指定，否则由网关 uid 派生）──────
 
@@ -178,6 +203,11 @@ void setup() {
     commands.registerAction("ping",     handlePing);
     commands.registerAction("get_info", handleGetInfo);
     commands.registerAction("reboot",   handleReboot);
+#if AC_IR_ENABLED
+    acIr.begin();
+    commands.registerAction("set_state", handleSetState);
+    Serial.printf("[Main] 红外空调执行器已启用 (IR_LED_PIN=%d)\n", IR_LED_PIN);
+#endif
 
     registerSensors();
 

@@ -31,6 +31,8 @@ export interface ControlPoint {
   default?: unknown;
   group?: string;
   order?: number;
+  // 依赖联动：仅当这些 state 字段全部等于给定值时该控件才可用（如空调开机后才可调温度）
+  depends_on?: Record<string, string | number | boolean>;
 }
 
 export interface Capability {
