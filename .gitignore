@@ -8,12 +8,7 @@
 .phpunit.result.cache
 .claude/
 
-# Mobile frontend
-mobile/node_modules/
-mobile/dist/
-
 # Build output
-/public/mobile/
 /public/app/
 
 # uni-app client

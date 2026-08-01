@@ -24,14 +24,16 @@ docker exec -it home-guardian-app php create_admin.php
 
 后端服务：管理后台 `http://localhost:8787/admin/login`，REST API 在 `/api/*`，WebSocket 在 `:8788`。
 
-### 移动端
+### 移动端（uni-app 主客户端）
 
 ```bash
-cd mobile
+cd uniapp
 npm install
-npm run dev     # 开发服务器 http://localhost:5173/mobile/
-npm run build   # 构建到 ../public/mobile/
+npm run dev:h5     # 开发服务器 http://localhost:5173/
+npm run build:h5   # 构建到 ../public/app/
 ```
+
+> App / 小程序通过 HBuilderX 云打包，详见 `uniapp/README.md`。
 
 ## 提交前自检（与 CI 一致）
 
@@ -49,15 +51,15 @@ composer test
 
 **移动端**
 ```bash
-cd mobile
-npx tsc --noEmit   # 类型检查
-npm run build      # 构建验证
+cd uniapp
+npm run type-check   # 类型检查
+npm run build:h5     # 构建验证
 ```
 
 ## 代码规范
 
 - **PHP**：遵循 PSR-12；控制器保持瘦逻辑，业务放 `app/service/`；数据库改动写迁移（`database/php-migrations/`），不要手改线上库。
-- **TypeScript/React**：函数组件 + Hooks；API 调用集中在 `mobile/src/api/`；类型显式声明，避免 `any`。
+- **TypeScript/Vue**：`<script setup>` + Composition API；API 调用集中在 `uniapp/src/api/`；类型显式声明，避免 `any`。
 - 缩进/换行遵循 [.editorconfig](.editorconfig)。
 - 注释和文档可用中文，与现有代码风格一致。
 
