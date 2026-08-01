@@ -37,10 +37,21 @@ static const char* fanStr(stdAc::fanspeed_t f) {
     }
 }
 
-AcIr::AcIr(uint16_t irLedPin, decode_type_t protocol)
-    : _ac(irLedPin), _protocol(protocol) {}
+AcIr::AcIr(uint16_t irLedPin, decode_type_t defaultProtocol)
+    : _ac(irLedPin), _protocol(defaultProtocol) {}
 
 void AcIr::begin() {
+    // 恢复上次在 App 里选定的协议（NVS）；没有则用 config.h 的默认值
+    _prefs.begin("ac_ir", false);
+    String saved = _prefs.getString("proto", "");
+    if (saved.length()) {
+        decode_type_t p = strToDecodeType(saved.c_str());
+        if (p != decode_type_t::UNKNOWN) {
+            _protocol = p;
+            Serial.printf("[AC-IR] 恢复已保存协议: %s\n", saved.c_str());
+        }
+    }
+
     // 初始默认状态：与后端"空调"能力模板的 default 对齐（关机 / 制冷 / 26℃ / 自动风）
     _state.protocol = _protocol;
     _state.model    = 1;
@@ -62,7 +73,24 @@ void AcIr::begin() {
     _state.clock    = -1;
 }
 
+void AcIr::setProtocol(decode_type_t p, bool persist) {
+    _protocol = p;
+    _state.protocol = p;
+    if (persist) {
+        _prefs.putString("proto", typeToString(p));
+    }
+    Serial.printf("[AC-IR] 切换协议 → %s\n", typeToString(p).c_str());
+}
+
 bool AcIr::apply(const JsonObject& params, JsonObject& outState) {
+    // 运行时切协议：先切再发，本次即用新协议（App 里逐个试的关键）
+    if (params["protocol"].is<const char*>()) {
+        decode_type_t p = strToDecodeType(params["protocol"].as<const char*>());
+        if (p != decode_type_t::UNKNOWN && p != _protocol) {
+            setProtocol(p, true);
+        }
+    }
+
     // merge：只覆盖本次带来的字段，其余沿用当前状态
     if (params["power"].is<bool>())        _state.power    = params["power"].as<bool>();
     if (params["mode"].is<const char*>())  _state.mode     = parseMode(params["mode"].as<const char*>());
@@ -81,9 +109,10 @@ bool AcIr::apply(const JsonObject& params, JsonObject& outState) {
 }
 
 void AcIr::fillState(JsonObject& outState) const {
-    outState["power"] = _state.power;
-    outState["mode"]  = modeStr(_state.mode);
-    outState["temp"]  = _state.degrees;
-    outState["fan"]   = fanStr(_state.fanspeed);
-    outState["swing"] = (_state.swingv != stdAc::swingv_t::kOff);
+    outState["power"]    = _state.power;
+    outState["mode"]     = modeStr(_state.mode);
+    outState["temp"]     = _state.degrees;
+    outState["fan"]      = fanStr(_state.fanspeed);
+    outState["swing"]    = (_state.swingv != stdAc::swingv_t::kOff);
+    outState["protocol"] = typeToString(_protocol);
 }

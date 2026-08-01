@@ -75,6 +75,21 @@ function onSlider(ctrl: ControlPoint, e: { detail: { value: number } }) {
 function onEnum(ctrl: ControlPoint, value: string | number) {
   send(ctrl, value);
 }
+// 当前枚举值的显示标签
+function enumLabel(ctrl: ControlPoint): string {
+  const v = stateVal(ctrl);
+  const op = (ctrl.options || []).find((o) => o.value === v);
+  return op ? op.label : '请选择';
+}
+// 选项多（如红外协议）时用 actionSheet 选择，避免分段按钮挤爆
+function chooseEnum(ctrl: ControlPoint) {
+  const opts = ctrl.options || [];
+  if (!opts.length) return;
+  uni.showActionSheet({
+    itemList: opts.map((o) => o.label),
+    success: (r) => { const op = opts[r.tapIndex]; if (op) onEnum(ctrl, op.value); },
+  });
+}
 // 步进器：在 [min,max] 内按 step 加减
 function onStep(ctrl: ControlPoint, dir: 1 | -1) {
   const step = ctrl.step ?? 1;
@@ -165,16 +180,22 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
           @tap="onSwitch(ctrl)"
         />
 
-        <!-- enum → 分段 -->
-        <view v-else-if="ctrl.widget === 'enum'" class="seg">
-          <view
-            v-for="op in ctrl.options || []"
-            :key="String(op.value)"
-            class="seg-btn"
-            :class="{ on: stateVal(ctrl) === op.value }"
-            @tap="onEnum(ctrl, op.value)"
-          >{{ op.label }}</view>
-        </view>
+        <!-- enum：选项少→分段；选项多→actionSheet 选择器 -->
+        <template v-else-if="ctrl.widget === 'enum'">
+          <view v-if="(ctrl.options || []).length <= 5" class="seg">
+            <view
+              v-for="op in ctrl.options || []"
+              :key="String(op.value)"
+              class="seg-btn"
+              :class="{ on: stateVal(ctrl) === op.value }"
+              @tap="onEnum(ctrl, op.value)"
+            >{{ op.label }}</view>
+          </view>
+          <view v-else class="enum-picker" @tap="chooseEnum(ctrl)">
+            <text class="enum-cur">{{ enumLabel(ctrl) }}</text>
+            <text class="enum-arrow">›</text>
+          </view>
+        </template>
 
         <!-- stepper → − 值 ＋ -->
         <view v-else-if="ctrl.widget === 'stepper'" class="stepper">
@@ -358,6 +379,25 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 }
 .slider-wrap {
   margin-top: 10rpx;
+}
+.enum-picker {
+  margin-top: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: $hg-card-2;
+  border: 1rpx solid $hg-line;
+  border-radius: $hg-radius-s;
+  padding: 20rpx 24rpx;
+}
+.enum-cur {
+  font-size: 28rpx;
+  color: $hg-fg;
+  font-weight: 600;
+}
+.enum-arrow {
+  color: $hg-muted;
+  font-size: 34rpx;
 }
 .stepper {
   display: flex;
