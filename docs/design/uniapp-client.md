@@ -1,7 +1,8 @@
 # uniapp 客户端技术方案 —— Android App / 微信小程序 / H5
 
-> 状态：待评审
-> 前置讨论结论：uniapp 成为 Home Guardian 的**主客户端**（全功能含管理）；现有 `mobile/`（React）冻结为 Web 体验版，大版本更新时再处理。
+> 状态：已落地（历史设计文档，保留决策脉络）
+> 前置讨论结论：uniapp 成为 Home Guardian 的**主客户端**（全功能含管理）。
+> **更新（2026-08）：旧 `mobile/`（React）与 `mobile-v2/` 已彻底删除，uni-app 现为唯一客户端；根路径 `/` 已切换默认跳转到 `/app/`。下文中关于「冻结 mobile/、暂不切 /」的措辞为当时决策，现已作废。**
 > 时序：**用户体系升级（docs/design/home-user-system.md）先行**，本方案 PR1 基于新用户体系开发。
 
 ## 1. 定位与目标端
