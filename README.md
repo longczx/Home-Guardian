@@ -13,7 +13,7 @@
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
   <a href="#"><img src="https://img.shields.io/badge/Database-PostgreSQL-blue.svg" alt="PostgreSQL"></a>
   <a href="#"><img src="https://img.shields.io/badge/Admin-LayUI-red.svg" alt="LayUI"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Mobile-React_19-61dafb.svg" alt="React"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Client-uni--app_Vue_3-42b883.svg" alt="uni-app"></a>
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
 </p>
 
@@ -33,7 +33,6 @@
 *   **多端界面:**
     *   **后台管理面板** — Webman + LayUI 服务端渲染，session 认证，供管理员进行系统配置和设备管理。
     *   **移动 App / 小程序 / H5** — uni-app + Vue 3 + TS（`uniapp/`），主客户端，多服务器接入、家庭邀请注册、设备控制与告警闭环。
-    *   **Web 体验版** — React 19 + Ant Design Mobile + PWA（`mobile/`），已冻结，浏览器免安装访问。
 *   **完全容器化:** 使用 Docker Compose 一键启动所有服务。
 *   **灵活权限:** 家庭三级角色（户主/管理员/成员）+ RBAC + 位置作用域多层控制。
 *   **家庭用户体系:** 邀请码自助注册加入家庭，资源按家庭作用域隔离（多家庭地基已就位，详见 `docs/design/home-user-system.md`）。
@@ -46,10 +45,10 @@
                                                      ├──► Redis Pub/Sub ──► Webman WS Worker ──► 移动端 (实时数据)
                                                      └──► Alert Stream  ──► 告警引擎 ──► 通知推送
 
-移动端 (React) ──HTTP──► Nginx:80 ──► /api/*    ──► Webman HTTP :8787 (REST API)
+uni-app 客户端 ──HTTP──► Nginx:80 ──► /api/*    ──► Webman HTTP :8787 (REST API)
                                    ├── /ws      ──► Webman WS   :8788 (WebSocket)
                                    ├── /admin/* ──► Webman HTTP :8787 (服务端渲染)
-                                   └── /mobile/ ──► 静态文件 (SPA)
+                                   └── /app/    ──► 静态文件 (uni-app H5 SPA)
 ```
 
 ## 技术栈
@@ -62,7 +61,7 @@
 | **主数据库** | PostgreSQL + TimescaleDB | 持久化存储设备信息和海量时序数据 |
 | **缓存数据库** | Redis 7 | 热数据、设备状态、任务队列、Pub/Sub |
 | **后台管理** | LayUI 2.9 + ThinkPHP Template | 服务端渲染后台面板，session 认证 |
-| **移动端** | React 19 + Ant Design Mobile + ECharts | PWA 移动端，JWT 认证 |
+| **移动端** | uni-app + Vue 3 + TS（App / 小程序 / H5） | 主客户端，JWT 认证，多服务器接入 |
 | **设备固件** | ESP32 / Arduino + PlatformIO | IoT 设备端，MQTT 通信，模块化传感器架构 |
 
 ## 项目结构
@@ -87,18 +86,17 @@ Home-Guardian/
 │   ├── include/             # 头文件 (config, 传感器接口, MQTT, WiFi)
 │   ├── src/                 # 源文件 (main, 传感器实现, 指令处理)
 │   └── platformio.ini       # PlatformIO 构建配置
-├── mobile/                  # 移动端 React 项目
+├── uniapp/                  # 移动端主客户端 (uni-app + Vue 3 + TS)
 │   ├── src/
-│   │   ├── api/             # Axios + JWT 自动刷新
-│   ├── stores/          # Zustand 状态管理
-│   │   ├── hooks/           # WebSocket Hook
-│   │   ├── utils/            # 工具函数 (指标查找等)
-│   │   ├── pages/           # 页面组件
-│   │   └── components/      # 通用组件
-│   ├── package.json
-│   └── vite.config.ts
+│   │   ├── api/             # uni.request 封装 + JWT 自动刷新
+│   │   ├── stores/          # Pinia 状态管理（多服务器/鉴权/语言）
+│   │   ├── utils/           # WebSocket / 推送 / 工具函数
+│   │   ├── pages/           # 页面（首页/设备/告警/管理）
+│   │   ├── locale/          # vue-i18n 多语言
+│   │   └── pages.json       # 页面与 tabBar 配置
+│   └── package.json
 ├── public/
-│   ├── mobile/              # 移动端构建产物 (npm run build)
+│   ├── app/                 # uni-app H5 构建产物 (npm run build:h5)
 │   ├── api-docs.html        # Swagger UI 页面
 │   ├── openapi.yaml         # OpenAPI 3.0 spec (自动生成)
 │   └── favicon.ico
@@ -128,13 +126,15 @@ Home-Guardian/
     ```
     *修改 `.env` 文件中的数据库密码、Redis 密码和 JWT 密钥。*
 
-3.  **构建移动端:**
+3.  **构建移动端（H5）:**
     ```bash
-    cd mobile
+    cd uniapp
     npm install
-    npm run build    # 产物输出到 ../public/mobile/
+    npm run build:h5    # 产物输出到 ../public/app/
     cd ..
     ```
+
+    > App / 小程序通过 HBuilderX 云打包，见 `uniapp/README.md`。
 
 4.  **启动服务:**
     ```bash
@@ -148,7 +148,7 @@ Home-Guardian/
     ```
 
 6.  **检查服务状态:**
-    *   **移动端:** 访问 `http://localhost/mobile/`
+    *   **移动端:** 访问 `http://localhost/app/`
     *   **后台管理:** 访问 `http://localhost/admin/login`
     *   **EMQX 管理后台:** 访问 `http://localhost:18083` (默认 `admin` / `public`)
 
@@ -168,9 +168,9 @@ Home-Guardian/
 
 2.  **启动移动端开发服务器（另一个终端）:**
     ```bash
-    cd mobile
+    cd uniapp
     npm install
-    npm run dev
+    npm run dev:h5
     ```
 
 3.  **创建管理员账号（首次使用）:**
@@ -179,7 +179,7 @@ Home-Guardian/
     ```
 
 4.  **访问:**
-    *   **移动端 (HMR):** `http://localhost:5173/mobile/`
+    *   **移动端 (HMR):** `http://localhost:5173/`
     *   **后台管理:** `http://localhost:8787/admin/login`
 
 **开发环境请求链路:**
@@ -420,7 +420,7 @@ client.connect("esp32-livingroom-01", mqtt_user, mqtt_pass);
 平台建网关+子传感器 + 生成 MQTT 凭证 ──► 设备连 EMQX 上线 ──► 移动端轮询到"已上线"
 ```
 
-移动端页面：`/mobile/devices/add`（设备列表右上角「+ 添加」进入）。
+移动端页面：设备管理页右下角「＋ 添加设备」进入（生成配对码，设备自助配网上线）。
 
 > **生产注意**：
 > - 配置环境变量 `MQTT_PUBLIC_HOST` 为设备可达的公网 EMQX 地址（注册响应据此返回，未配置回退 `MQTT_HOST`）。
@@ -546,7 +546,7 @@ python simulator.py --api
 - [x] Web API 接口开发 (16 REST Controller, 50+ Endpoints)
 - [x] WebSocket 实时推送服务
 - [x] 后台管理面板 (LayUI 服务端渲染)
-- [x] 移动端前端 (React 19 + Ant Design Mobile + PWA)
+- [x] 移动端主客户端 (uni-app + Vue 3 + TS：App / 小程序 / H5)
 - [x] API 在线文档 (Swagger UI + swagger-php 注解)
 - [x] 全局指标定义 + 设备指标配置 + 模拟数据生成
 - [x] ESP32 设备固件 (Arduino + PlatformIO，模块化传感器架构)

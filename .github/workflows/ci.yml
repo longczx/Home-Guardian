@@ -49,34 +49,6 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit --testdox
 
-  frontend:
-    name: Mobile (React / TS)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Build
-        run: npm run build
-
   uniapp:
     name: uni-app (Vue3 / TS)
     runs-on: ubuntu-latest

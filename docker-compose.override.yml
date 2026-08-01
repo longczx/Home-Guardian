@@ -11,8 +11,8 @@ services:
     environment:
       - APP_DEBUG=true
 
-# 移动端开发说明：
+# 移动端开发说明（uni-app 为主客户端）：
 # 1. docker compose up 启动后端
-# 2. cd mobile && npm install && npm run dev 启动移动端开发服务器
-# 3. 访问 http://localhost:5173/mobile/ (Vite 自动代理 /api → :8787, /ws → :8788)
+# 2. cd uniapp && npm install && npm run dev:h5 启动 H5 开发服务器
+# 3. 访问 http://localhost:5173/ (Vite 自动代理 /api → :8787, /ws → :8788)
 # 4. 访问 http://localhost:8787/admin/login 访问后台管理面板
