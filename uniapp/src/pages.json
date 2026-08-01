@@ -55,6 +55,10 @@
       "style": { "navigationBarTitleText": "编辑设备" }
     },
     {
+      "path": "pages/manage/gateway-modules",
+      "style": { "navigationBarTitleText": "子设备管理" }
+    },
+    {
       "path": "pages/manage/alert-rules",
       "style": { "navigationBarTitleText": "告警规则" }
     },

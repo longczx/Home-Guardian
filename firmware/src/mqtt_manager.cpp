@@ -48,8 +48,37 @@ void MqttManager::connect() {
         // 订阅网关级指令
         _mqtt.subscribe(_gatewayCommandSub, 1);
         Serial.printf("[MQTT] 已订阅 %s\n", _gatewayCommandSub);
+
+        // 代其下子设备订阅指令（重连后同样要恢复）
+        for (uint8_t i = 0; i < _subCount; i++) {
+            subscribeCommandTopic(_subUids[i].c_str());
+        }
     } else {
         Serial.printf("[MQTT] 连接失败, rc=%d\n", _mqtt.state());
+    }
+}
+
+void MqttManager::subscribeCommandTopic(const char* uid) {
+    char topic[80];
+    snprintf(topic, sizeof(topic), "home/downstream/%s/command/set", uid);
+    _mqtt.subscribe(topic, 1);
+    Serial.printf("[MQTT] 已订阅 %s\n", topic);
+}
+
+void MqttManager::subscribeDevice(const char* uid) {
+    if (!uid || !*uid) return;
+    if (_subCount >= MAX_SUB_DEVICES) {
+        Serial.printf("[MQTT] 子设备订阅已满，忽略 %s\n", uid);
+        return;
+    }
+    for (uint8_t i = 0; i < _subCount; i++) {
+        if (_subUids[i] == uid) return;   // 已登记
+    }
+    _subUids[_subCount++] = uid;
+
+    // 已连接则立即生效；未连接时留待下次 connect() 统一订阅
+    if (_mqtt.connected()) {
+        subscribeCommandTopic(uid);
     }
 }
 
@@ -95,8 +124,29 @@ bool MqttManager::publishSensorState(const char* sensorUid, bool online) {
     return _mqtt.publish(topic, payload, true);
 }
 
+bool MqttManager::publishDeviceStateJson(const char* uid, const char* json) {
+    char topic[80];
+    snprintf(topic, sizeof(topic), "home/upstream/%s/state/post", uid);
+    return _mqtt.publish(topic, json);
+}
+
+bool MqttManager::publishManifest(const char* json) {
+    char topic[80];
+    snprintf(topic, sizeof(topic), "home/upstream/%s/manifest/post", _gatewayUid.c_str());
+    return _mqtt.publish(topic, json);
+}
+
 bool MqttManager::publishCommandReply(const char* json) {
     return _mqtt.publish(_gatewayCommandReply, json);
+}
+
+bool MqttManager::publishCommandReplyFor(const char* uid, const char* json) {
+    if (!uid || !*uid || _gatewayUid == uid) {
+        return publishCommandReply(json);
+    }
+    char topic[80];
+    snprintf(topic, sizeof(topic), "home/upstream/%s/command/reply", uid);
+    return _mqtt.publish(topic, json);
 }
 
 void MqttManager::onCommand(CommandCallback cb) {
@@ -105,11 +155,28 @@ void MqttManager::onCommand(CommandCallback cb) {
 
 void MqttManager::_mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
     if (_instance && _instance->_commandCb) {
+        // 从 home/downstream/{uid}/command/set 解出目标设备 uid，
+        // 以区分指令是给网关自己还是给其下某个子设备（如红外空调）
+        char uid[48] = {0};
+        static const char* PREFIX = "home/downstream/";
+        const size_t PREFIX_LEN = strlen(PREFIX);
+        if (topic && strncmp(topic, PREFIX, PREFIX_LEN) == 0) {
+            const char* start = topic + PREFIX_LEN;
+            const char* slash = strchr(start, '/');
+            size_t n = slash ? (size_t)(slash - start) : strlen(start);
+            if (n >= sizeof(uid)) n = sizeof(uid) - 1;
+            memcpy(uid, start, n);
+            uid[n] = '\0';
+        }
+        if (uid[0] == '\0') {
+            strncpy(uid, _instance->_gatewayUid.c_str(), sizeof(uid) - 1);
+        }
+
         char buf[512];
         unsigned int len = min(length, (unsigned int)(sizeof(buf) - 1));
         memcpy(buf, payload, len);
         buf[len] = '\0';
-        Serial.printf("[MQTT] ← 指令: %s\n", buf);
-        _instance->_commandCb(buf, len);
+        Serial.printf("[MQTT] ← 指令(%s): %s\n", uid, buf);
+        _instance->_commandCb(uid, buf, len);
     }
 }

@@ -199,6 +199,7 @@ class MqttSubscriber
             'telemetry' => $this->handleTelemetry($deviceUid, $data),
             'state'     => $this->handleState($deviceUid, $data),
             'command'   => $this->handleCommandReply($deviceUid, $data),
+            'manifest'  => $this->handleManifest($deviceUid, $data),
             default     => Log::debug("未识别的 MQTT 模块: {$module}"),
         };
     }
@@ -371,6 +372,68 @@ class MqttSubscriber
                     catch (\Throwable $e) { Log::error("传感器离线告警失败: {$e->getMessage()}"); }
                 }
             }
+        }
+    }
+
+    /**
+     * 处理子设备清单（设备热插拔）
+     *
+     * 网关每次连上 MQTT、以及运行期增删模块后，都会发布一份自己当前挂载的子设备
+     * 清单。平台据此自动增补设备记录——无需重新配网、无需配对码，这正是热插拔
+     * 与首次自注册（一次性配对码）的区别。
+     *
+     * 清单里缺席的子设备只标离线不删除，避免误拔一次就丢掉历史遥测与告警规则。
+     *
+     * @param string $gatewayUid 上报者（必须是网关）
+     * @param array  $data       {"devices": [{device_uid, name, type, metric_fields?}]}
+     */
+    private function handleManifest(string $gatewayUid, array $data): void
+    {
+        $devices = $data['devices'] ?? null;
+        if (!is_array($devices)) {
+            Log::warning("清单格式无效: {$gatewayUid}");
+            return;
+        }
+
+        $gateway = Device::where('device_uid', $gatewayUid)->first();
+        if (!$gateway) {
+            Log::warning("清单来自未知设备: {$gatewayUid}");
+            return;
+        }
+        // 只有网关能声明子设备，否则任一设备都可凭自己的凭证凭空造设备
+        if ($gateway->type !== 'gateway') {
+            Log::warning("非网关设备尝试上报子设备清单: {$gatewayUid}");
+            return;
+        }
+
+        try {
+            $result = DeviceService::syncGatewayChildren($gateway, $devices);
+        } catch (\Throwable $e) {
+            Log::error("同步子设备清单失败({$gatewayUid}): {$e->getMessage()}");
+            return;
+        }
+
+        if ($result['created']) {
+            Log::info("网关 {$gatewayUid} 新增子设备: " . implode(', ', $result['created']));
+        }
+
+        // 被拔掉的子设备推一次离线，让各端列表即时反映
+        foreach ($result['absent'] as $dev) {
+            $this->redisPub->publish('ws:broadcast', json_encode([
+                'type'            => 'device_status',
+                'device_id'       => $dev->id,
+                'device_uid'      => $dev->device_uid,
+                'device_location' => $dev->location,
+                'is_online'       => false,
+            ], JSON_UNESCAPED_UNICODE));
+        }
+
+        // 新增设备会改变设备列表，通知各端刷新
+        if ($result['created'] || count($result['absent'])) {
+            $this->redisPub->publish('ws:broadcast', json_encode([
+                'type'        => 'device_list_changed',
+                'gateway_uid' => $gatewayUid,
+            ], JSON_UNESCAPED_UNICODE));
         }
     }
 

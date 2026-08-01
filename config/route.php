@@ -244,6 +244,10 @@ Route::group('/api', function () {
     Route::delete('/metric-definitions/{id:\d+}', [app\controller\MetricDefinitionController::class, 'destroy'])
         ->middleware([new PermissionMiddleware('devices.delete'), AuditLogMiddleware::class]);
 
+    /* ---------- 能力模板（App 端只读，供执行器挑选控制能力） ---------- */
+    Route::get('/capability-templates', [app\controller\CapabilityTemplateController::class, 'index'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+
     /* ---------- 设备管理 ---------- */
     Route::get('/devices', [app\controller\DeviceController::class, 'index'])
         ->middleware([new PermissionMiddleware('devices.view')]);

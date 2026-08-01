@@ -45,6 +45,10 @@
 //  无需接收器识别、也无需反复烧录：在 App 空调控制页逐个试协议，空调有反应即选定。
 //  常见：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …（海信多为 COOLIX/HITACHI 系）
 #define AC_PROTOCOL            decode_type_t::COOLIX
+//  空调在后台是一台挂在本网关下的【独立设备】(type=ac)，与传感器一样有自己的
+//  在线状态和控制卡。uid 默认由网关 UID 派生（如 esp32-aabbcc-ac）；
+//  仅当要沿用后台已存在的固定 uid 时才取消注释：
+// #define AC_IR_UID           "ac-living-01"
 
 // =====================================================================
 //  运行期配置（WiFi / MQTT 身份）

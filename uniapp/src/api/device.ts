@@ -1,5 +1,5 @@
 import request from './request';
-import type { Device, Paginated, LatestMetric, AggregatedPoint } from './types';
+import type { Device, Paginated, LatestMetric, AggregatedPoint, Capability } from './types';
 
 export function getDevices(params?: Record<string, string | number | boolean>) {
   return request.get<Paginated<Device>>('/devices', params);
@@ -15,7 +15,13 @@ export function sendCommand(id: number, payload: Record<string, unknown>) {
 
 export function updateDevice(
   id: number,
-  data: { name?: string; location?: string; metric_fields?: { key: string; label: string; unit?: string }[] },
+  data: {
+    name?: string;
+    location?: string;
+    type?: string;
+    capability?: Capability | null;
+    metric_fields?: { key: string; label: string; unit?: string }[];
+  },
 ) {
   return request.put<Device>(`/devices/${id}`, data as Record<string, unknown>);
 }

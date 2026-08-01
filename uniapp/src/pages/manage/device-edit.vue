@@ -3,7 +3,8 @@ import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getDevice, updateDevice } from '@/api/device';
 import { getMetricDefinitions, createMetricDefinition, type MetricDefinition } from '@/api/metricDefinition';
-import type { Device } from '@/api/types';
+import { getCapabilityTemplates, type CapabilityTemplate } from '@/api/capabilityTemplate';
+import type { Device, Capability } from '@/api/types';
 import { toast } from '@/utils/guard';
 import { timeAgo } from '@/utils/format';
 
@@ -11,11 +12,76 @@ const id = ref(0);
 const device = ref<Device | null>(null);
 const name = ref('');
 const location = ref('');
+const type = ref('');
 const saving = ref(false);
 
+// 设备类型：决定 App 里的归类与图标；ac/switch/light/curtain 为执行器类，
+// 配合「能力模板」才会渲染出控制卡。gateway 另有含义（见 chooseType 提示）。
+const TYPES = [
+  { value: 'sensor', label: '传感器' },
+  { value: 'ac', label: '空调' },
+  { value: 'switch', label: '开关' },
+  { value: 'light', label: '灯' },
+  { value: 'curtain', label: '窗帘' },
+  { value: 'gateway', label: '网关' },
+];
+const typeLabel = computed(() => TYPES.find((t) => t.value === type.value)?.label ?? type.value ?? '未设置');
+
+// 用 actionSheet 选择，与本项目其他表单一致（规避 uni <picker> 渲染崩溃）
+function chooseType() {
+  uni.showActionSheet({
+    itemList: TYPES.map((t) => t.label),
+    success: (r) => {
+      const next = TYPES[r.tapIndex]?.value;
+      if (!next) return;
+      // 网关是"代其下子设备收发 MQTT"的角色，且后端按 type==='gateway'
+      // 才会在它离线时批量下线子设备，误改会让子设备一直卡在在线
+      if (type.value === 'gateway' && next !== 'gateway') {
+        uni.showModal({
+          title: '确认改类型？',
+          content: '该设备当前是网关。改为其他类型后，它离线时其下子设备将不再自动下线。',
+          success: (m) => { if (m.confirm) type.value = next; },
+        });
+        return;
+      }
+      type.value = next;
+    },
+  });
+}
+
+// 能力模板：给执行器套上后详情页才会渲染控制卡（电源/模式/温度…）
+const templates = ref<CapabilityTemplate[]>([]);
+const capability = ref<Capability | null>(null);
+const capabilityLabel = computed(() => {
+  if (!capability.value) return '无（仅遥测展示）';
+  const hit = templates.value.find(
+    (t) => t.control_mode === capability.value?.control_mode
+      && t.controls?.length === capability.value?.controls?.length,
+  );
+  return hit ? hit.name : `自定义（${capability.value.controls?.length ?? 0} 个控件）`;
+});
+
+function chooseCapability() {  const items = ['无（仅遥测展示）', ...templates.value.map((t) => t.name)];
+  uni.showActionSheet({
+    itemList: items,
+    success: (r) => {
+      if (r.tapIndex === 0) {
+        capability.value = null;
+        return;
+      }
+      const t = templates.value[r.tapIndex - 1];
+      if (!t) return;
+      capability.value = { control_mode: t.control_mode, controls: t.controls };
+      // 套模板时顺带对齐类型，省得用户再选一次
+      if (t.device_category && type.value !== 'gateway') {
+        type.value = t.device_category;
+      }
+    },
+  });
+}
+
 // 遥测字段字典
-const defs = ref<MetricDefinition[]>([]);
-// 已选字段：key → {label, unit}（字典项与自定义项统一存这里）
+const defs = ref<MetricDefinition[]>([]);// 已选字段：key → {label, unit}（字典项与自定义项统一存这里）
 const selected = ref<Record<string, { label: string; unit: string }>>({});
 
 // 自定义添加表单
@@ -73,7 +139,11 @@ async function load() {
     device.value = d;
     name.value = d.name;
     location.value = d.location || '';
+    type.value = d.type || '';
+    capability.value = d.capability || null;
     defs.value = Array.isArray(list) ? list : [];
+    // 模板列表拿不到不影响其余编辑，失败静默降级
+    templates.value = await getCapabilityTemplates().catch(() => []);
 
     const sel: Record<string, { label: string; unit: string }> = {};
     (d.metric_fields || []).forEach((m) => {
@@ -94,7 +164,13 @@ async function save() {
   }));
   saving.value = true;
   try {
-    await updateDevice(id.value, { name: name.value.trim(), location: location.value.trim(), metric_fields: mf });
+    await updateDevice(id.value, {
+      name: name.value.trim(),
+      location: location.value.trim(),
+      type: type.value || undefined,
+      capability: capability.value,
+      metric_fields: mf,
+    });
     toast('已保存', 'success');
     setTimeout(() => uni.navigateBack(), 500);
   } catch (e) {
@@ -104,18 +180,20 @@ async function save() {
   }
 }
 
+function openModules() {
+  uni.navigateTo({ url: `/pages/manage/gateway-modules?id=${id.value}` });
+}
+
 onLoad((q) => {
   id.value = Number(q?.id || 0);
   load();
-});
-</script>
+});</script>
 
 <template>
   <view class="page">
     <!-- 只读信息 -->
     <view v-if="device" class="card info">
       <view class="irow"><text class="ik">设备标识</text><text class="iv">{{ device.device_uid }}</text></view>
-      <view class="irow"><text class="ik">类型</text><text class="iv">{{ device.type }}</text></view>
       <view class="irow"><text class="ik">状态</text>
         <text class="iv" :style="{ color: device.is_online ? '#2fb56b' : '#7a8299' }">
           {{ device.is_online ? '在线' : '离线 ' + timeAgo(device.last_seen) }}
@@ -134,6 +212,19 @@ onLoad((q) => {
       <view class="field">
         <text class="label">位置 / 房间</text>
         <input v-model="location" class="input" placeholder="如 客厅" placeholder-class="ph" />
+      </view>
+      <view class="field">
+        <text class="label">设备类型</text>
+        <view class="picker" @tap="chooseType">{{ typeLabel }} ›</view>
+      </view>
+      <view class="field">
+        <text class="label">控制能力（执行器需要）</text>
+        <view class="picker" @tap="chooseCapability">{{ capabilityLabel }} ›</view>
+      </view>
+      <!-- 网关才有子设备可热插拔 -->
+      <view v-if="type === 'gateway'" class="field">
+        <text class="label">子设备</text>
+        <view class="picker" @tap="openModules">管理挂载的传感器 / 执行器 ›</view>
       </view>
     </view>
 
@@ -195,6 +286,7 @@ onLoad((q) => {
 .field:last-child { border-bottom: none; }
 .label { display: block; font-size: 24rpx; color: $hg-muted; margin-bottom: 12rpx; }
 .input { font-size: 30rpx; color: $hg-fg; }
+.picker { font-size: 30rpx; color: $hg-fg; }
 .ph { color: #b6bccb; }
 .mhead { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 0 4rpx; }
 .ct { font-size: 26rpx; font-weight: 600; color: $hg-fg; }

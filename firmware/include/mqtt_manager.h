@@ -7,7 +7,8 @@
 
 class MqttManager {
 public:
-    typedef void (*CommandCallback)(const char* payload, unsigned int length);
+    // targetUid：指令投递给哪台设备（从主题里解出），网关自身或其下子设备
+    typedef void (*CommandCallback)(const char* targetUid, const char* payload, unsigned int length);
 
     bool begin(const char* host, uint16_t port,
                const char* gatewayUid, const char* password);
@@ -25,8 +26,22 @@ public:
     bool publishSensorTelemetry(const char* sensorUid, const char* json);
     bool publishSensorState(const char* sensorUid, bool online);
 
+    // 订阅子设备的指令主题：子设备不直连 MQTT，由网关代收
+    // （后端 ACL 已放行网关订阅其下子设备的 downstream，见 DeviceService::checkMqttAcl）
+    void subscribeDevice(const char* uid);
+
+    // 子设备完整状态上报（子执行器用）：home/upstream/{uid}/state/post
+    bool publishDeviceStateJson(const char* uid, const char* json);
+
+    // 子设备清单上报（设备热插拔）：home/upstream/{网关uid}/manifest/post
+    // 平台据此自动增补/下线子设备，免去重新配网
+    bool publishManifest(const char* json);
+
     // 指令回复（网关级）
     bool publishCommandReply(const char* json);
+
+    // 指令回复（发到指定设备的 reply 主题，子执行器用）
+    bool publishCommandReplyFor(const char* uid, const char* json);
 
     void onCommand(CommandCallback cb);
 
@@ -44,6 +59,13 @@ private:
     unsigned long _lastReconnect = 0;
     unsigned long _reconnectInterval = 5000;
     CommandCallback _commandCb = nullptr;
+
+    // 代收指令的子设备 uid（重连后需重新订阅，故须留存）
+    static constexpr uint8_t MAX_SUB_DEVICES = 4;
+    String _subUids[MAX_SUB_DEVICES];
+    uint8_t _subCount = 0;
+
+    void subscribeCommandTopic(const char* uid);
 
     void connect();
     static MqttManager* _instance;
