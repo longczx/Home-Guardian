@@ -47,14 +47,29 @@ IRremoteESP8266 内置 50+ 品牌协议。**协议是运行时可切的**——c
 
 ---
 
-## 三、烧录固件
+## 三、装上红外模块
 
-固件已内置红外空调执行器，只需在 `firmware/include/config.h`（从 `config.example.h` 复制）里打开开关：
+### 方式 A：设备已经在跑 —— 直接热插拔，免烧录（推荐）
+
+网关挂载了哪些模块由运行期清单决定，所以已上线的设备**不用重新烧录、也不用恢复出厂**：
+
+1. App →**设备管理**→ 点开你的**网关**→「**子设备**」；
+2. 模块类型选「**红外空调**」，GPIO 填你接红外管的脚（默认 25），起个名；
+3. 「插入并同步」。
+
+固件会实例化红外驱动、存进 NVS 清单并上报，平台随即建出一台 `type=ac` 的子设备。
+掉电重启沿用，不必再动。
+
+> GPIO34-39 是**仅输入**引脚，驱动不了红外管，选中会被拒绝。
+
+### 方式 B：全新设备首次烧录
+
+`config.h` 里的开关只用于**首次开机播种默认清单**（此后以 NVS 为准）：
 
 ```cpp
-#define AC_IR_ENABLED   1                        // 启用
+#define AC_IR_ENABLED   1                        // 首次开机默认挂一个红外空调模块
 #define IR_LED_PIN      25                       // 你接红外管的 GPIO
-#define AC_PROTOCOL     decode_type_t::COOLIX    // 换成上一步识别到的协议
+#define AC_PROTOCOL     decode_type_t::COOLIX    // 首次开机默认协议，之后可在 App 里切
 ```
 
 `platformio.ini` 已包含 `crankyoldgit/IRremoteESP8266` 依赖，直接编译烧录：
@@ -71,12 +86,15 @@ WiFi/MQTT 凭证走两种方式（与传感器一致）：
 
 ## 四、在后台/App 里把它变成"空调"
 
-设备上线后，还要给它套上"空调"能力（这决定 App 上显示什么控件）：
+空调是一台**挂在网关下的独立子设备**（`type=ac`，有自己的在线状态与告警规则）。
+它上线后还要套上"空调"能力，这决定 App 上显示什么控件：
 
-1. 进**管理后台**或 **App → 设备管理**，找到这台设备；
-2. 编辑设备，**能力模板**选内置的 **「空调」**（数据库已预置，`device_category=ac`、`control_mode=merge`）；
-3. 建议把**设备类型**设成 `ac`（不要留 `gateway`，否则首页会按网关隐藏它）；
-4. 保存。
+1. **App → 设备管理**（或管理后台），找到这台空调子设备；
+2. 编辑设备，「**控制能力**」选内置的 **「空调」**（数据库已预置，`device_category=ac`、`control_mode=merge`）；
+3. 保存。套模板时**设备类型**会自动对齐为 `ac`，一般无需再手动改。
+
+> ⚠️ 别把**网关本身**的类型从 `gateway` 改掉——平台按 `type='gateway'` 决定网关离线时
+> 是否批量下线其下子设备，改了会让子设备一直卡在"在线"。空调是子设备，与网关是两条记录。
 
 现在 App 设备详情页会出现：**电源开关 · 模式(制冷/制热/除湿/送风) · 温度(−/＋ 步进) · 风速 · 扫风 · 红外协议**。关机时其余控件自动置灰；「红外协议」用于第五步逐个试协议。
 
@@ -92,7 +110,8 @@ WiFi/MQTT 凭证走两种方式（与传感器一致）：
 
 ```
 App 改任一项 → 后端 ActuatorService(merge) 合并出完整状态
-   → MQTT home/downstream/{uid}/command/set {action:set_state, params:{power,mode,temp,fan,swing}}
+   → MQTT home/downstream/{空调uid}/command/set {action:set_state, params:{power,mode,temp,fan,swing}}
+   → 网关代收（后端 ACL 放行网关订阅其下子设备的 downstream）
    → ESP32 IRac 合成红外帧发射 → 空调
    → ESP32 回 command/reply + 上报 state/post（多端同步显示）
 ```

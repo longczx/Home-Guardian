@@ -9,7 +9,9 @@ public:
     typedef bool (*ActionHandler)(const JsonObject& params, JsonObject& response);
 
     void registerAction(const char* action, ActionHandler handler);
-    void handle(const char* payload, unsigned int length, MqttManager& mqtt);
+
+    // targetUid：指令的目标设备（网关自身或其下子设备），回复按它发到对应的 reply 主题
+    void handle(const char* targetUid, const char* payload, unsigned int length, MqttManager& mqtt);
 
 private:
     static constexpr uint8_t MAX_ACTIONS = 16;

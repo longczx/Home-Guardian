@@ -11,12 +11,12 @@ public:
     bool read(JsonObject& telemetry) override;
     void describeFields(JsonArray& fields) const override;
     const char* name() const override { return "DHT11"; }
-    const char* uid() const override { return _uid; }
+    const char* uid() const override { return _uid.c_str(); }
 
 private:
     DHT _dht;
     uint8_t _pin;
-    const char* _uid;
+    String _uid;   // 自持一份：热插拔时清单条目会移动，裸指针会悬空
 };
 
 #endif

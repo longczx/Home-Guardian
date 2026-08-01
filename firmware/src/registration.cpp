@@ -4,7 +4,8 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 
-bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* fw) {
+bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* fw,
+                       const char* actuatorUid, const char* actuatorName, const char* actuatorType) {
     String url = store.serverUrl();
     if (url.length() == 0) {
         Serial.println("[注册] 未配置平台地址 server_url");
@@ -32,6 +33,16 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
         // 自报遥测字段：让平台 metric_fields 与固件实际上报的 key 自动对齐
         JsonArray mf = o["metric_fields"].to<JsonArray>();
         s->describeFields(mf);
+    }
+
+    // 子执行器（如红外空调）：与传感器同列在 sensors[]，靠 type 区分。
+    // 后端 ProvisioningService 按 type 建成独立子设备并挂到本网关下（gateway_uid），
+    // 因此它同样享有独立在线状态、告警规则，网关离线时被一并批量下线。
+    if (actuatorUid && *actuatorUid) {
+        JsonObject o = arr.add<JsonObject>();
+        o["device_uid"] = actuatorUid;
+        o["name"]       = (actuatorName && *actuatorName) ? actuatorName : actuatorUid;
+        o["type"]       = (actuatorType && *actuatorType) ? actuatorType : "ac";
     }
 
     String body;

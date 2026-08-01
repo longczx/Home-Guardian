@@ -29,3 +29,31 @@ bool SensorRegistry::readAll(JsonObject& telemetry) {
     }
     return anySuccess;
 }
+
+ISensor* SensorRegistry::findByUid(const char* uid) const {
+    if (!uid) return nullptr;
+    for (uint8_t i = 0; i < _count; i++) {
+        if (strcmp(_sensors[i]->uid(), uid) == 0) return _sensors[i];
+    }
+    return nullptr;
+}
+
+bool SensorRegistry::removeByUid(const char* uid) {
+    if (!uid) return false;
+    for (uint8_t i = 0; i < _count; i++) {
+        if (strcmp(_sensors[i]->uid(), uid) != 0) continue;
+        delete _sensors[i];
+        for (uint8_t j = i; j + 1 < _count; j++) {
+            _sensors[j] = _sensors[j + 1];
+        }
+        _sensors[--_count] = nullptr;
+        return true;
+    }
+    return false;
+}
+
+SensorRegistry::~SensorRegistry() {
+    for (uint8_t i = 0; i < _count; i++) {
+        delete _sensors[i];
+    }
+}

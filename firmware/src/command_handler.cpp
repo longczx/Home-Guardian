@@ -7,7 +7,7 @@ void CommandHandler::registerAction(const char* action, ActionHandler handler) {
     }
 }
 
-void CommandHandler::handle(const char* payload, unsigned int length, MqttManager& mqtt) {
+void CommandHandler::handle(const char* targetUid, const char* payload, unsigned int length, MqttManager& mqtt) {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload, length);
     if (err) {
@@ -19,7 +19,7 @@ void CommandHandler::handle(const char* payload, unsigned int length, MqttManage
     const char* requestId = doc["request_id"] | "";
     JsonObject params     = doc["params"].as<JsonObject>();
 
-    Serial.printf("[CMD] 收到指令: action=%s, request_id=%s\n", action, requestId);
+    Serial.printf("[CMD] 收到指令: action=%s, request_id=%s, target=%s\n", action, requestId, targetUid);
 
     // 查找已注册的处理器
     bool found = false;
@@ -55,6 +55,6 @@ void CommandHandler::handle(const char* payload, unsigned int length, MqttManage
 
     char buf[256];
     serializeJson(reply, buf, sizeof(buf));
-    mqtt.publishCommandReply(buf);
+    mqtt.publishCommandReplyFor(targetUid, buf);
     Serial.printf("[CMD] → 回复: %s\n", buf);
 }

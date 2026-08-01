@@ -457,18 +457,41 @@ ESP32 (物理板)                    EMQX Broker                 Home Guardian
 
 ### 支持的传感器模块
 
-| 模块 | 传感器 | 上报指标 | 引脚 |
+| 模块 | 类型标识 | 上报指标 | 默认引脚 |
 |:---|:---|:---|:---|
-| DHT11 | 温湿度传感器 | `temperature`, `humidity` | GPIO4 |
-| Sound | 声敏传感器（模拟输出） | `noise_db` | GPIO34 (ADC1) |
+| DHT11 | `dht11` | `temperature`, `humidity` | GPIO4 |
+| Sound | `sound` | `noise_db` | GPIO34 (ADC1) |
+| 红外空调 | `ac_ir` | —（执行器） | GPIO25 |
 
-添加新传感器只需实现 `ISensor` 接口（`begin` + `read` + `uid`）并在 `main.cpp` 中注册。
+添加新传感器只需实现 `ISensor` 接口（`begin` + `read` + `uid`），并在 `main.cpp` 的 `instantiate()`
+里加一个分支、在 `ModuleStore::isSupportedType()` 登记类型标识。
+
+### 设备热插拔（免烧录增删模块）
+
+**挂载了哪些传感器/执行器由网关 NVS 里的模块清单在运行期决定**，不再由 `config.h` 的编译期
+开关写死。在 App 里增删即可，无需改 `config.h` 重新烧录，也无需恢复出厂重新配网。
+
+```
+App「网关 → 子设备」插入模块 ──► MQTT 指令 add_module{type,pin}
+   → 固件实例化驱动 + 存入 NVS 清单
+   → 上报 home/upstream/{网关uid}/manifest/post
+   → 平台自动建出子设备并上线
+```
+
+- **清单持久化**：存 NVS，掉电重启沿用；网关每次连上 MQTT 都会重报一次，平台据此自动对齐
+- **移除模块**：平台侧**保留设备记录与历史遥测、告警规则，仅转为离线**；要彻底清除在 Admin 手动删
+- **首次开机**：NVS 为空时按 `config.h` 的 `SENSOR_*_ENABLED` / `AC_IR_ENABLED` 播种一份，老配置不丢
+- **引脚校验**：GPIO34-39 为仅输入引脚，选作红外发射会被拒绝
+
+> 与首次自注册的区别：自注册用**一次性配对码**，只在配网那一刻拍一次快照；热插拔走
+> **网关自己的 MQTT 凭证**上报清单，因此可以随时重来。仅网关（`type=gateway`）有权上报清单。
 
 ### 快速开始
 
 1. **Admin 创建设备:**
     - 创建网关设备：type=gateway，设置 MQTT 密码
     - 创建传感器设备：type=sensor，选择所属网关，配置 metric_fields
+    - （走自助配网则跳过本步，设备注册时自动创建）
 
 2. **生成固件配置:**
     Admin → 编辑网关设备 → 点击「生成固件配置」→ 填入 WiFi 和 MQTT 密码 → 复制 `config.h`
@@ -485,13 +508,19 @@ ESP32 (物理板)                    EMQX Broker                 Home Guardian
 4. **验证:**
     设备上电 → 网关和所有传感器在 Admin 显示在线 → 仪表盘和移动端实时显示遥测数据
 
+5. **后续加硬件:** 不必再回到第 2、3 步——直接在 App 里热插拔（见上一节）
+
 ### 内置指令
 
 | 指令 | 说明 |
 |:---|:---|
 | `ping` | 连通性测试，返回 ok |
-| `get_info` | 返回固件版本、网关 UID、运行时长、可用内存、WiFi RSSI、传感器数量 |
+| `get_info` | 返回固件版本、网关 UID、运行时长、可用内存、WiFi RSSI、传感器/模块数量 |
 | `reboot` | 远程重启 ESP32 |
+| `list_modules` | 返回当前挂载的模块清单（type/pin/uid/name） |
+| `add_module` | 热插入模块，参数 `{type, pin, name?, uid?}` |
+| `remove_module` | 拔除模块，参数 `{uid}` |
+| `set_state` | 执行器全量状态下发（红外空调用） |
 
 ### 接线参考
 
@@ -552,7 +581,9 @@ python simulator.py --api
 - [x] ESP32 设备固件 (Arduino + PlatformIO，模块化传感器架构)
 - [x] 执行器能力模型 + 动态控制 UI (声明式 capability，前端按 schema 渲染控件)
 - [x] 设备自助配网 (平台侧：配对码 + 设备自注册 API + 移动端添加设备页)
-- [ ] **下一步: 配网固件 (SoftAP) + 更多执行器模块 + OTA 远程升级**
+- [x] 配网固件 (ESP32 SoftAP captive portal + 配对码自注册握手)
+- [x] 设备热插拔 (运行期模块清单 + manifest 同步，App 内增删传感器/执行器免烧录)
+- [ ] **下一步: 更多执行器模块 + OTA 远程升级**
 
 ## 贡献
 

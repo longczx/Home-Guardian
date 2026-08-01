@@ -136,6 +136,80 @@ class DeviceService
     }
 
     /**
+     * 按网关上报的清单同步其子设备（设备热插拔）
+     *
+     * 网关每次连上 MQTT、以及运行期增删模块后，都会发布一份自己挂载的子设备清单。
+     * 本方法据此对齐平台侧记录：新的建、已有的补字段、清单里缺席的标记离线。
+     *
+     * 缺席者【只标离线不删除】：设备名下可能已有历史遥测与绑定的告警规则，
+     * 误拔一次就级联删掉不可逆。要彻底清理由用户在 Admin 手动删。
+     *
+     * @param  Device $gateway 网关设备（子设备的 home_id / location 随它继承）
+     * @param  array  $devices 子设备清单 [{device_uid, name, type, metric_fields?}]
+     * @return array  {created: string[], absent: Device[]}
+     */
+    public static function syncGatewayChildren(Device $gateway, array $devices): array
+    {
+        $created = [];
+        $seen    = [];
+
+        foreach ($devices as $d) {
+            if (!is_array($d)) {
+                continue;
+            }
+            $uid = trim((string)($d['device_uid'] ?? ''));
+            // 网关不能把自己列为自己的子设备（否则 gateway_uid 自指，离线逻辑成环）
+            if ($uid === '' || $uid === $gateway->device_uid) {
+                continue;
+            }
+            $seen[] = $uid;
+
+            $existing = Device::where('device_uid', $uid)->first();
+
+            $data = [
+                'home_id'     => $gateway->home_id,
+                'device_uid'  => $uid,
+                'name'        => $d['name'] ?? $uid,
+                'type'        => $d['type'] ?? 'sensor',
+                'location'    => $gateway->location,
+                'gateway_uid' => $gateway->device_uid,
+            ];
+
+            if ($existing) {
+                // 已存在：不覆盖用户在 App 里改过的名称/位置/类型，只补关联关系
+                $data = ['gateway_uid' => $gateway->device_uid];
+            } else {
+                $data['mqtt_username'] = $uid; // 子设备不直连 MQTT，仅保持该列唯一
+                $created[] = $uid;
+            }
+
+            // 固件自报的遥测字段：仅在原字段为空时采用，避免覆盖用户手改的 metric_fields
+            if (array_key_exists('metric_fields', $d)
+                && (!$existing || empty($existing->metric_fields))) {
+                $data['metric_fields'] = $d['metric_fields'];
+            }
+
+            if ($existing) {
+                $existing->update($data);
+            } else {
+                Device::create($data);
+            }
+        }
+
+        // 清单里缺席的子设备 → 标离线（保留记录、历史与告警规则）
+        $absent = Device::where('gateway_uid', $gateway->device_uid)
+            ->when($seen !== [], fn($q) => $q->whereNotIn('device_uid', $seen))
+            ->where('is_online', true)
+            ->get(['id', 'device_uid', 'location']);
+
+        foreach ($absent as $dev) {
+            self::updateOnlineStatus($dev->device_uid, false);
+        }
+
+        return ['created' => $created, 'absent' => $absent];
+    }
+
+    /**
      * 心跳超时扫描：把 last_seen 过期但仍标记在线的设备置为离线
      *
      * 兜底 MQTT LWT 未触发的「静默死亡」（断电/崩溃/掉网）——仅靠 LWT 时
