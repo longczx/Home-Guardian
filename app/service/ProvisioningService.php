@@ -127,6 +127,7 @@ class ProvisioningService
             // 2. 子传感器/子设备
             foreach (($payload['sensors'] ?? []) as $i => $s) {
                 $sUid = trim((string)($s['device_uid'] ?? '')) ?: ($gwUid . '-s' . ($i + 1));
+                $existingSensor = Device::where('device_uid', $sUid)->first();
                 $sData = [
                     'home_id'       => $record->home_id,
                     'device_uid'    => $sUid,
@@ -136,7 +137,9 @@ class ProvisioningService
                     'gateway_uid'   => $gwUid,
                     'mqtt_username' => $sUid, // 子设备不连 MQTT，但保持列唯一
                 ];
-                if (array_key_exists('metric_fields', $s)) {
+                // 固件自报字段：仅在新建或原字段为空时采用，避免覆盖用户在 App 里手改的 metric_fields
+                if (array_key_exists('metric_fields', $s)
+                    && (!$existingSensor || empty($existingSensor->metric_fields))) {
                     $sData['metric_fields'] = $s['metric_fields'];
                 }
                 if (array_key_exists('capability', $s)) {

@@ -24,3 +24,10 @@ bool SensorDHT11::read(JsonObject& telemetry) {
     telemetry["humidity"]    = round(humi * 10.0) / 10.0;
     return true;
 }
+
+void SensorDHT11::describeFields(JsonArray& fields) const {
+    JsonObject t = fields.add<JsonObject>();
+    t["key"] = "temperature"; t["label"] = "温度"; t["unit"] = "°C";
+    JsonObject h = fields.add<JsonObject>();
+    h["key"] = "humidity";    h["label"] = "湿度"; h["unit"] = "%";
+}

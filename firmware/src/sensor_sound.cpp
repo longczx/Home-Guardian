@@ -45,3 +45,8 @@ bool SensorSound::read(JsonObject& telemetry) {
     telemetry["noise_db"] = round(final_db * 10.0) / 10.0;
     return true;
 }
+
+void SensorSound::describeFields(JsonArray& fields) const {
+    JsonObject n = fields.add<JsonObject>();
+    n["key"] = "noise_db"; n["label"] = "噪声"; n["unit"] = "dB";
+}
