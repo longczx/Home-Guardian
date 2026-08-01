@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getDevice, updateDevice } from '@/api/device';
+import { getMetricDefinitions, createMetricDefinition, type MetricDefinition } from '@/api/metricDefinition';
 import type { Device } from '@/api/types';
 import { toast } from '@/utils/guard';
 import { timeAgo } from '@/utils/format';
@@ -10,36 +11,87 @@ const id = ref(0);
 const device = ref<Device | null>(null);
 const name = ref('');
 const location = ref('');
-const metrics = ref<{ key: string; label: string; unit: string }[]>([]);
 const saving = ref(false);
+
+// 遥测字段字典
+const defs = ref<MetricDefinition[]>([]);
+// 已选字段：key → {label, unit}（字典项与自定义项统一存这里）
+const selected = ref<Record<string, { label: string; unit: string }>>({});
+
+// 自定义添加表单
+const showCustom = ref(false);
+const cf = ref({ key: '', label: '', unit: '', saveToDict: false });
+
+// 已选中但不在字典里的（历史/自定义字段）
+const customSelected = computed(() => {
+  const dictKeys = new Set(defs.value.map((d) => d.metric_key));
+  return Object.keys(selected.value).filter((k) => !dictKeys.has(k));
+});
+
+function isSelected(key: string) {
+  return Object.prototype.hasOwnProperty.call(selected.value, key);
+}
+
+function toggleDef(d: MetricDefinition) {
+  if (isSelected(d.metric_key)) {
+    removeKey(d.metric_key);
+  } else {
+    selected.value = { ...selected.value, [d.metric_key]: { label: d.label, unit: d.unit || '' } };
+  }
+}
+
+function removeKey(key: string) {
+  const next = { ...selected.value };
+  delete next[key];
+  selected.value = next;
+}
+
+async function addCustom() {
+  const key = cf.value.key.trim();
+  if (!key) return toast('请填写字段 key');
+  const label = cf.value.label.trim() || key;
+  const unit = cf.value.unit.trim();
+
+  // 存入字典（失败不阻断，仅提示；重复 key 视为已存在照常选中）
+  if (cf.value.saveToDict) {
+    try {
+      const created = await createMetricDefinition({ metric_key: key, label, unit });
+      defs.value = [...defs.value, created];
+    } catch (e) {
+      toast('未能存入字典：' + (e as Error).message);
+    }
+  }
+
+  selected.value = { ...selected.value, [key]: { label, unit } };
+  cf.value = { key: '', label: '', unit: '', saveToDict: false };
+  showCustom.value = false;
+}
 
 async function load() {
   try {
-    const d = await getDevice(id.value);
+    const [d, list] = await Promise.all([getDevice(id.value), getMetricDefinitions().catch(() => [])]);
     device.value = d;
     name.value = d.name;
     location.value = d.location || '';
-    metrics.value = (d.metric_fields || []).map((m) => ({
-      key: m.key, label: m.label || m.key, unit: m.unit || '',
-    }));
+    defs.value = Array.isArray(list) ? list : [];
+
+    const sel: Record<string, { label: string; unit: string }> = {};
+    (d.metric_fields || []).forEach((m) => {
+      sel[m.key] = { label: m.label || m.key, unit: m.unit || '' };
+    });
+    selected.value = sel;
   } catch (e) {
     toast((e as Error).message);
   }
 }
 
-function addMetric() {
-  metrics.value.push({ key: '', label: '', unit: '' });
-}
-function removeMetric(i: number) {
-  metrics.value.splice(i, 1);
-}
-
 async function save() {
   if (!name.value.trim()) return toast('名称不能为空');
-  // 过滤空 key 的指标行
-  const mf = metrics.value
-    .filter((m) => m.key.trim())
-    .map((m) => ({ key: m.key.trim(), label: m.label.trim() || m.key.trim(), unit: m.unit.trim() }));
+  const mf = Object.entries(selected.value).map(([key, v]) => ({
+    key,
+    label: v.label || key,
+    unit: v.unit || '',
+  }));
   saving.value = true;
   try {
     await updateDevice(id.value, { name: name.value.trim(), location: location.value.trim(), metric_fields: mf });
@@ -85,20 +137,47 @@ onLoad((q) => {
       </view>
     </view>
 
-    <!-- 遥测指标 -->
+    <!-- 遥测指标：从字典勾选 -->
     <view class="card">
       <view class="mhead">
         <text class="ct">遥测指标</text>
-        <text class="add" @tap="addMetric">＋ 添加</text>
       </view>
-      <text class="hint">定义该设备上报的遥测字段（key 需与设备上报一致，如 temperature）。</text>
-      <view v-for="(m, i) in metrics" :key="i" class="mrow">
-        <input v-model="m.key" class="min" placeholder="key" placeholder-class="ph" />
-        <input v-model="m.label" class="min" placeholder="名称" placeholder-class="ph" />
-        <input v-model="m.unit" class="min unit" placeholder="单位" placeholder-class="ph" />
-        <text class="mdel" @tap="removeMetric(i)">✕</text>
+      <text class="hint">从字典勾选设备上报的字段，key 自动对齐——避免手打拼错导致图表不显示、告警不触发。</text>
+
+      <view v-if="defs.length" class="chips">
+        <text
+          v-for="d in defs"
+          :key="d.metric_key"
+          class="chip"
+          :class="{ on: isSelected(d.metric_key) }"
+          @tap="toggleDef(d)"
+        >{{ d.icon }} {{ d.label }}<text v-if="d.unit" class="cu"> · {{ d.unit }}</text></text>
       </view>
-      <text v-if="!metrics.length" class="empty">暂无指标</text>
+      <text v-else class="empty">字典为空，可在下方自定义添加</text>
+
+      <!-- 已选的自定义字段（不在字典中） -->
+      <view v-if="customSelected.length" class="custom-list">
+        <text class="sub">自定义字段</text>
+        <view v-for="k in customSelected" :key="k" class="crow">
+          <text class="ck">{{ selected[k].label }} · {{ k }}<text v-if="selected[k].unit"> · {{ selected[k].unit }}</text></text>
+          <text class="mdel" @tap="removeKey(k)">✕</text>
+        </view>
+      </view>
+
+      <!-- 自定义添加 -->
+      <view class="add-wrap">
+        <text class="add" @tap="showCustom = !showCustom">{{ showCustom ? '收起' : '＋ 自定义字段' }}</text>
+        <view v-if="showCustom" class="cform">
+          <input v-model="cf.key" class="min" placeholder="key（须与设备上报一致，如 temperature）" placeholder-class="ph" />
+          <input v-model="cf.label" class="min" placeholder="显示名称，如 温度" placeholder-class="ph" />
+          <input v-model="cf.unit" class="min" placeholder="单位（可空），如 °C" placeholder-class="ph" />
+          <view class="save-dict" @tap="cf.saveToDict = !cf.saveToDict">
+            <text class="cbox">{{ cf.saveToDict ? '☑' : '☐' }}</text>
+            <text class="cbox-txt">同时存入字典，下次可直接勾选</text>
+          </view>
+          <button class="mini-btn" @tap="addCustom">添加</button>
+        </view>
+      </view>
     </view>
 
     <button class="btn btn-primary" :loading="saving" @tap="save">保存</button>
@@ -119,13 +198,28 @@ onLoad((q) => {
 .ph { color: #b6bccb; }
 .mhead { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 0 4rpx; }
 .ct { font-size: 26rpx; font-weight: 600; color: $hg-fg; }
-.add { font-size: 26rpx; color: $hg-accent; }
-.hint { display: block; font-size: 22rpx; color: $hg-muted; padding-bottom: 12rpx; }
-.mrow { display: flex; align-items: center; gap: 12rpx; padding: 14rpx 0; border-top: 1rpx solid $hg-line; }
-.min { flex: 1; min-width: 0; font-size: 26rpx; color: $hg-fg; background: $hg-card-2; border-radius: 10rpx; padding: 12rpx 16rpx; }
-.min.unit { flex: 0 0 120rpx; }
+.hint { display: block; font-size: 22rpx; color: $hg-muted; padding-bottom: 16rpx; line-height: 1.5; }
+.chips { display: flex; flex-wrap: wrap; gap: 14rpx; padding-bottom: 6rpx; }
+.chip {
+  padding: 12rpx 24rpx; border-radius: 999rpx; border: 1rpx solid $hg-line;
+  background: $hg-card-2; color: $hg-muted; font-size: 24rpx;
+}
+.chip.on { background: $hg-accent-soft; border-color: $hg-accent; color: $hg-accent; font-weight: 600; }
+.cu { font-size: 22rpx; opacity: 0.8; }
+.empty { display: block; text-align: center; color: $hg-muted; font-size: 24rpx; padding: 16rpx 0; }
+.custom-list { margin-top: 18rpx; }
+.sub { display: block; font-size: 22rpx; color: $hg-muted; margin-bottom: 8rpx; }
+.crow { display: flex; align-items: center; justify-content: space-between; padding: 14rpx 0; border-top: 1rpx solid $hg-line; }
+.ck { font-size: 26rpx; color: $hg-fg; }
 .mdel { flex: none; color: $hg-crit; font-size: 28rpx; padding: 0 6rpx; }
-.empty { display: block; text-align: center; color: $hg-muted; font-size: 24rpx; padding: 20rpx 0; }
+.add-wrap { padding: 18rpx 0 8rpx; }
+.add { font-size: 26rpx; color: $hg-accent; }
+.cform { margin-top: 16rpx; display: flex; flex-direction: column; gap: 14rpx; }
+.min { font-size: 26rpx; color: $hg-fg; background: $hg-card-2; border-radius: 10rpx; padding: 16rpx; }
+.save-dict { display: flex; align-items: center; gap: 10rpx; }
+.cbox { font-size: 30rpx; color: $hg-accent; }
+.cbox-txt { font-size: 24rpx; color: $hg-muted; }
+.mini-btn { background: $hg-accent; color: #fff; font-size: 26rpx; height: 72rpx; line-height: 72rpx; border-radius: $hg-radius-s; }
 .btn { border-radius: $hg-radius-s; height: 90rpx; line-height: 90rpx; font-size: 32rpx; }
 .btn-primary { background: $hg-accent; color: #fff; }
 </style>
