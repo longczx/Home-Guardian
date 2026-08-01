@@ -1,5 +1,8 @@
 # Home Guardian 移动端页面线框图说明稿
 
+> **归档说明（2026-08）**：早期 UI 生成输入稿，线框布局仍可参考；技术栈已迁移到 uni-app（Vue 3），
+> 现行客户端在 `uniapp/`、H5 部署于 `/app/`。现行客户端设计见 [docs/design/uniapp-client.md](docs/design/uniapp-client.md)。
+
 本文档基于 [MOBILE_UI_FUNCTIONS.md](MOBILE_UI_FUNCTIONS.md) 继续拆解，目标不是描述功能清单，而是直接指导另一个 AI 或设计师出页面线框图、低保真稿和首轮视觉稿。
 
 ## 1. 使用方式

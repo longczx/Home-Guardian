@@ -32,7 +32,7 @@
 | **消息中间件** | **EMQX 5.8** | **通信枢纽**。作为高性能 MQTT Broker，负责处理所有设备与服务器之间的实时、双向消息传递，支持海量设备连接。 |
 | **主数据库** | **PostgreSQL + TimescaleDB** | **数据仓库**。使用 PostgreSQL 存储结构化数据（如设备、用户），并利用 TimescaleDB 扩展高效地存储和查询海量时序遥测数据。 |
 | **缓存/队列** | **Redis 7** | **高速公路**。作为高性能内存数据库，用于：1. 存储热数据（设备最新状态）；2. 作为数据写入和告警处理的缓冲队列；3. Redis Pub/Sub 桥接 MQTT 数据到 WebSocket。 |
-| **前端界面** | **LayUI 2.9 (Admin) + React 19 + Ant Design Mobile (Mobile)** | Admin: 服务端渲染管理面板。Mobile: 响应式 PWA 移动端，卡片式布局 + ECharts 数据可视化。 |
+| **前端界面** | **LayUI 2.9 (Admin) + uni-app + Vue 3 + TS (Client)** | Admin: 服务端渲染管理面板。Client: App / 小程序 / H5 统一客户端，卡片式布局 + ECharts 数据可视化。 |
 | **部署方案** | **Docker / Docker Compose** | **运行环境**。将所有服务容器化，实现一键部署、环境隔离和跨平台一致性，极大简化开发和运维。 |
 | **版本控制** | **Git / GitHub** | **代码管理**。所有代码和文档都将在 GitHub 仓库中进行版本控制，便于协作和追踪。 |
 
@@ -255,8 +255,8 @@ Authorization → HTTP Server
 *   **目标用户:** 系统管理员
 *   **功能:** 设备/用户/角色/告警/自动化等全部 CRUD 管理，遥测数据查看，审计日志
 
-**移动端前端 (`/mobile/*`)**
-*   **技术栈:** React 19 + Ant Design Mobile + Zustand + ECharts + PWA
+**移动端客户端 (`/app/*`)**
+*   **技术栈:** uni-app + Vue 3 + TS + Pinia + vue-i18n + ECharts（App / 微信小程序 / H5）
 *   **认证方式:** JWT 双 Token (access 2h + refresh 30d)
 *   **目标用户:** 普通家庭成员
 *   **功能:** 环境概览、设备控制（开关/亮度等）、数据图表（1h/24h/7d）、告警通知列表
@@ -346,7 +346,7 @@ Authorization → HTTP Server
 
 **安全：** 配对码 8 位高熵 + TTL + 一次性使用；`register` 响应含明文 MQTT 密码，生产须启用 HTTPS 并对该公开接口限流；返回的 MQTT 地址取自 `MQTT_PUBLIC_HOST`。
 
-> **落地状态：** 平台侧（API + 移动端 `/mobile/devices/add`）已实现；设备端 SoftAP 配网固件为后续 Phase。
+> **落地状态：** 平台侧（API + 客户端「添加设备」页）已实现；设备端 SoftAP 配网固件已随 uni-app 客户端落地。
 
 ---
 

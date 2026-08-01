@@ -1,5 +1,10 @@
 # Home Guardian 移动端 UI 功能点文档
 
+> **归档说明（2026-08）**：本文档是早期用于生成 UI 稿的输入，产品定位与功能清单仍适用。
+> 但**技术栈已由 React 迁移到 uni-app（Vue 3）**，正文中的 `/mobile/*` 路由为旧 React 版路径，
+> 现行客户端在 `uniapp/`（页面走 `/pages/*`，H5 部署于 `/app/`）。现行客户端设计见
+> [docs/design/uniapp-client.md](docs/design/uniapp-client.md)。
+
 本文档用于交给另一个 AI 生成移动端 UI 图，目标是覆盖当前移动端已实现功能，并补充后端已具备、建议在 UI 方案中预留的模块。
 
 ## 1. 产品定位

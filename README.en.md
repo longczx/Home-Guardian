@@ -13,7 +13,7 @@
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
   <a href="#"><img src="https://img.shields.io/badge/Database-PostgreSQL-blue.svg" alt="PostgreSQL"></a>
   <a href="#"><img src="https://img.shields.io/badge/Admin-LayUI-red.svg" alt="LayUI"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Mobile-React_19-61dafb.svg" alt="React"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Client-uni--app_Vue_3-42b883.svg" alt="uni-app"></a>
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
 </p>
 
@@ -30,24 +30,24 @@
 *   **Smart alerting:** A highly customizable alert engine that, when telemetry triggers a rule, sends notifications via Email, Webhook, Telegram, WeChat Work, DingTalk, and more.
 *   **Time-series storage:** Uses **PostgreSQL + TimescaleDB** to store massive volumes of sensor data with efficient query performance.
 *   **Dynamic metric management:** Global metric definitions + per-device metric configuration, flexibly defining the name, unit, icon, and other metadata of telemetry metrics, with the frontend adapting display automatically.
-*   **Dual interfaces:**
+*   **Two interfaces:**
     *   **Admin panel** — server-rendered with Webman + LayUI, session auth, for administrators to configure the system and manage devices.
-    *   **Mobile frontend** — React 19 + Ant Design Mobile + PWA, JWT auth, for regular users to view environment data and control devices.
+    *   **Mobile App / Mini Program / H5** — uni-app + Vue 3 + TS (`uniapp/`), the primary client: multi-server access, invite-based family sign-up, device control, and closed-loop alerting.
 *   **Fully containerized:** Start all services with a single Docker Compose command.
-*   **Flexible permissions:** Two-layer control with RBAC + location scope.
+*   **Flexible permissions:** Family three-tier roles (owner/admin/member) + RBAC + location scope.
 
 ## Architecture
 
 ```
 Sensors ──GPIO──► ESP32 Gateway ──MQTT──► EMQX ──► Webman MQTT process ──► Redis Queue ──► PostgreSQL
                                                        │
-                                                       ├──► Redis Pub/Sub ──► Webman WS Worker ──► Mobile (real-time data)
+                                                       ├──► Redis Pub/Sub ──► Webman WS Worker ──► Client (real-time data)
                                                        └──► Alert Stream  ──► Alert engine ──► Notifications
 
-Mobile (React) ──HTTP──► Nginx:80 ──► /api/*    ──► Webman HTTP :8787 (REST API)
+uni-app client ──HTTP──► Nginx:80 ──► /api/*    ──► Webman HTTP :8787 (REST API)
                                     ├── /ws      ──► Webman WS   :8788 (WebSocket)
                                     ├── /admin/* ──► Webman HTTP :8787 (server-rendered)
-                                    └── /mobile/ ──► static files (SPA)
+                                    └── /app/    ──► static files (uni-app H5 SPA)
 ```
 
 ## Tech Stack
@@ -60,7 +60,7 @@ Mobile (React) ──HTTP──► Nginx:80 ──► /api/*    ──► Webman
 | **Primary database** | PostgreSQL + TimescaleDB | Persists device info and large-scale time-series data |
 | **Cache database** | Redis 7 | Hot data, device state, task queues, Pub/Sub |
 | **Admin panel** | LayUI 2.9 + ThinkPHP Template | Server-rendered admin panel, session auth |
-| **Mobile** | React 19 + Ant Design Mobile + ECharts | PWA mobile app, JWT auth |
+| **Client** | uni-app + Vue 3 + TS (App / Mini Program / H5) | Primary client, JWT auth, multi-server access |
 | **Device firmware** | ESP32 / Arduino + PlatformIO | IoT device side, MQTT communication, modular sensor architecture |
 
 ## Project Structure
@@ -85,18 +85,17 @@ Home-Guardian/
 │   ├── include/             # Headers (config, sensor interface, MQTT, WiFi)
 │   ├── src/                 # Sources (main, sensor implementations, command handler)
 │   └── platformio.ini       # PlatformIO build config
-├── mobile/                  # Mobile React project
+├── uniapp/                  # Primary client (uni-app + Vue 3 + TS)
 │   ├── src/
-│   │   ├── api/             # Axios + JWT auto-refresh
-│   │   ├── stores/          # Zustand state management
-│   │   ├── hooks/           # WebSocket hooks
-│   │   ├── utils/           # Utilities (metric lookup, etc.)
-│   │   ├── pages/           # Page components
-│   │   └── components/      # Shared components
-│   ├── package.json
-│   └── vite.config.ts
+│   │   ├── api/             # uni.request wrapper + JWT auto-refresh
+│   │   ├── stores/          # Pinia state (multi-server / auth / locale)
+│   │   ├── utils/           # WebSocket / push / helpers
+│   │   ├── pages/           # Pages (home / device / alerts / manage)
+│   │   ├── locale/          # vue-i18n
+│   │   └── pages.json       # Pages & tabBar config
+│   └── package.json
 ├── public/
-│   ├── mobile/              # Mobile build output (npm run build)
+│   ├── app/                 # uni-app H5 build output (npm run build:h5)
 │   ├── api-docs.html        # Swagger UI page
 │   ├── openapi.yaml         # OpenAPI 3.0 spec (auto-generated)
 │   └── favicon.ico
@@ -126,13 +125,15 @@ Home-Guardian/
     ```
     *Edit `.env` and change the database password, Redis password, and JWT secret.*
 
-3.  **Build the mobile frontend:**
+3.  **Build the client (H5):**
     ```bash
-    cd mobile
+    cd uniapp
     npm install
-    npm run build    # output goes to ../public/mobile/
+    npm run build:h5    # output goes to ../public/app/
     cd ..
     ```
+
+    > App / Mini Program are cloud-packaged via HBuilderX; see `uniapp/README.md`.
 
 4.  **Start the services:**
     ```bash
@@ -146,7 +147,7 @@ Home-Guardian/
     ```
 
 6.  **Check service status:**
-    *   **Mobile:** open `http://localhost/mobile/`
+    *   **Client:** open `http://localhost/app/`
     *   **Admin panel:** open `http://localhost/admin/login`
     *   **EMQX dashboard:** open `http://localhost:18083` (default `admin` / `public`)
 
@@ -164,11 +165,11 @@ Home-Guardian/
     ```
     > Loads `docker-compose.override.yml` by default: skips Nginx and exposes ports 8787/8788.
 
-2.  **Start the mobile dev server (in another terminal):**
+2.  **Start the client dev server (in another terminal):**
     ```bash
-    cd mobile
+    cd uniapp
     npm install
-    npm run dev
+    npm run dev:h5
     ```
 
 3.  **Create an admin account (first time):**
@@ -177,12 +178,12 @@ Home-Guardian/
     ```
 
 4.  **Access:**
-    *   **Mobile (HMR):** `http://localhost:5173/mobile/`
+    *   **Client (HMR):** `http://localhost:5173/`
     *   **Admin panel:** `http://localhost:8787/admin/login`
 
 **Development request flow:**
 ```
-Mobile :5173
+Client :5173
   ├── pages/JS/CSS  →  Vite Dev Server (HMR)
   ├── /api/*        →  Vite proxy → localhost:8787 (Webman)
   └── /ws           →  Vite proxy → localhost:8788 (WebSocket)
@@ -194,7 +195,7 @@ Admin panel
 **Development vs. Production:**
 | | Development | Production |
 |:---|:---|:---|
-| Mobile | Vite :5173 (HMR) | Nginx serves static files |
+| Client | Vite :5173 (HMR) | Nginx serves static files |
 | Admin panel | Webman :8787 direct | Nginx → webman:8787 |
 | API proxy | Vite proxy → :8787 | Nginx → webman:8787 |
 | Nginx | not started | started |
@@ -391,21 +392,21 @@ Besides manually creating a device in the admin panel and flashing a generated `
 **Flow:**
 
 ```
-Mobile "Add device" ──► generate pairing code (10min TTL) ──┐
+Client "Add device" ──► generate pairing code (10min TTL) ──┐
                                                             │
 Device powers on → SoftAP (HG-Setup-xxxx) ──► user enters WiFi + pastes pairing code
                                                             │
 Device joins home WiFi ──► POST /provisioning/register (code + self info)
                                                             │
-Platform creates gateway+sensors + MQTT creds ──► device connects EMQX ──► mobile polls "online"
+Platform creates gateway+sensors + MQTT creds ──► device connects EMQX ──► client polls "online"
 ```
 
-Mobile page: `/mobile/devices/add` (via the "+ Add" button at the top of the device list).
+Client page: device management → "＋ Add device" (generates a pairing code; the device self-provisions and comes online).
 
 > **Production notes:**
 > - Set `MQTT_PUBLIC_HOST` to the publicly reachable EMQX address for devices (the register response uses it; falls back to `MQTT_HOST` if unset).
 > - The `register` response contains a plaintext MQTT password; enable HTTPS in production and rate-limit this public endpoint.
-> - The device-side SoftAP provisioning and self-registration handshake are firmware-layer capabilities; the platform side (API + mobile) is ready.
+> - The device-side SoftAP provisioning and self-registration handshake are firmware-layer capabilities; the platform side (API + client) is ready.
 
 ## ESP32 Device Firmware
 
@@ -526,12 +527,12 @@ The simulator generates realistic data (sine wave + random noise) for each metri
 - [x] Web API development (16 REST controllers, 50+ endpoints)
 - [x] WebSocket real-time push service
 - [x] Admin panel (LayUI server-rendered)
-- [x] Mobile frontend (React 19 + Ant Design Mobile + PWA)
+- [x] Primary client (uni-app + Vue 3 + TS: App / Mini Program / H5)
 - [x] Online API docs (Swagger UI + swagger-php annotations)
 - [x] Global metric definitions + per-device metric config + simulated data generation
 - [x] ESP32 device firmware (Arduino + PlatformIO, modular sensor architecture)
 - [x] Actuator capability model + dynamic control UI (declarative capability, frontend renders controls from schema)
-- [x] Self-service device provisioning (platform side: pairing code + device self-registration API + mobile add-device page)
+- [x] Self-service device provisioning (platform side: pairing code + device self-registration API + client add-device page)
 - [ ] **Next: provisioning firmware (SoftAP) + more actuator modules + OTA remote upgrades**
 
 ## Contributing
