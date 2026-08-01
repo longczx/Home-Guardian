@@ -41,9 +41,9 @@
 //     DHT11（上面的传感器模块），用真实室温做闭环展示与自动化。
 #define AC_IR_ENABLED          0                     // 置 1 启用红外空调执行器
 #define IR_LED_PIN             25                    // 红外发射管 GPIO（需经三极管驱动，勿直连）
-//  你的空调红外协议：先用库自带的 IRrecvDumpV3 例程对着实体遥控识别 Protocol，
-//  再填到这里。常见：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …
-//  海信机型多数落在 COOLIX 或 HITACHI 系；识别不出就走原始码学习（见文档）。
+//  AC_PROTOCOL 只是【首次开机默认协议】。协议可在 App 里运行时切换并持久化到 NVS——
+//  无需接收器识别、也无需反复烧录：在 App 空调控制页逐个试协议，空调有反应即选定。
+//  常见：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …（海信多为 COOLIX/HITACHI 系）
 #define AC_PROTOCOL            decode_type_t::COOLIX
 
 // =====================================================================
