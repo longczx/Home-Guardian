@@ -217,39 +217,43 @@ class TelemetryController
         $start = $request->get('start', now()->subDays(7)->toDateTimeString());
         $end = $request->get('end', now()->toDateTimeString());
 
-        // 计算时间跨度，短范围直接查原始表（连续聚合有 1 小时延迟）
+        // 按跨度自适应分桶，控制点数在 ~150-300：24h→5min，≤7d→30min，更长→3h
         $startTs = strtotime($start);
         $endTs = strtotime($end);
         $spanHours = ($endTs - $startTs) / 3600;
-
         if ($spanHours <= 24) {
-            // 短范围：从原始表按 5 分钟分桶聚合
-            $data = Db::select("
-                SELECT
-                    time_bucket('5 minutes', ts) AS bucket,
-                    avg((value ->> 0)::NUMERIC)  AS avg_value,
-                    min((value ->> 0)::NUMERIC)  AS min_value,
-                    max((value ->> 0)::NUMERIC)  AS max_value,
-                    count(*)                     AS sample_count
+            $bucket = '5 minutes';
+        } elseif ($spanHours <= 24 * 7) {
+            $bucket = '30 minutes';
+        } else {
+            $bucket = '3 hours';
+        }
+        // $bucket 来自固定白名单，非用户输入，可安全内插
+
+        // 取值表达式：value 可能是标量数字（25.6）或数组（[25.6]）。
+        //   标量：value #>> '{}' 取标量文本；数组：value -> 0 取首元素再 #>> '{}'。
+        //   统一为 (CASE ... END) #>> '{}' 后转 numeric —— 修复此前 value->>0 对标量返回 NULL 的 bug。
+        $valueExpr = "((CASE WHEN jsonb_typeof(value) = 'array' THEN value -> 0 ELSE value END) #>> '{}')::NUMERIC";
+
+        $data = Db::select("
+            SELECT
+                time_bucket(INTERVAL '{$bucket}', ts) AS bucket,
+                avg(v) AS avg_value,
+                min(v) AS min_value,
+                max(v) AS max_value,
+                count(*) AS sample_count
+            FROM (
+                SELECT ts, {$valueExpr} AS v
                 FROM telemetry_logs
                 WHERE device_id = ?
                   AND metric_key = ?
                   AND ts BETWEEN ? AND ?
                   AND (jsonb_typeof(value) = 'number'
                        OR (jsonb_typeof(value) = 'array' AND jsonb_typeof(value -> 0) = 'number'))
-                GROUP BY bucket
-                ORDER BY bucket ASC
-            ", [$deviceId, $metricKey, $start, $end]);
-        } else {
-            // 长范围：从连续聚合视图查询
-            $data = Db::table('telemetry_hourly')
-                ->select('bucket', 'avg_value', 'min_value', 'max_value', 'sample_count')
-                ->where('device_id', $deviceId)
-                ->where('metric_key', $metricKey)
-                ->whereBetween('bucket', [$start, $end])
-                ->orderBy('bucket', 'asc')
-                ->get();
-        }
+            ) t
+            GROUP BY bucket
+            ORDER BY bucket ASC
+        ", [$deviceId, $metricKey, $start, $end]);
 
         return api_success($data);
     }
