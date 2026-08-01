@@ -169,7 +169,8 @@ class DeviceController
         return view('admin/device/firmware-config', [
             'device'    => $device,
             'sensors'   => $sensors,
-            'mqttHost'  => getenv('MQTT_HOST') ?: '192.168.1.100',
+            // 展示给用户填入设备的地址：优先公网可达地址，回退内部 host
+            'mqttHost'  => getenv('MQTT_PUBLIC_HOST') ?: (getenv('MQTT_HOST') ?: '192.168.1.100'),
             'mqttPort'  => getenv('MQTT_PORT') ?: '1883',
             'nav'       => 'devices',
             'adminUser' => $request->adminUser,
