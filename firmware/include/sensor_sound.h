@@ -8,6 +8,7 @@ public:
     SensorSound(uint8_t pin, const char* deviceUid);
     bool begin() override;
     bool read(JsonObject& telemetry) override;
+    void describeFields(JsonArray& fields) const override;
     const char* name() const override { return "Sound"; }
     const char* uid() const override { return _uid; }
 

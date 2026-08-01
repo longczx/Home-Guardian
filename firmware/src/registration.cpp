@@ -29,6 +29,9 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
         o["device_uid"] = s->uid();   // 与后续遥测发布使用的 uid 一致
         o["name"]       = s->name();
         o["type"]       = "sensor";
+        // 自报遥测字段：让平台 metric_fields 与固件实际上报的 key 自动对齐
+        JsonArray mf = o["metric_fields"].to<JsonArray>();
+        s->describeFields(mf);
     }
 
     String body;
