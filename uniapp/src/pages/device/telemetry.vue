@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { onLoad, onReady, onUnload } from '@dcloudio/uni-app';
 import { getAggregatedTelemetry } from '@/api/device';
 import type { AggregatedPoint } from '@/api/types';
@@ -25,6 +25,18 @@ function isoAgo(hours: number): string {
   return new Date(Date.now() - hours * 3600 * 1000).toISOString();
 }
 
+// 汇总统计（NUMERIC 经 PDO 是字符串，统一 Number() 兜底）
+const stat = computed(() => {
+  const avg = points.value.map((p) => Number(p.avg_value)).filter(Number.isFinite);
+  const maxs = points.value.map((p) => Number(p.max_value)).filter(Number.isFinite);
+  const mins = points.value.map((p) => Number(p.min_value)).filter(Number.isFinite);
+  return {
+    latest: avg.length ? avg[avg.length - 1].toFixed(1) : '-',
+    peak: maxs.length ? Math.max(...maxs).toFixed(1) : '-',
+    valley: mins.length ? Math.min(...mins).toFixed(1) : '-',
+  };
+});
+
 async function load() {
   if (!metric.value) return;
   const r = RANGES.find((x) => x.key === range.value)!;
@@ -41,36 +53,84 @@ function setRange(k: string) {
   load();
 }
 
-// 轻量 canvas 折线（PR1 自绘；uCharts 可后续替换）
+// 桶时间戳 → 轴标签（24h 显示 时:分；更长显示 月/日）
+function fmtTime(bucket: string): string {
+  const d = new Date(String(bucket).replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return range.value === '24h'
+    ? `${p(d.getHours())}:${p(d.getMinutes())}`
+    : `${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+}
+
+// 轻量 canvas 折线：带 Y 轴刻度 + 网格 + X 轴时间标签 + 面积填充
 function draw() {
-  const data = points.value.map((p) => p.avg_value).filter((v) => typeof v === 'number');
+  // NUMERIC 经 PDO 会是字符串，统一 Number() 兜底，别再被 typeof 过滤掉
+  const pts = points.value.filter((p) => Number.isFinite(Number(p.avg_value)));
+  const data = pts.map((p) => Number(p.avg_value));
   const ctx = uni.createCanvasContext('trend');
   const w = canvasW.value;
   const h = canvasH.value;
-  const pad = 12;
   ctx.clearRect(0, 0, w, h);
+
   if (data.length < 2) {
-    ctx.setFillStyle('#c9d6f2');
+    ctx.setFillStyle('rgba(255,255,255,0.55)');
     ctx.setFontSize(13);
-    ctx.fillText('暂无足够数据', w / 2 - 40, h / 2);
+    ctx.setTextAlign('center');
+    ctx.fillText('暂无足够数据', w / 2, h / 2);
     ctx.draw();
     return;
   }
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const span = max - min || 1;
-  const x = (i: number) => pad + (i / (data.length - 1)) * (w - pad * 2);
-  const y = (v: number) => h - pad - ((v - min) / span) * (h - pad * 2 - 8);
 
-  // 网格
-  ctx.setStrokeStyle('rgba(201,214,242,0.18)');
-  ctx.setLineWidth(1);
-  [0.25, 0.5, 0.75].forEach((p) => {
+  const padL = 46, padR = 14, padT = 14, padB = 28;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  let min = Math.min(...data);
+  let max = Math.max(...data);
+  if (min === max) { min -= 1; max += 1; }
+  const room = (max - min) * 0.12; // 上下留白，曲线不贴边
+  min -= room; max += room;
+  const span = max - min || 1;
+
+  const x = (i: number) => padL + (i / (data.length - 1)) * plotW;
+  const y = (v: number) => padT + (1 - (v - min) / span) * plotH;
+
+  // Y 轴：4 档网格线 + 数值刻度
+  const yTicks = 4;
+  ctx.setFontSize(10);
+  ctx.setTextAlign('right');
+  for (let i = 0; i <= yTicks; i++) {
+    const val = min + (span * i) / yTicks;
+    const yy = y(val);
+    ctx.setStrokeStyle('rgba(255,255,255,0.08)');
+    ctx.setLineWidth(1);
     ctx.beginPath();
-    ctx.moveTo(pad, h * p);
-    ctx.lineTo(w - pad, h * p);
+    ctx.moveTo(padL, yy);
+    ctx.lineTo(w - padR, yy);
     ctx.stroke();
-  });
+    ctx.setFillStyle('rgba(255,255,255,0.5)');
+    ctx.fillText(val.toFixed(1), padL - 6, yy + 3);
+  }
+
+  // X 轴：约 4 个时间刻度
+  ctx.setTextAlign('center');
+  ctx.setFillStyle('rgba(255,255,255,0.5)');
+  const xTicks = Math.min(4, data.length - 1);
+  for (let i = 0; i <= xTicks; i++) {
+    const idx = Math.round((i / xTicks) * (data.length - 1));
+    ctx.fillText(fmtTime(pts[idx].bucket), x(idx), h - 9);
+  }
+
+  // 面积填充
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(data[0]));
+  data.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(data.length - 1), padT + plotH);
+  ctx.lineTo(x(0), padT + plotH);
+  ctx.closePath();
+  ctx.setFillStyle('rgba(110,168,255,0.14)');
+  ctx.fill();
 
   // 折线
   ctx.setStrokeStyle('#6ea8ff');
@@ -79,12 +139,13 @@ function draw() {
   data.forEach((v, i) => (i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v))));
   ctx.stroke();
 
-  // 终点
+  // 终点高亮
   const li = data.length - 1;
   ctx.setFillStyle('#6ea8ff');
   ctx.beginPath();
-  ctx.arc(x(li), y(data[li]), 4, 0, Math.PI * 2);
+  ctx.arc(x(li), y(data[li]), 3.5, 0, Math.PI * 2);
   ctx.fill();
+
   ctx.draw();
 }
 
@@ -141,15 +202,15 @@ onUnload(() => unsub());
 
     <view class="summary" v-if="points.length">
       <view class="sm">
-        <text class="sv">{{ points[points.length - 1]?.avg_value?.toFixed?.(1) ?? '-' }}{{ unit }}</text>
+        <text class="sv">{{ stat.latest }}{{ unit }}</text>
         <text class="sl">最新均值</text>
       </view>
       <view class="sm">
-        <text class="sv">{{ Math.max(...points.map((p) => p.max_value)).toFixed(1) }}{{ unit }}</text>
+        <text class="sv">{{ stat.peak }}{{ unit }}</text>
         <text class="sl">峰值</text>
       </view>
       <view class="sm">
-        <text class="sv">{{ Math.min(...points.map((p) => p.min_value)).toFixed(1) }}{{ unit }}</text>
+        <text class="sv">{{ stat.valley }}{{ unit }}</text>
         <text class="sl">谷值</text>
       </view>
     </view>
