@@ -53,6 +53,8 @@ enum Mode { MODE_PROVISION, MODE_NORMAL };
 Mode mode = MODE_NORMAL;
 
 unsigned long lastTelemetry = 0;
+unsigned long lastHeartbeat = 0;
+unsigned long rebootAt = 0;
 bool sensorsOnlinePublished = false;
 unsigned long btnPressStart = 0;
 
@@ -75,8 +77,7 @@ bool handleGetInfo(const JsonObject& params, JsonObject& response) {
 
 bool handleReboot(const JsonObject& params, JsonObject& response) {
     response["message"] = "rebooting in 1s";
-    delay(1000);
-    ESP.restart();
+    rebootAt = millis() + 1000;
     return true;
 }
 
@@ -415,6 +416,14 @@ void loop() {
     }
     if (!mqtt.isConnected()) {
         sensorsOnlinePublished = false;
+    }
+
+    if (rebootAt && (long)(millis() - rebootAt) >= 0) ESP.restart();
+    // 应用层心跳独立于 MQTT keepalive，避免无遥测设备被超时扫描误判离线。
+    if (mqtt.isConnected() && millis() - lastHeartbeat >= 30000) {
+        lastHeartbeat = millis();
+        mqtt.publishGatewayState(true);
+        if (acIr) mqtt.publishSensorState(acUid.c_str(), true);
     }
 
     // 定时遥测：逐传感器独立发布

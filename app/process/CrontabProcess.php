@@ -38,6 +38,7 @@ class CrontabProcess
 
         // 每 60 秒做一次设备心跳超时扫描（兜底 LWT 未触发的静默离线）
         Timer::add(60, [$this, 'sweepOfflineDevices']);
+        Timer::add(5, [$this, 'expireCommands']);
 
         Log::info('CrontabProcess 定时自动化进程已启动');
     }
@@ -111,6 +112,20 @@ class CrontabProcess
                 $this->initRedis();
             }
         }
+    }
+
+    public function expireCommands(): void
+    {
+        try {
+            foreach (\app\model\CommandLog::pending()->where('sent_at', '<', now()->subSeconds(60))->get() as $log) {
+                $changed = \app\model\CommandLog::where('id', $log->id)->pending()
+                    ->update(['status' => 'timeout', 'replied_at' => now()]);
+                if ($changed) Redis::connection('pubsub')->publish('ws:broadcast', json_encode([
+                    'type' => 'command_reply', 'request_id' => $log->request_id,
+                    'device_id' => $log->device_id, 'status' => 'timeout',
+                ]));
+            }
+        } catch (\Throwable $e) { Log::error('指令超时检查失败: ' . $e->getMessage()); }
     }
 
     /**

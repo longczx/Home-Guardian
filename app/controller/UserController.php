@@ -242,6 +242,10 @@ class UserController
             }
         });
 
+        if (array_intersect(['password', 'is_active', 'role_ids', 'allowed_locations'], array_keys($data))) {
+            \app\service\AuthService::logoutAll($id);
+        }
+
         AuditService::log($request, 'update', 'user', $id,
             AuditService::diffChanges($original, $user->fresh()->toArray())
         );
@@ -275,6 +279,7 @@ class UserController
         }
 
         $username = $user->username;
+        \app\service\AuthService::logoutAll($id);
         $user->delete();
 
         AuditService::log($request, 'delete', 'user', $id, [

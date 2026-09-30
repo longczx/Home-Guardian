@@ -41,6 +41,7 @@ async function test(c: NotificationChannel) {
     testing.value = 0;
   }
 }
+function deliveries() { uni.navigateTo({ url: '/pages/manage/deliveries' }); }
 function add() {
   uni.navigateTo({ url: '/pages/manage/channel-edit' });
 }
@@ -68,6 +69,7 @@ onShow(load);
 
 <template>
   <view class="page">
+    <button @tap="deliveries">投递记录与重试</button>
     <view class="list">
       <view v-for="c in channels" :key="c.id" class="row">
         <view class="mid" @tap="edit(c)">

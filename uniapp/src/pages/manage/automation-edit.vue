@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchValue } from '@/utils/events';
 import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
@@ -25,6 +26,8 @@ const f = ref({
   metricKey: '',
   condition: 'GREATER_THAN',
   value: 0,
+  durationSec: 0,
+  cooldownSec: 0,
   // schedule
   cronMode: 'daily' as 'daily' | 'hourly' | 'weekday' | 'custom',
   cronTime: '22:00', // HH:MM，用于 daily/weekday
@@ -32,6 +35,7 @@ const f = ref({
   // action
   actionType: 'device_command' as 'device_command' | 'notify',
   actDeviceId: undefined as number | undefined,
+  actionParams: '{}',
   actName: '',        // 指令 action 名，如 turn_on
   channelIds: [] as number[],
   isEnabled: true,
@@ -113,6 +117,8 @@ function buildPayload(): AutomationInput | null {
       metric_key: f.value.metricKey.trim(),
       condition: f.value.condition,
       value: Number(f.value.value),
+      duration_sec: Number(f.value.durationSec),
+      cooldown_sec: Number(f.value.cooldownSec),
     };
   } else {
     const cron = effectiveCron();
@@ -124,7 +130,12 @@ function buildPayload(): AutomationInput | null {
   if (f.value.actionType === 'device_command') {
     if (!f.value.actDeviceId) { toast('请选择执行设备'); return null; }
     if (!f.value.actName.trim()) { toast('请填写指令名'); return null; }
-    action = { type: 'device_command' as const, device_id: f.value.actDeviceId, payload: { action: f.value.actName.trim() } };
+    let params: Record<string, unknown>;
+    try {
+      params = JSON.parse(f.value.actionParams);
+      if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error();
+    } catch { toast('动作参数必须是有效 JSON 对象'); return null; }
+    action = { type: 'device_command' as const, device_id: f.value.actDeviceId, payload: { action: f.value.actName.trim(), params } };
   } else {
     if (!f.value.channelIds.length) { toast('请选择通知渠道'); return null; }
     action = { type: 'notify' as const, channel_ids: f.value.channelIds };
@@ -172,12 +183,15 @@ onLoad(async (q) => {
         metricKey: (tc.metric_key as string) || '',
         condition: (tc.condition as string) || 'GREATER_THAN',
         value: (tc.value as number) ?? 0,
+        durationSec: Number(tc.duration_sec ?? 0),
+        cooldownSec: Number(tc.cooldown_sec ?? 0),
         cronMode: tc.cron ? 'custom' : 'daily',
         cronTime: '22:00',
         cron: (tc.cron as string) || '0 22 * * *',
         actionType: act?.type === 'notify' ? 'notify' : 'device_command',
         actDeviceId: act?.device_id,
         actName: act?.payload?.action || '',
+        actionParams: JSON.stringify(act?.payload?.params ?? {}),
         channelIds: act?.channel_ids || [],
         isEnabled: a.is_enabled,
       };
@@ -225,6 +239,13 @@ onLoad(async (q) => {
         <view class="field"><text class="label">阈值</text>
           <input v-model.number="f.value" type="number" class="input" placeholder="如 30" placeholder-class="ph" />
         </view>
+        <view class="field"><text class="label">持续满足（秒）</text>
+          <input v-model.number="f.durationSec" type="number" class="input" />
+        </view>
+        <view class="field"><text class="label">两次触发间隔（秒）</text>
+          <input v-model.number="f.cooldownSec" type="number" class="input" />
+        </view>
+        <text class="hint">持续满足只执行一次，条件恢复后可再次触发。</text>
       </template>
 
       <template v-else>
@@ -269,6 +290,9 @@ onLoad(async (q) => {
           </view>
           <input v-else v-model="f.actName" class="input" placeholder="如 turn_on / turn_off" placeholder-class="ph" />
         </view>
+        <view class="field"><text class="label">动作参数（JSON）</text>
+          <input v-model="f.actionParams" class="input" placeholder='例如 {"power":true,"temp":26}' />
+        </view>
       </template>
 
       <template v-else>
@@ -284,7 +308,7 @@ onLoad(async (q) => {
     <view class="card">
       <view class="field row-between">
         <text class="label nomb">启用</text>
-        <switch :checked="f.isEnabled" color="#2b6fe3" @change="f.isEnabled = $event.detail.value" />
+        <switch :checked="f.isEnabled" color="#2b6fe3" @change="f.isEnabled = switchValue($event)" />
       </view>
     </view>
 

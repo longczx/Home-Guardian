@@ -13,3 +13,9 @@ node_modules/
 .DS_Store
 docker-compose.yml
 PROJECT_BLUEPRINT.md
+
+**/node_modules/
+**/.pio/
+firmware/include/config.h
+uniapp/dist/
+docker-compose.test.yml

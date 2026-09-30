@@ -26,13 +26,15 @@ class CommandLogController
         tags: ['指令日志'],
     )]
     #[OA\Parameter(name: 'device_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer'))]
-    #[OA\Parameter(name: 'status', in: 'query', description: 'pending / delivered / success / failed / timeout', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'status', in: 'query', description: 'queued / sent / delivered / replied_ok / replied_error / timeout', required: false, schema: new OA\Schema(type: 'string'))]
     #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
     #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 20))]
     #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
     public function index(Request $request)
     {
-        $query = CommandLog::with('device:id,device_uid,name,location');
+        $query = CommandLog::with('device:id,device_uid,name,location')->whereHas('device');
+
+        if ($requestId = $request->get('request_id')) $query->where('request_id', $requestId);
 
         // 按设备筛选
         if ($deviceId = $request->get('device_id')) {
@@ -75,7 +77,7 @@ class CommandLogController
     #[OA\Response(response: 403, description: '无权查看', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function show(Request $request, int $id)
     {
-        $commandLog = CommandLog::with('device:id,device_uid,name,location')->find($id);
+        $commandLog = CommandLog::with('device:id,device_uid,name,location')->whereHas('device')->find($id);
 
         if (!$commandLog) {
             return api_error('指令记录不存在', 404, 2004);

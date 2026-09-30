@@ -66,31 +66,52 @@ class NotificationProcess
     public function processQueue(): void
     {
         try {
-            for ($i = 0; $i < 20; $i++) {
-                $raw = $this->redis->rPop(self::QUEUE_KEY);
-                if (!$raw) {
-                    break;
-                }
-
+            if (!$this->redis) $this->initRedis();
+            $queue = new \app\service\ReliableQueue($this->redis, self::QUEUE_KEY, self::QUEUE_KEY . ':processing');
+            foreach ($queue->reserve(20) as $raw) {
                 $task = json_decode($raw, true);
-                if (!$task) {
+                if (!is_array($task) || !is_array($task['channel_ids'] ?? null)
+                    || !is_string($task['title'] ?? '') || !is_string($task['content'] ?? '')
+                    || !is_array($task['extra'] ?? [])
+                    || count(array_filter($task['channel_ids'], fn ($id) => !is_int($id) && !(is_string($id) && ctype_digit($id)))) > 0) {
+                    $queue->move($raw, self::QUEUE_KEY . ':deadletter');
                     continue;
                 }
-
-                NotificationService::send(
-                    $task['channel_ids'] ?? [],
-                    $task['title'] ?? '通知',
-                    $task['content'] ?? '',
-                    $task['extra'] ?? []
-                );
+                foreach (array_unique($task['channel_ids']) as $channelId) {
+                    $channel = \app\model\NotificationChannel::withoutGlobalScopes()->find((int)$channelId);
+                    if (!$channel || (isset($task['extra']['home_id']) && (int)$task['extra']['home_id'] !== (int)$channel->home_id)) continue;
+                    \app\model\NotificationDelivery::withoutGlobalScopes()->firstOrCreate([
+                        'delivery_key' => hash('sha256', ($task['task_id'] ?? $raw) . ':' . $channelId),
+                    ], [
+                        'home_id' => $channel->home_id, 'channel_id' => $channelId,
+                        'title' => mb_substr($task['title'] ?? '通知', 0, 255), 'content' => $task['content'] ?? '',
+                        'extra' => $task['extra'] ?? [], 'next_attempt_at' => now(),
+                    ]);
+                }
+                $queue->acknowledge($raw);
             }
+            $this->deliverPending();
         } catch (\Throwable $e) {
-            Log::error("通知发送异常: {$e->getMessage()}");
+            Log::error('通知队列异常，任务保留待重试: ' . $e->getMessage());
+            if ($e instanceof \RedisException) $this->redis = null;
+        }
+    }
 
-            // Redis 连接断开时重连
-            if (str_contains($e->getMessage(), 'Redis') || str_contains($e->getMessage(), 'Connection')) {
-                $this->initRedis();
-            }
+    public function deliverPending(): void
+    {
+        $deliveries = \app\model\NotificationDelivery::withoutGlobalScopes()
+            ->where('status', 'pending')->where('next_attempt_at', '<=', now())->orderBy('id')->limit(20)->get();
+        foreach ($deliveries as $delivery) {
+            $results = NotificationService::send([$delivery->channel_id], $delivery->title, $delivery->content, $delivery->extra ?? []);
+            $result = $results[$delivery->channel_id] ?? ['status' => 'skipped', 'error' => null];
+            $attempts = $delivery->attempts + 1;
+            $failed = $result['status'] === 'failed';
+            $delivery->update([
+                'status' => $failed && $attempts < 5 ? 'pending' : $result['status'],
+                'attempts' => $attempts, 'last_error' => $result['error'],
+                'next_attempt_at' => $failed && $attempts < 5 ? now()->addSeconds(min(300, 2 ** $attempts)) : null,
+                'sent_at' => $result['status'] === 'sent' ? now() : null,
+            ]);
         }
     }
 

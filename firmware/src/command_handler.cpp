@@ -1,5 +1,6 @@
 #include "command_handler.h"
 #include <Arduino.h>
+#include <Preferences.h>
 
 void CommandHandler::registerAction(const char* action, ActionHandler handler) {
     if (_count < MAX_ACTIONS) {
@@ -20,6 +21,43 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
     JsonObject params     = doc["params"].as<JsonObject>();
 
     Serial.printf("[CMD] 收到指令: action=%s, request_id=%s, target=%s\n", action, requestId, targetUid);
+
+    if (!requestId[0] || strlen(requestId) > 96) return;
+    Preferences cache;
+    if (!cache.begin("hg_commands", false)) return;
+    // 持久化最近 16 条回执，MQTT QoS1 重投或重启后不重复操作硬件。
+    for (uint8_t i = 0; i < 16; i++) {
+        String key = "c" + String(i);
+        String saved = cache.getString(key.c_str(), "");
+        JsonDocument entry;
+        if (deserializeJson(entry, saved)) continue;
+        if (String(entry["id"] | "") == requestId && String(entry["target"] | "") == targetUid) {
+            String previous = entry["reply"] | "";
+            cache.end();
+            mqtt.publishCommandReplyFor(targetUid, previous.c_str());
+            return;
+        }
+    }
+    uint8_t slot = cache.getUChar("next", 0) % 16;
+    String cacheKey = "c" + String(slot);
+    JsonDocument entry;
+    entry["id"] = requestId;
+    entry["target"] = targetUid;
+    JsonDocument interrupted;
+    interrupted["request_id"] = requestId;
+    interrupted["status"] = "error";
+    interrupted["message"] = "execution interrupted; inspect device before retry";
+    String tombstone;
+    serializeJson(interrupted, tombstone);
+    entry["reply"] = tombstone;
+    String saved;
+    serializeJson(entry, saved);
+    // 先记执行标记；掉电后返回未知结果，避免再次执行非幂等动作。
+    if (!cache.putString(cacheKey.c_str(), saved) || !cache.putUChar("next", (slot + 1) % 16)) {
+        cache.end();
+        mqtt.publishCommandReplyFor(targetUid, tombstone.c_str());
+        return;
+    }
 
     // 查找已注册的处理器
     bool found = false;
@@ -53,8 +91,13 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
         reply["message"] = "action failed";
     }
 
-    char buf[256];
-    serializeJson(reply, buf, sizeof(buf));
-    mqtt.publishCommandReplyFor(targetUid, buf);
-    Serial.printf("[CMD] → 回复: %s\n", buf);
+    String response;
+    serializeJson(reply, response);
+    entry["reply"] = response;
+    saved = "";
+    serializeJson(entry, saved);
+    cache.putString(cacheKey.c_str(), saved);
+    cache.end();
+    mqtt.publishCommandReplyFor(targetUid, response.c_str());
+    Serial.printf("[CMD] → 回复: %s\n", response.c_str());
 }

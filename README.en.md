@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml"><img src="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="#"><img src="https://img.shields.io/badge/PHP-8.2-blue.svg" alt="PHP 8.2"></a>
+  <a href="#"><img src="https://img.shields.io/badge/PHP-8.5-blue.svg" alt="PHP 8.5"></a>
   <a href="#"><img src="https://img.shields.io/badge/Webman-latest-brightgreen.svg" alt="Webman"></a>
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
   <a href="#"><img src="https://img.shields.io/badge/Database-PostgreSQL-blue.svg" alt="PostgreSQL"></a>
@@ -55,7 +55,7 @@ uni-app client ──HTTP──► Nginx:80 ──► /api/*    ──► Webman
 | Component | Technology | Responsibility |
 | :--- | :--- | :--- |
 | **Reverse proxy** | Nginx 1.27 | SSL termination, static files, request routing |
-| **App backend** | PHP 8.2 / Webman | REST API (:8787), WebSocket (:8788), alert engine |
+| **App backend** | PHP 8.5 / Webman | REST API (:8787), WebSocket (:8788), alert engine |
 | **Message broker** | EMQX 5.8 | MQTT broker, handling device connections and messaging |
 | **Primary database** | PostgreSQL + TimescaleDB | Persists device info and large-scale time-series data |
 | **Cache database** | Redis 7 | Hot data, device state, task queues, Pub/Sub |
@@ -534,6 +534,20 @@ The simulator generates realistic data (sine wave + random noise) for each metri
 - [x] Actuator capability model + dynamic control UI (declarative capability, frontend renders controls from schema)
 - [x] Self-service device provisioning (platform side: pairing code + device self-registration API + client add-device page)
 - [ ] **Next: provisioning firmware (SoftAP) + more actuator modules + OTA remote upgrades**
+
+## Permission and reliability upgrade
+
+GitHub Actions is disabled for this repository; branch protection does not require hosted checks. Validate locally with Docker. The retained CI workflow is manual-only if Actions is explicitly re-enabled later.
+
+Runtime and CI now use PHP 8.5. Stop Webman workers, build the new image, run `docker compose run --rm --no-deps webman php webman migrate:run`, then restart Webman. Three migrations add durable session versions, telemetry event IDs and notification delivery records. Existing access tokens are replaced via refresh; admin sessions require a new login. Removed members are never automatically re-enrolled.
+
+Before recreating an existing Redis instance with AOF enabled, issue `CONFIG SET appendonly yes` over an authenticated connection and wait until `INFO persistence` reports `aof_rewrite_in_progress=0` and `aof_last_bgrewrite_status=ok`. Fresh deployments use AOF everysec; a sudden power loss can still lose about one second of writes.
+
+Reflash ESP32 devices to enable 30-second application heartbeats and persistent deduplication of the most recent 16 command replies. Commands expire after 60 seconds; the client waits for device ACKs and surfaces errors/timeouts. An IR ACK confirms transmission by the gateway, not the physical AC state. Interrupted execution is not replayed automatically.
+
+Telemetry automations fire once per continuous matching condition; recovery re-arms them, subject to cooldown. Device actions use capability validation. Review legacy action/parameter configurations when upgrading. Notification delivery is tracked per channel, retried up to five times, and visible under notification-channel management. SMTP uses the configured server and credentials. External delivery is at least once: a crash after sending but before recording success can cause a duplicate.
+
+For isolated Docker tests, use the commands in the [Chinese README](README.md#docker-隔离验证) with `docker-compose.test.yml` and the `hg-review` project. CI covers PostgreSQL/Redis/SMTP integration, TimescaleDB migrations, client race regressions and ESP32 compilation. Real hardware and production notification accounts require deployment acceptance.
 
 ## Contributing
 

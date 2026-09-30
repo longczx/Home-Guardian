@@ -1,0 +1,59 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    volumes:
+      - .:/app
+      - test_vendor:/app/vendor
+    environment:
+      TEST_REDIS_HOST: redis
+      TEST_PGSQL_HOST: postgres
+      TEST_SMTP_HOST: mailpit
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    command: php vendor/bin/phpunit --testdox
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, "yes", --appendfsync, everysec]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  postgres:
+    image: timescale/timescaledb:latest-pg14
+    environment:
+      POSTGRES_USER: guardian_test
+      POSTGRES_PASSWORD: guardian_test
+      POSTGRES_DB: guardian_test
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U guardian_test -d guardian_test]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  mailpit:
+    image: axllent/mailpit:v1.27
+  node:
+    image: node:20-bookworm
+    working_dir: /app/uniapp
+    volumes:
+      - .:/app
+      - test_node_modules:/app/uniapp/node_modules
+    profiles: [tools]
+  firmware:
+    image: python:3.12-bookworm
+    working_dir: /app/firmware
+    volumes:
+      - .:/app
+      - test_platformio:/root/.platformio
+    profiles: [tools]
+volumes:
+  test_vendor:
+  test_node_modules:
+  test_platformio:

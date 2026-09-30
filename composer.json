@@ -10,7 +10,7 @@
   "license": "MIT",
   "description": "Home Guardian - A private, high-performance home IoT management platform.",
   "require": {
-    "php": ">=8.2",
+    "php": "~8.5.0",
     "workerman/webman-framework": "^2.1",
     "monolog/monolog": "^2.0",
     "illuminate/database": "^11.0",
@@ -22,6 +22,7 @@
     "workerman/mqtt": "^2.0",
     "dragonmantank/cron-expression": "^3.0",
     "symfony/cache": "^7.0",
+    "symfony/mailer": "^8.0@stable",
     "webman/database": "^2.1",
     "symfony/var-dumper": "^8.0",
     "topthink/think-template": "^3.0",
@@ -66,6 +67,6 @@
   "repositories": [{
     "name": "packagist",
     "type": "composer",
-    "url": "https://mirrors.aliyun.com/composer/"
+    "url": "https://repo.packagist.org"
   }]
 }

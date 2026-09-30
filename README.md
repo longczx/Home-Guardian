@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml"><img src="https://github.com/longczx/Home-Guardian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="#"><img src="https://img.shields.io/badge/PHP-8.2-blue.svg" alt="PHP 8.2"></a>
+  <a href="#"><img src="https://img.shields.io/badge/PHP-8.5-blue.svg" alt="PHP 8.5"></a>
   <a href="#"><img src="https://img.shields.io/badge/Webman-latest-brightgreen.svg" alt="Webman"></a>
   <a href="#"><img src="https://img.shields.io/badge/MQTT-EMQX_5.8-orange.svg" alt="EMQX"></a>
   <a href="#"><img src="https://img.shields.io/badge/Database-PostgreSQL-blue.svg" alt="PostgreSQL"></a>
@@ -56,7 +56,7 @@ uni-app 客户端 ──HTTP──► Nginx:80 ──► /api/*    ──► Web
 | 组件 | 技术 | 职责 |
 | :--- | :--- | :--- |
 | **反向代理** | Nginx 1.27 | SSL 终端、静态文件、请求分发 |
-| **应用后端** | PHP 8.2 / Webman | REST API (:8787)、WebSocket (:8788)、告警引擎 |
+| **应用后端** | PHP 8.5 / Webman | REST API (:8787)、WebSocket (:8788)、告警引擎 |
 | **消息中间件** | EMQX 5.8 | MQTT Broker，处理设备连接与消息传递 |
 | **主数据库** | PostgreSQL + TimescaleDB | 持久化存储设备信息和海量时序数据 |
 | **缓存数据库** | Redis 7 | 热数据、设备状态、任务队列、Pub/Sub |
@@ -584,6 +584,49 @@ python simulator.py --api
 - [x] 配网固件 (ESP32 SoftAP captive portal + 配对码自注册握手)
 - [x] 设备热插拔 (运行期模块清单 + manifest 同步，App 内增删传感器/执行器免烧录)
 - [ ] **下一步: 更多执行器模块 + OTA 远程升级**
+
+## 权限与可靠性升级
+
+本次升级统一使用 PHP 8.5，增加三项增量迁移：用户持久化会话版本、遥测 event_id 去重索引、通知投递记录。
+
+升级已有部署时，先暂停 Webman Worker，用新镜像执行迁移，再恢复服务（迁移不会补回已移除的家庭成员）：
+
+```bash
+docker compose stop webman
+docker compose build webman
+docker compose run --rm --no-deps webman php webman migrate:run
+docker compose up -d webman
+```
+
+旧 access_token 将失效，有效 refresh_token 可以换取新版 token；旧后台 session 需要重新登录。修改角色、密码、位置权限或移除成员会撤销相关用户的会话。WebSocket 在每次广播前校验权限，空闲连接最迟 15 秒关闭。
+
+已有 Redis 数据切换到 AOF 前，通过已认证的 Redis 连接执行 `CONFIG SET appendonly yes`，确认 `INFO persistence` 中 `aof_rewrite_in_progress=0`、`aof_last_bgrewrite_status=ok` 后再按新 Compose 配置重建 Redis。新部署默认启用 AOF everysec；极端掉电仍可能损失约 1 秒未同步的写入。
+
+需要重新烧录 ESP32 固件，才能启用 30 秒应用心跳和最近 16 条指令的 NVS 回执去重。指令排队后最长等待 60 秒；客户端显示排队、设备确认、失败或超时。红外回执表示网关完成发送，不能证明空调实际状态。固件掉电发生在执行中时，重复指令返回未知结果，需核对硬件后重新操作。
+
+遥测持续满足条件只执行一次，恢复后才允许再次触发；自动化编辑页可设置持续时间、冷却时间及动作参数。设备动作统一经过执行器能力校验，旧规则中未声明的 action/非法 params 会被拒绝，应在升级时检查规则。
+
+通知按渠道记录结果，失败自动退避重试最多 5 次；管理页的「通知渠道 → 投递记录与重试」可查看和重试失败记录。SMTP 使用渠道配置的主机、端口、账户和密码实际发送，不再依赖本机 mail()。外部通知采用至少一次投递，若发送后、写入成功状态前进程退出，可能重复发送。
+
+### Docker 隔离验证
+
+该仓库的 GitHub Actions 已关闭，保护规则不依赖远程 CI；默认通过下列本地 Docker 命令验证，不使用 GitHub 托管运行器。CI 配置保留为手动触发，未来如需启用，应先确认账户计费设置。
+
+测试使用独立 Compose 项目和命名依赖卷，不绑定生产数据库或主机端口：
+
+```bash
+docker compose -p hg-review -f docker-compose.test.yml up -d redis postgres mailpit
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps php composer install --no-scripts --no-interaction --prefer-dist
+docker compose -p hg-review -f docker-compose.test.yml run --rm php
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps node npm ci --no-audit --no-fund
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps node npm test
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps node npm run type-check
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps node npm run build:h5:local
+docker compose -p hg-review -f docker-compose.test.yml run --rm --no-deps node npm run build:mp-weixin
+docker compose -p hg-review -f docker-compose.test.yml down
+```
+
+后端测试包括真实 Redis/PostgreSQL/SMTP、TimescaleDB 迁移回滚；CI 同时执行前端竞态回归与 ESP32 编译。硬件烧录、真实红外控制和正式通知账户仍需部署后验收。
 
 ## 贡献
 

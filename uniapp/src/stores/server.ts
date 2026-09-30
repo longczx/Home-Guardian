@@ -19,12 +19,14 @@ const CURRENT_KEY = 'hg_current_server';
 interface ServerState {
   servers: ServerConfig[];
   currentId: string;
+  connectionRevision: number;
 }
 
 export const useServerStore = defineStore('server', {
   state: (): ServerState => ({
     servers: [],
     currentId: '',
+    connectionRevision: 0,
   }),
 
   getters: {
@@ -42,8 +44,10 @@ export const useServerStore = defineStore('server', {
 
   actions: {
     restore() {
+      const previous = this.currentId;
       this.servers = uni.getStorageSync(STORAGE_KEY) || [];
       this.currentId = uni.getStorageSync(CURRENT_KEY) || (this.servers[0]?.id ?? '');
+      if (this.currentId !== previous) this.connectionRevision++;
     },
 
     persist() {
@@ -57,6 +61,7 @@ export const useServerStore = defineStore('server', {
       const existing = this.servers.find((s) => s.url === normalized);
       if (existing) {
         existing.name = name || existing.name;
+        if (this.currentId !== existing.id) this.connectionRevision++;
         this.currentId = existing.id;
         this.persist();
         return existing.id;
@@ -64,6 +69,7 @@ export const useServerStore = defineStore('server', {
       // App/小程序无 crypto.randomUUID，用时间戳+序号足够本地唯一
       const id = `srv_${this.servers.length}_${Date.now().toString(36)}`;
       this.servers.push({ id, name: name || normalized, url: normalized });
+      this.connectionRevision++;
       this.currentId = id;
       this.persist();
       return id;
@@ -71,6 +77,7 @@ export const useServerStore = defineStore('server', {
 
     switchTo(id: string) {
       if (this.servers.some((s) => s.id === id)) {
+        if (this.currentId !== id) this.connectionRevision++;
         this.currentId = id;
         this.persist();
       }
@@ -79,6 +86,7 @@ export const useServerStore = defineStore('server', {
     remove(id: string) {
       this.servers = this.servers.filter((s) => s.id !== id);
       if (this.currentId === id) {
+        this.connectionRevision++;
         this.currentId = this.servers[0]?.id ?? '';
       }
       this.persist();

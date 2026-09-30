@@ -28,6 +28,60 @@ class AutomationService
      */
     private const RULES_CHANGED_KEY = 'automation:rules:changed';
 
+    private static function validatedInput(array $data, ?Automation $existing = null): array
+    {
+        $data = array_intersect_key($data, array_flip(['name', 'description', 'trigger_type',
+            'trigger_config', 'actions', 'is_enabled', 'created_by']));
+        if ($existing) unset($data['created_by']);
+        $homeId = $existing ? (int)$existing->home_id
+            : (\app\model\scope\HomeScope::currentHomeId() ?? \app\model\Home::DEFAULT_HOME_ID);
+        if (!$existing) $data['home_id'] = $homeId;
+        $merged = array_merge($existing?->toArray() ?? [], $data);
+        $config = $merged['trigger_config'] ?? [];
+        $actions = $merged['actions'] ?? [];
+        if (!is_array($config) || !is_array($actions) || !$actions) {
+            throw new BusinessException('触发配置和动作必须为有效对象/数组', 422, 4002);
+        }
+        $checkDevice = static function ($id) use ($homeId): void {
+            $device = Device::withoutGlobalScopes()->where('home_id', $homeId)->find($id);
+            if (!$device) throw new BusinessException('设备不属于当前家庭', 422, 4002);
+            try { $request = request(); } catch (\Throwable) { $request = null; }
+            if ($request?->user && !$request->canAccessLocation($device->location)) {
+                throw new BusinessException('无权使用目标设备', 403, 1004);
+            }
+        };
+        if (($merged['trigger_type'] ?? '') === Automation::TRIGGER_TELEMETRY) {
+            $checkDevice($config['device_id'] ?? 0);
+            if (!isset($config['metric_key'], $config['condition'], $config['value'])
+                || !is_numeric($config['value']) || !in_array($config['condition'], ['GREATER_THAN','LESS_THAN','EQUALS','NOT_EQUALS'], true)) {
+                throw new BusinessException('遥测触发条件无效', 422, 4002);
+            }
+            foreach (['duration_sec', 'cooldown_sec'] as $key) {
+                if (isset($config[$key]) && (!is_numeric($config[$key]) || $config[$key] < 0)) {
+                    throw new BusinessException('持续时间/冷却时间必须为非负数', 422, 4002);
+                }
+            }
+        } elseif (($merged['trigger_type'] ?? '') === Automation::TRIGGER_SCHEDULE) {
+            if (!\Cron\CronExpression::isValidExpression($config['cron'] ?? '')) {
+                throw new BusinessException('定时表达式无效', 422, 4002);
+            }
+        } else throw new BusinessException('触发类型无效', 422, 4002);
+        foreach ($actions as $action) {
+            if (($action['type'] ?? '') === Automation::ACTION_DEVICE_COMMAND) {
+                $checkDevice($action['device_id'] ?? 0);
+                if (!is_array($action['payload'] ?? null) || !is_string($action['payload']['action'] ?? null)
+                    || !is_array($action['payload']['params'] ?? [])) throw new BusinessException('设备动作格式无效', 422, 4002);
+            } elseif (($action['type'] ?? '') === Automation::ACTION_NOTIFY) {
+                $ids = $action['channel_ids'] ?? [];
+                if (!is_array($ids) || !$ids || \app\model\NotificationChannel::withoutGlobalScopes()
+                    ->where('home_id', $homeId)->whereIn('id', $ids)->count() !== count(array_unique($ids))) {
+                    throw new BusinessException('通知渠道不属于当前家庭', 422, 4002);
+                }
+            } else throw new BusinessException('动作类型无效', 422, 4002);
+        }
+        return $data;
+    }
+
     /**
      * 创建自动化规则
      *
@@ -36,6 +90,7 @@ class AutomationService
      */
     public static function create(array $data): Automation
     {
+        $data = self::validatedInput($data);
         $automation = Automation::create($data);
         self::notifyRulesChanged();
         return $automation;
@@ -57,7 +112,10 @@ class AutomationService
             throw new BusinessException('自动化规则不存在', 404, 4001);
         }
 
+        $data = self::validatedInput($data, $automation);
         $automation->update($data);
+        self::clearDuration($id);
+        Redis::connection('default')->del("automation:latch:{$id}");
         self::notifyRulesChanged();
         return $automation->fresh();
     }
@@ -94,7 +152,7 @@ class AutomationService
         foreach ($actions as $index => $action) {
             try {
                 match ($action['type'] ?? '') {
-                    Automation::ACTION_DEVICE_COMMAND => self::executeDeviceCommand($action),
+                    Automation::ACTION_DEVICE_COMMAND => self::executeDeviceCommand($action, $automation),
                     Automation::ACTION_NOTIFY         => self::executeNotify($action, $automation),
                     default => Log::warning("未知的自动化动作类型: " . ($action['type'] ?? 'null')),
                 };
@@ -114,7 +172,7 @@ class AutomationService
      *
      * @param array $action 动作配置，如 {"type": "device_command", "device_id": 2, "payload": {"action": "turn_on"}}
      */
-    private static function executeDeviceCommand(array $action): void
+    private static function executeDeviceCommand(array $action, Automation $automation): void
     {
         $deviceId = $action['device_id'] ?? null;
         $payload = $action['payload'] ?? [];
@@ -124,7 +182,9 @@ class AutomationService
             return;
         }
 
-        MqttCommandService::sendCommand($deviceId, $payload);
+        $device = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->find($deviceId);
+        if (!$device) throw new BusinessException('自动化目标设备不属于当前家庭', 422, 4002);
+        ActuatorService::applyCommand($device, $payload['action'] ?? '', $payload['params'] ?? []);
 
         Log::info("自动化: 已向设备 {$deviceId} 发送控制指令", $payload);
     }
@@ -139,7 +199,8 @@ class AutomationService
      */
     private static function executeNotify(array $action, Automation $automation): void
     {
-        $channelIds = $action['channel_ids'] ?? [];
+        $channelIds = \app\model\NotificationChannel::withoutGlobalScopes()
+            ->where('home_id', $automation->home_id)->whereIn('id', $action['channel_ids'] ?? [])->pluck('id')->all();
 
         if (empty($channelIds)) {
             return;
@@ -147,10 +208,11 @@ class AutomationService
 
         // 推入通知队列由 NotificationProcess 异步发送，避免在告警引擎事件循环里同步阻塞
         $task = json_encode([
+            'task_id' => bin2hex(random_bytes(16)),
             'channel_ids' => $channelIds,
             'title'       => "自动化触发: {$automation->name}",
             'content'     => $automation->description ?: "自动化规则 [{$automation->name}] 已触发执行",
-            'extra'       => ['automation_id' => $automation->id],
+            'extra'       => ['automation_id' => $automation->id, 'home_id' => $automation->home_id],
         ], JSON_UNESCAPED_UNICODE);
 
         Redis::connection('queue')->lPush('notify:queue', $task);
@@ -223,12 +285,22 @@ class AutomationService
         if (!$met) {
             // 条件不满足，清除防抖计时，避免"持续满足"被旧记录污染
             self::clearDuration($automation->id);
+            Redis::connection('default')->del("automation:latch:{$automation->id}");
             return;
         }
 
         // 防抖：无 duration 配置时立即触发
         $durationSec = $config['duration_sec'] ?? 0;
         if ($durationSec <= 0 || self::checkDuration($automation->id, $durationSec)) {
+            $redis = Redis::connection('default');
+            $latch = "automation:latch:{$automation->id}";
+            if ($redis->exists($latch)) return;
+            $cooldown = max(0, (int)($config['cooldown_sec'] ?? 0));
+            $last = (int)$redis->get("automation:last:{$automation->id}");
+            if ($last && time() - $last < $cooldown) return;
+            // 持续满足只触发一次；条件恢复后才解除，进程重启仍保留状态。
+            if (!$redis->setnx($latch, '1')) return;
+            $redis->set("automation:last:{$automation->id}", time());
             self::executeActions($automation);
         }
     }
@@ -239,7 +311,7 @@ class AutomationService
     private static function notifyRulesChanged(): void
     {
         try {
-            Redis::connection('default')->setex(self::RULES_CHANGED_KEY, 600, (string)time());
+            Redis::connection('default')->setex(self::RULES_CHANGED_KEY, 600, bin2hex(random_bytes(8)));
         } catch (\Throwable $e) {
             Log::error("通知引擎刷新自动化规则失败: {$e->getMessage()}");
         }
@@ -269,7 +341,6 @@ class AutomationService
 
         // 检查是否已持续足够长时间
         if (time() - (int)$firstHit >= $durationSec) {
-            $redis->del($key); // 清除记录，防止重复触发
             return true;
         }
 

@@ -44,93 +44,74 @@ function buildQuery(params?: RequestOptions['params']): string {
   return pairs.length ? `?${pairs.join('&')}` : '';
 }
 
-// 刷新期间并发请求排队，拿到新 token 后统一重放
-let isRefreshing = false;
-let waiters: Array<(token: string | null) => void> = [];
+interface RequestContext { id: string; base: string; revision: number }
+const refreshJobs = new Map<string, Promise<string | null>>();
 
-function onRefreshed(token: string | null) {
-  waiters.forEach((cb) => cb(token));
-  waiters = [];
+function assertCurrent(context: RequestContext) {
+  const server = useServerStore();
+  if (server.currentId !== context.id || server.apiBase !== context.base || server.connectionRevision !== context.revision) {
+    throw new Error('服务器已切换，已忽略原服务器响应');
+  }
 }
 
-async function doRefresh(): Promise<string | null> {
-  const server = useServerStore();
+async function doRefresh(context: RequestContext): Promise<string | null> {
   const auth = useAuthStore();
-  const refreshToken = auth.refreshToken;
+  const refreshToken = auth.byServer[context.id]?.refreshToken;
   if (!refreshToken) return null;
-
   try {
     const res = await uniRequest({
-      url: `${server.apiBase}/auth/refresh`,
-      method: 'POST',
-      data: { refresh_token: refreshToken },
+      url: `${context.base}/auth/refresh`, method: 'POST', data: { refresh_token: refreshToken },
       header: { 'Content-Type': 'application/json' },
     });
     const body = res.data as ApiResponse<{ access_token: string; refresh_token: string }>;
-    if (res.statusCode === 200 && body.code === 0) {
-      auth.setTokens(body.data.access_token, body.data.refresh_token);
+    if (res.statusCode === 200 && body.code === 0 && auth.byServer[context.id]?.refreshToken === refreshToken) {
+      auth.setTokens(body.data.access_token, body.data.refresh_token, context.id);
       return body.data.access_token;
     }
-  } catch {
-    /* fallthrough */
-  }
+  } catch { /* 返回 null，由原服务器请求处理登录失效 */ }
   return null;
 }
 
-function redirectToLogin() {
-  useAuthStore().logout();
-  uni.reLaunch({ url: '/pages/auth/login' });
+async function execute<T>(url: string, options: RequestOptions, context: RequestContext): Promise<T> {
+  assertCurrent(context);
+  const auth = useAuthStore();
+  const { method = 'GET', data, params, auth: needAuth = true } = options;
+  const header: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = auth.byServer[context.id]?.accessToken;
+  if (needAuth && token) header.Authorization = `Bearer ${token}`;
+  const res = await uniRequest({ url: `${context.base}${url}${buildQuery(params)}`, method: method as UniApp.RequestOptions['method'], data, header });
+  assertCurrent(context);
+  const body = res.data as ApiResponse<T>;
+  if (res.statusCode === 401 && needAuth && !options._retry) {
+    const key = `${context.id}:${context.base}`;
+    let job = refreshJobs.get(key);
+    if (!job) {
+      job = doRefresh(context).finally(() => refreshJobs.delete(key));
+      refreshJobs.set(key, job);
+    }
+    const expectedRefreshToken = auth.byServer[context.id]?.refreshToken;
+    const freshToken = await job;
+    assertCurrent(context);
+    if (!freshToken) {
+      if (auth.byServer[context.id]?.refreshToken !== expectedRefreshToken) throw new Error('登录状态已更新，请重新请求');
+      auth.logout(context.id);
+      uni.reLaunch({ url: '/pages/auth/login' });
+      throw new Error('登录已失效');
+    }
+    return execute<T>(url, { ...options, _retry: true }, context);
+  }
+  if (res.statusCode < 200 || res.statusCode >= 300) throw new Error(body?.message || `请求失败 (${res.statusCode})`);
+  if (body?.code !== 0) throw new Error(body?.message || '业务错误');
+  return body.data;
 }
 
 export async function apiRequest<T = unknown>(url: string, options: RequestOptions = {}): Promise<T> {
   const server = useServerStore();
-  const auth = useAuthStore();
-  const { method = 'GET', data, params, auth: needAuth = true } = options;
-
   if (!server.apiBase) {
     uni.reLaunch({ url: '/pages/server/list' });
     throw new Error('未配置服务器');
   }
-
-  const header: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (needAuth && auth.accessToken) {
-    header.Authorization = `Bearer ${auth.accessToken}`;
-  }
-
-  const res = await uniRequest({
-    url: `${server.apiBase}${url}${buildQuery(params)}`,
-    method,
-    data,
-    header,
-  });
-
-  const body = res.data as ApiResponse<T>;
-
-  // 401：尝试刷新后重放一次
-  if (res.statusCode === 401 && needAuth && !options._retry) {
-    if (isRefreshing) {
-      const token = await new Promise<string | null>((resolve) => waiters.push(resolve));
-      if (!token) throw new Error('登录已失效');
-      return apiRequest<T>(url, { ...options, _retry: true });
-    }
-    isRefreshing = true;
-    const token = await doRefresh();
-    isRefreshing = false;
-    onRefreshed(token);
-    if (!token) {
-      redirectToLogin();
-      throw new Error('登录已失效');
-    }
-    return apiRequest<T>(url, { ...options, _retry: true });
-  }
-
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    throw new Error(body?.message || `请求失败 (${res.statusCode})`);
-  }
-  if (body.code !== 0) {
-    throw new Error(body.message || '业务错误');
-  }
-  return body.data;
+  return execute<T>(url, options, { id: server.currentId, base: server.apiBase, revision: server.connectionRevision });
 }
 
 export default {

@@ -18,6 +18,7 @@ let socketTask: UniApp.SocketTask | null = null;
 let connected = false;
 let manualClose = false;
 let reconnectAttempts = 0;
+let activeUrl = '';
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -61,20 +62,24 @@ function scheduleReconnect() {
 
 export function connectWs(): void {
   const url = wsUrl();
-  if (!url) return;
-  if (socketTask && connected) return;
+  if (!url) { closeWs(); return; }
+  if (socketTask && activeUrl === url) return;
+  closeWs();
+  activeUrl = url;
 
   manualClose = false;
   const task = uni.connectSocket({ url, complete: () => { /* noop */ } });
   socketTask = task;
 
   task.onOpen(() => {
+    if (task !== socketTask || activeUrl !== wsUrl()) { task.close({}); return; }
     connected = true;
     reconnectAttempts = 0;
     startPing();
   });
 
   task.onMessage((res) => {
+    if (task !== socketTask || activeUrl !== wsUrl()) return;
     try {
       const msg = JSON.parse(res.data as string) as { type?: string } & Record<string, unknown>;
       if (msg.type && msg.type !== 'pong' && msg.type !== 'connected') {
@@ -84,6 +89,7 @@ export function connectWs(): void {
   });
 
   task.onClose(() => {
+    if (task !== socketTask) return;
     connected = false;
     stopPing();
     socketTask = null;
@@ -91,6 +97,7 @@ export function connectWs(): void {
   });
 
   task.onError(() => {
+    if (task !== socketTask) return;
     connected = false;
     stopPing();
     // onError 后通常紧跟 onClose；此处不重复调度
@@ -99,11 +106,13 @@ export function connectWs(): void {
 
 export function closeWs(): void {
   manualClose = true;
+  activeUrl = '';
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   stopPing();
   if (socketTask) {
-    try { socketTask.close({}); } catch { /* ignore */ }
+    const oldTask = socketTask;
     socketTask = null;
+    try { oldTask.close({}); } catch { /* ignore */ }
   }
   connected = false;
 }

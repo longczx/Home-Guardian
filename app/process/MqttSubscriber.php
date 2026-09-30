@@ -46,6 +46,8 @@ class MqttSubscriber
      * MQTT 客户端实例
      */
     private ?MqttClient $mqttClient = null;
+    private bool $mqttConnected = false;
+    private array $inFlight = [];
 
     /**
      * Redis 连接（用于队列操作）
@@ -137,6 +139,7 @@ class MqttSubscriber
 
         // 连接成功回调
         $this->mqttClient->onConnect = function () {
+            $this->mqttConnected = true;
             Log::info('MQTT 已连接到 Broker');
 
             // 订阅所有设备的上行主题
@@ -162,6 +165,8 @@ class MqttSubscriber
 
         // 连接关闭回调
         $this->mqttClient->onClose = function () {
+            $this->mqttConnected = false;
+            $this->inFlight = [];
             Log::warning('MQTT 连接已关闭，将自动重连');
         };
 
@@ -247,6 +252,7 @@ class MqttSubscriber
                 'ts'         => $now,
                 'device_id'  => $deviceId,
                 'metric_key' => $metricKey,
+                'event_id'   => bin2hex(random_bytes(16)),
                 'value'      => json_encode($value),  // 标量/数组统一编码为 JSON，入库为 jsonb
             ]);
             $this->redis->lPush('hg:q:data_ingest_queue', $ingestItem);
@@ -433,6 +439,8 @@ class MqttSubscriber
             $this->redisPub->publish('ws:broadcast', json_encode([
                 'type'        => 'device_list_changed',
                 'gateway_uid' => $gatewayUid,
+                'device_id' => $gateway->id,
+                'home_id' => $gateway->home_id,
             ], JSON_UNESCAPED_UNICODE));
         }
     }
@@ -454,7 +462,7 @@ class MqttSubscriber
             ? 'replied_ok'
             : 'replied_error';
 
-        MqttCommandService::handleCommandReply($requestId, $status, $data);
+        MqttCommandService::handleCommandReply($requestId, $status, $data, $deviceUid);
     }
 
     /**
@@ -464,28 +472,46 @@ class MqttSubscriber
      */
     public function processCommandQueue(): void
     {
+        if (!$this->mqttConnected || !$this->mqttClient) return;
         try {
-            // 每次最多处理 10 条指令
-            for ($i = 0; $i < 10; $i++) {
-                $message = $this->redis->rPop('hg:q:mqtt:command:send');
-                if (!$message) {
-                    break;
-                }
-
-                $command = json_decode($message, true);
-                if (!$command || empty($command['topic'])) {
+            if (!$this->redis) $this->initRedis();
+            $queue = new \app\service\ReliableQueue($this->redis,
+                'hg:q:mqtt:command:send', 'hg:q:mqtt:command:processing');
+            foreach ($queue->reserve(10) as $raw) {
+                $command = json_decode($raw, true);
+                $requestId = $command['request_id'] ?? json_decode($command['payload'] ?? '{}', true)['request_id'] ?? null;
+                if (!$requestId || empty($command['topic'])) {
+                    $queue->move($raw, 'hg:q:mqtt:command:deadletter');
                     continue;
                 }
-
-                // 通过 MQTT 发布指令
-                $this->mqttClient->publish(
-                    $command['topic'],
-                    $command['payload'] ?? '',
-                    ['qos' => $command['qos'] ?? 1]
-                );
+                $log = \app\model\CommandLog::where('request_id', $requestId)->first();
+                if (!$log || in_array($log->status, ['replied_ok', 'replied_error', 'timeout'], true)) {
+                    $queue->acknowledge($raw);
+                    continue;
+                }
+                if ($log->sent_at->getTimestamp() < time() - 60) {
+                    $log->update(['status' => 'timeout', 'replied_at' => now()]);
+                    $queue->acknowledge($raw);
+                    continue;
+                }
+                if (($this->inFlight[$requestId] ?? 0) > time() - 10) continue;
+                $this->inFlight[$requestId] = time();
+                $this->mqttClient->publish($command['topic'], $command['payload'] ?? '', ['qos' => 1],
+                    function ($error = null) use ($queue, $raw, $requestId) {
+                        unset($this->inFlight[$requestId]);
+                        if ($error) return;
+                        try {
+                            \app\model\CommandLog::where('request_id', $requestId)->where('status', 'queued')
+                                ->update(['status' => 'sent']);
+                            $queue->acknowledge($raw);
+                        } catch (\Throwable $e) {
+                            Log::error('MQTT 确认保存失败，保留指令重试: ' . $e->getMessage());
+                        }
+                    });
             }
         } catch (\Throwable $e) {
-            Log::error("指令发送失败: {$e->getMessage()}");
+            Log::error('指令发送失败，保留待重试: ' . $e->getMessage());
+            if ($e instanceof \RedisException) $this->redis = null;
         }
     }
 

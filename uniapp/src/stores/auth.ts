@@ -68,21 +68,18 @@ export const useAuthStore = defineStore('auth', {
       uni.setStorageSync(STORAGE_KEY, this.byServer);
     },
 
-    setSession(accessToken: string, refreshToken: string, user: AuthUser | null) {
-      const sid = useServerStore().currentId;
+    setSession(accessToken: string, refreshToken: string, user: AuthUser | null, sid = useServerStore().currentId) {
       this.byServer[sid] = { accessToken, refreshToken, user };
       this.persist();
     },
 
-    setTokens(accessToken: string, refreshToken: string) {
-      const sid = useServerStore().currentId;
+    setTokens(accessToken: string, refreshToken: string, sid = useServerStore().currentId) {
       const prev = this.byServer[sid] ?? emptyEntry();
       this.byServer[sid] = { ...prev, accessToken, refreshToken };
       this.persist();
     },
 
-    logout() {
-      const sid = useServerStore().currentId;
+    logout(sid = useServerStore().currentId) {
       delete this.byServer[sid];
       this.persist();
     },

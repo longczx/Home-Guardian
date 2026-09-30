@@ -11,6 +11,7 @@
     "build:h5:local": "uni build",
     "build:app": "uni build -p app",
     "build:mp-weixin": "uni build -p mp-weixin",
+    "test": "node --test tests/*.test.mjs",
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.ts,.js"
   },

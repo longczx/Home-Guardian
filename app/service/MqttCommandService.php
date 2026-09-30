@@ -8,7 +8,7 @@
  *
  * 指令流程：
  *   1. Controller 调用 MqttCommandService::sendCommand()
- *   2. 生成 request_id，写入 command_logs 表（status = sent）
+ *   2. 生成 request_id，写入 command_logs 表（status = queued）
  *   3. 通过 Redis 将指令推送给 MqttSubscriber 进程
  *   4. MqttSubscriber 发布到 MQTT 主题 home/downstream/{device_id}/command/set
  *   5. 设备执行后回复 home/upstream/{device_id}/command/reply
@@ -47,6 +47,8 @@ class MqttCommandService
             throw new BusinessException('设备不存在', 404, 2001);
         }
 
+        if (!$device->is_online) throw new BusinessException('设备离线，无法发送指令', 409, 2107);
+
         // 生成唯一的请求 ID，用于追踪指令生命周期
         $requestId = self::generateRequestId();
 
@@ -62,18 +64,24 @@ class MqttCommandService
             'device_id'  => $deviceId,
             'topic'      => $topic,
             'payload'    => $mqttPayload,
-            'status'     => CommandLog::STATUS_SENT,
+            'status'     => CommandLog::STATUS_QUEUED,
             'sent_at'    => now(),
         ]);
 
         // 通过 Redis 推送给 MQTT 进程
         $message = json_encode([
+            'request_id' => $requestId,
             'topic'   => $topic,
             'payload' => json_encode($mqttPayload),
             'qos'     => 1,  // QoS 1: 至少送达一次
         ], JSON_UNESCAPED_UNICODE);
 
-        Redis::connection('queue')->lPush(self::COMMAND_CHANNEL, $message);
+        try {
+            Redis::connection('queue')->lPush(self::COMMAND_CHANNEL, $message);
+        } catch (\Throwable $e) {
+            $commandLog->update(['status' => CommandLog::STATUS_REPLIED_ERROR, 'replied_at' => now()]);
+            throw new BusinessException('指令排队失败，请稍后重试', 503, 2106);
+        }
 
         return $commandLog;
     }
@@ -87,7 +95,7 @@ class MqttCommandService
      * @param string $status    回复状态（replied_ok / replied_error）
      * @param array  $replyData 回复数据
      */
-    public static function handleCommandReply(string $requestId, string $status, array $replyData = []): void
+    public static function handleCommandReply(string $requestId, string $status, array $replyData = [], ?string $deviceUid = null): void
     {
         $commandLog = CommandLog::where('request_id', $requestId)->first();
 
@@ -96,10 +104,14 @@ class MqttCommandService
             return;
         }
 
-        $commandLog->update([
-            'status'     => $status,
-            'replied_at' => now(),
+        if ($deviceUid === null || $commandLog->device?->device_uid !== $deviceUid
+            || !in_array($commandLog->status, [CommandLog::STATUS_QUEUED, CommandLog::STATUS_SENT, CommandLog::STATUS_DELIVERED], true)) return;
+        if (!in_array($status, [CommandLog::STATUS_REPLIED_OK, CommandLog::STATUS_REPLIED_ERROR], true)) return;
+
+        $changed = CommandLog::where('id', $commandLog->id)->pending()->update([
+            'status' => $status, 'replied_at' => now(),
         ]);
+        if (!$changed) return;
 
         // 如果需要，可以通过 Redis Pub/Sub 通知前端指令执行结果
         $notification = json_encode([

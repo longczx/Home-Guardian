@@ -5,10 +5,11 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libssl-dev \
     libzip-dev \
+    libonig-dev \
     zip \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && docker-php-ext-install pdo pdo_pgsql pgsql zip sockets bcmath pcntl \
+    && docker-php-ext-install pdo pdo_pgsql pgsql zip sockets bcmath pcntl mbstring \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

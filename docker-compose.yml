@@ -65,7 +65,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: home-guardian-cache
-    command: redis-server --requirepass ${REDIS_PASSWORD:?请在.env中设置REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?请在.env中设置REDIS_PASSWORD} --appendonly yes --appendfsync everysec
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:

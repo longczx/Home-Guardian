@@ -154,11 +154,16 @@ class RoleController
             }
         }
 
-        $role->update(array_filter([
-            'name'        => $data['name'] ?? null,
-            'description' => $data['description'] ?? null,
-            'permissions' => $data['permissions'] ?? null,
-        ], fn($v) => $v !== null));
+        $role->getConnection()->transaction(function () use ($role, $data) {
+            foreach ($role->users()->pluck('users.id') as $userId) {
+                \app\service\AuthService::logoutAll((int)$userId);
+            }
+            $role->update(array_filter([
+                'name'        => $data['name'] ?? null,
+                'description' => $data['description'] ?? null,
+                'permissions' => $data['permissions'] ?? null,
+            ], fn($v) => $v !== null));
+        });
 
         AuditService::log($request, 'update', 'role', $id,
             AuditService::diffChanges($original, $role->fresh()->toArray())

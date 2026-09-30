@@ -42,6 +42,7 @@ class WebSocketServer
         // 在子进程中创建 Redis 订阅连接
         // 不能在主进程创建，因为 fork 后连接会共享导致冲突
         $this->subscribeRedis();
+        \Workerman\Timer::add(15, [$this, 'expireClients']);
     }
 
     /**
@@ -79,7 +80,7 @@ class WebSocketServer
 
         // 验证 JWT
         $payload = JwtService::verifyAccessToken($token);
-        if (!$payload) {
+        if (!$payload || !isset($payload->home_id)) {
             $connection->send(json_encode([
                 'type'    => 'error',
                 'message' => '认证令牌无效或已过期',
@@ -97,6 +98,7 @@ class WebSocketServer
 
         self::$clients[$connection->id] = [
             'connection' => $connection,
+            'token' => $token,
             'user'       => (object)[
                 'id'        => $payload->sub,
                 'username'  => $payload->username,
@@ -200,28 +202,25 @@ class WebSocketServer
     {
         $connection = new \Workerman\Connection\AsyncTcpConnection("tcp://{$host}:{$port}");
 
-        $connection->onConnect = function ($conn) use ($password) {
-            // 认证
-            if ($password) {
-                $conn->send("AUTH {$password}\r\n");
-            }
-            // 选择 DB2
-            $conn->send("SELECT 2\r\n");
-            // 订阅广播频道
-            $conn->send("SUBSCRIBE ws:broadcast\r\n");
+        $parser = new \app\service\RedisRespBuffer();
+        $connection->onConnect = function ($conn) use ($password, &$parser) {
+            $parser = new \app\service\RedisRespBuffer();
+            if ($password) $conn->send(\app\service\RedisRespBuffer::command(['AUTH', $password]));
+            $conn->send(\app\service\RedisRespBuffer::command(['SELECT', '2']));
+            $conn->send(\app\service\RedisRespBuffer::command(['SUBSCRIBE', 'ws:broadcast']));
         };
 
-        $connection->onMessage = function ($conn, $data) {
-            // 解析 Redis RESP 协议消息
-            // SUBSCRIBE 响应格式: *3\r\n$9\r\nsubscribe\r\n$12\r\nws:broadcast\r\n:1\r\n
-            // MESSAGE 格式: *3\r\n$7\r\nmessage\r\n$12\r\nws:broadcast\r\n$...\r\n{payload}\r\n
-            if (str_contains($data, 'message')) {
-                // 提取最后一个 \r\n 分隔的有效 JSON 数据
-                $lines = explode("\r\n", trim($data));
-                $payload = end($lines);
-                if ($payload && $payload[0] === '{') {
-                    $this->broadcastToClients($payload);
+        $connection->onMessage = function ($conn, $data) use (&$parser) {
+            try {
+                foreach ($parser->feed($data) as $frame) {
+                    if (is_array($frame) && ($frame[0] ?? '') === 'message'
+                        && ($frame[1] ?? '') === 'ws:broadcast' && is_string($frame[2] ?? null)) {
+                        $this->broadcastToClients($frame[2]);
+                    }
                 }
+            } catch (\Throwable $e) {
+                \support\Log::error('WebSocket Redis 消息处理失败: ' . $e->getMessage());
+                $conn->close();
             }
         };
 
@@ -247,6 +246,16 @@ class WebSocketServer
      *
      * @param string $message JSON 格式的消息
      */
+    public function expireClients(): void
+    {
+        foreach (self::$clients as $id => $client) {
+            if (!JwtService::verifyAccessToken($client['token'])) {
+                $client['connection']->close();
+                unset(self::$clients[$id]);
+            }
+        }
+    }
+
     private function broadcastToClients(string $message): void
     {
         $data = json_decode($message, true);
@@ -254,29 +263,17 @@ class WebSocketServer
             return;
         }
 
-        // 获取消息关联的设备位置（用于权限过滤）
-        $deviceLocation = $data['device_location'] ?? null;
-
-        foreach (self::$clients as $clientInfo) {
-            $connection = $clientInfo['connection'];
-            $user = $clientInfo['user'];
-
-            // admin 收到所有消息
-            if ($user->is_admin) {
-                $connection->send($message);
+        $device = isset($data['device_id'])
+            ? \app\model\Device::withoutGlobalScopes()->find((int)$data['device_id']) : null;
+        foreach (self::$clients as $id => $clientInfo) {
+            $payload = JwtService::verifyAccessToken($clientInfo['token']);
+            if (!$payload) {
+                $clientInfo['connection']->close();
+                unset(self::$clients[$id]);
                 continue;
             }
-
-            // 非位置相关的消息（如系统通知）推送给所有人
-            if (!$deviceLocation) {
-                $connection->send($message);
-                continue;
-            }
-
-            // 位置作用域为空 = 不限制
-            $allowedLocations = $user->locations ?? [];
-            if (empty($allowedLocations) || in_array($deviceLocation, $allowedLocations)) {
-                $connection->send($message);
+            if (\app\service\RealtimeAccessService::canReceive($payload, $data, $device)) {
+                $clientInfo['connection']->send($message);
             }
         }
     }

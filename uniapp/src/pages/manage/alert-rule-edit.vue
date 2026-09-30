@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchValue } from '@/utils/events';
 import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getAlertRule, createAlertRule, updateAlertRule, CONDITIONS, SEVERITIES, type AlertRuleInput } from '@/api/alertRule';
@@ -213,7 +214,7 @@ onLoad(async (q) => {
       </view>
       <view class="field row-between">
         <text class="label nomb">恢复时发通知</text>
-        <switch :checked="form.notify_on_recovery" color="#2b6fe3" @change="form.notify_on_recovery = $event.detail.value" />
+        <switch :checked="form.notify_on_recovery" color="#2b6fe3" @change="form.notify_on_recovery = switchValue($event)" />
       </view>
       <view class="field">
         <text class="label">通知渠道</text>
@@ -230,7 +231,7 @@ onLoad(async (q) => {
       </view>
       <view class="field row-between">
         <text class="label nomb">启用规则</text>
-        <switch :checked="form.is_enabled" color="#2b6fe3" @change="form.is_enabled = $event.detail.value" />
+        <switch :checked="form.is_enabled" color="#2b6fe3" @change="form.is_enabled = switchValue($event)" />
       </view>
     </view>
 

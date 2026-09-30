@@ -210,12 +210,17 @@ class HomeService
     private static function applyRoleChange(int $homeId, HomeUser $target, string $role): void
     {
         (new HomeUser)->getConnection()->transaction(function () use ($homeId, $target, $role) {
+            Home::where('id', $homeId)->lockForUpdate()->firstOrFail();
+            $changedUsers = [$target->user_id];
             if ($role === HomeUser::ROLE_OWNER) {
+                $changedUsers = array_merge($changedUsers, HomeUser::where('home_id', $homeId)
+                    ->where('role', HomeUser::ROLE_OWNER)->pluck('user_id')->all());
                 HomeUser::where('home_id', $homeId)
                     ->where('role', HomeUser::ROLE_OWNER)
                     ->update(['role' => HomeUser::ROLE_ADMIN]);
             }
             $target->update(['role' => $role]);
+            foreach (array_unique($changedUsers) as $userId) AuthService::logoutAll((int)$userId);
         });
     }
 
@@ -242,10 +247,10 @@ class HomeService
             throw new BusinessException('管理员只能移除普通成员', 403, 8015);
         }
 
-        $target->delete();
-
-        // 被移除者立即失去访问权：吊销其所有会话
-        AuthService::logoutAll($targetUserId);
+        (new HomeUser)->getConnection()->transaction(function () use ($target, $targetUserId) {
+            $target->delete();
+            AuthService::logoutAll($targetUserId);
+        });
     }
 
     /**

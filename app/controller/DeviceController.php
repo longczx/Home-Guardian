@@ -351,7 +351,7 @@ class DeviceController
         return api_success([
             'request_id' => $commandLog->request_id,
             'status'     => $commandLog->status,
-        ], '指令已发送');
+        ], '指令已排队，等待设备确认');
     }
 
     /**

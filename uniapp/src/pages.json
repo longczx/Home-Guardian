@@ -1,5 +1,6 @@
 {
   "pages": [
+    { "path": "pages/manage/deliveries", "style": { "navigationBarTitleText": "通知投递记录" } },
     {
       "path": "pages/index/index",
       "style": {

@@ -221,6 +221,11 @@ Route::group('/api', function () {
     Route::delete('/invites/{id:\d+}', [app\controller\InviteController::class, 'destroy'])
         ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
 
+    Route::get('/notification-deliveries', [app\controller\NotificationDeliveryController::class, 'index'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::post('/notification-deliveries/{id:\d+}/retry', [app\controller\NotificationDeliveryController::class, 'retry'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+
     /* ---------- 推送设备（uniPush cid 上报 / 设置） ---------- */
     Route::post('/push/devices', [app\controller\PushController::class, 'register']);
     Route::delete('/push/devices', [app\controller\PushController::class, 'unregister']);

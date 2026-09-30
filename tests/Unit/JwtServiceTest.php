@@ -7,6 +7,14 @@ use app\service\JwtService;
 
 class JwtServiceTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        foreach ([1, 42] as $id) {
+            \Illuminate\Database\Capsule\Manager::table('users')->updateOrInsert(['id' => $id],
+                ['username' => "jwt_user_{$id}", 'password_hash' => 'unused', 'is_active' => true, 'auth_version' => 0]);
+        }
+    }
+
     /* =============================================
      * issueAccessToken + verifyAccessToken
      * ============================================= */
@@ -52,7 +60,7 @@ class JwtServiceTest extends TestCase
     public function test_payload_contains_token_version(): void
     {
         // #18：access_token 内嵌 token 版本号 tv，用于「注销所有设备/改密」后主动失效。
-        // 测试环境无 Redis，getTokenVersion 走 fail-open 返回 0，因此 tv=0 且校验通过。
+        // 初始会话版本从数据库读取，Redis 不影响撤销语义。
         $token   = JwtService::issueAccessToken(1, 'u', [], [], []);
         $payload = JwtService::verifyAccessToken($token);
 

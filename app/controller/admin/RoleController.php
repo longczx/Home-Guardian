@@ -109,7 +109,12 @@ class RoleController
             $updateData['permissions'] = json_decode($data['permissions_json'], true) ?: [];
         }
 
-        $role->update($updateData);
+        $role->getConnection()->transaction(function () use ($role, $updateData) {
+            foreach ($role->users()->pluck('users.id') as $userId) {
+                \app\service\AuthService::logoutAll((int)$userId);
+            }
+            $role->update($updateData);
+        });
 
         return redirect('/admin/roles');
     }

@@ -28,6 +28,14 @@ class AdminAuthMiddleware implements MiddlewareInterface
             return redirect('/admin/login');
         }
 
+        $user = \app\model\User::with('roles')->find($adminUser['id']);
+        if (!$user || !$user->is_active || empty($user->getMergedPermissions()['admin'])
+            || !isset($adminUser['auth_version'])
+            || (int)$adminUser['auth_version'] !== (int)$user->auth_version) {
+            $request->session()->delete('admin_user');
+            return redirect('/admin/login');
+        }
+
         // 将管理员信息挂载到 request
         $request->adminUser = $adminUser;
 
