@@ -610,6 +610,8 @@ docker compose up -d webman
 
 ### Docker 隔离验证
 
+该仓库的 GitHub Actions 已关闭，保护规则不依赖远程 CI；默认通过下列本地 Docker 命令验证，不使用 GitHub 托管运行器。CI 配置保留为手动触发，未来如需启用，应先确认账户计费设置。
+
 测试使用独立 Compose 项目和命名依赖卷，不绑定生产数据库或主机端口：
 
 ```bash

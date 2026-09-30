@@ -537,6 +537,8 @@ The simulator generates realistic data (sine wave + random noise) for each metri
 
 ## Permission and reliability upgrade
 
+GitHub Actions is disabled for this repository; branch protection does not require hosted checks. Validate locally with Docker. The retained CI workflow is manual-only if Actions is explicitly re-enabled later.
+
 Runtime and CI now use PHP 8.5. Stop Webman workers, build the new image, run `docker compose run --rm --no-deps webman php webman migrate:run`, then restart Webman. Three migrations add durable session versions, telemetry event IDs and notification delivery records. Existing access tokens are replaced via refresh; admin sessions require a new login. Removed members are never automatically re-enrolled.
 
 Before recreating an existing Redis instance with AOF enabled, issue `CONFIG SET appendonly yes` over an authenticated connection and wait until `INFO persistence` reports `aof_rewrite_in_progress=0` and `aof_last_bgrewrite_status=ok`. Fresh deployments use AOF everysec; a sudden power loss can still lose about one second of writes.

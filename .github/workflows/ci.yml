@@ -1,10 +1,8 @@
 name: CI
 
+# 托管 Actions 在仓库设置中关闭；重新启用后也只支持手动触发。
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 # 同一分支的并发运行只保留最新一次
 concurrency:
