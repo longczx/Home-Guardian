@@ -14,6 +14,64 @@ use app\exception\BusinessException;
 
 class DeviceService
 {
+    private const INPUT_FIELDS = ['name', 'type', 'location', 'firmware_version',
+        'mqtt_username', 'mqtt_password', 'gateway_uid', 'metric_fields', 'capability'];
+
+    public static function writeInput(array $input, ?Device $device = null): array
+    {
+        $fields = self::INPUT_FIELDS;
+        if (!$device) $fields[] = 'device_uid';
+        $data = array_intersect_key($input, array_flip($fields));
+        if (!$device && !isset($data['type'])) $data['type'] = 'sensor';
+        foreach (['device_uid', 'name', 'type'] as $key) {
+            if ((!$device || array_key_exists($key, $data))
+                && (!is_string($data[$key] ?? null) || trim($data[$key]) === '')) {
+                throw new BusinessException("{$key} 不能为空", 422, 1000);
+            }
+        }
+        foreach (['location', 'gateway_uid', 'mqtt_username', 'mqtt_password', 'firmware_version'] as $key) {
+            if (isset($data[$key]) && !is_string($data[$key])) {
+                throw new BusinessException("{$key} 必须为字符串", 422, 1000);
+            }
+        }
+        foreach (['metric_fields', 'capability'] as $key) {
+            if (array_key_exists($key, $data)) {
+                if ($data[$key] === '') $data[$key] = null;
+                if (is_string($data[$key])) {
+                    try { $data[$key] = json_decode($data[$key], true, 512, JSON_THROW_ON_ERROR); }
+                    catch (\JsonException) { throw new BusinessException("{$key} 必须是有效 JSON", 422, 1000); }
+                }
+                if ($data[$key] !== null && !is_array($data[$key])) {
+                    throw new BusinessException("{$key} 必须为对象或数组", 422, 1000);
+                }
+            }
+        }
+        $homeId = $device ? (int)$device->home_id
+            : (\app\model\scope\HomeScope::currentHomeId() ?? \app\model\Home::DEFAULT_HOME_ID);
+        if (!$device) $data['home_id'] = $homeId;
+        $gatewayUid = array_key_exists('gateway_uid', $data) ? $data['gateway_uid'] : $device?->gateway_uid;
+        if (array_key_exists('gateway_uid', $data) && $data['gateway_uid'] === '') {
+            $gatewayUid = $data['gateway_uid'] = null;
+        }
+        if ($gatewayUid) {
+            $gateway = Device::withoutGlobalScopes()->where('device_uid', $gatewayUid)->first();
+            if (!$gateway || $gateway->type !== 'gateway' || (int)$gateway->home_id !== $homeId
+                || ($data['type'] ?? $device?->type) === 'gateway') {
+                throw new BusinessException('所属网关无效或不属于当前家庭', 422, 2003);
+            }
+        }
+        try { $request = request(); } catch (\Throwable) { $request = null; }
+        if ($request?->user) {
+            if (array_key_exists('location', $data) && !$request->canAccessLocation($data['location'])) {
+                throw new BusinessException('无权使用该位置', 403, 1004);
+            }
+            if (isset($gateway) && !$request->canAccessLocation($gateway->location)) {
+                throw new BusinessException('无权使用该网关', 403, 1004);
+            }
+        }
+        return $data;
+    }
+
     /**
      * 创建新设备
      *
@@ -26,6 +84,7 @@ class DeviceService
      */
     public static function create(array $data): Device
     {
+        $data = self::writeInput($data);
         // 检查 device_uid 唯一性
         if (Device::where('device_uid', $data['device_uid'])->exists()) {
             throw new BusinessException('设备 UID 已存在', 409, 2002);
@@ -68,6 +127,8 @@ class DeviceService
         if (!$device) {
             throw new BusinessException('设备不存在', 404, 2001);
         }
+
+        $data = self::writeInput($data, $device);
 
         // 如果更新 MQTT 密码，重新生成哈希
         if (!empty($data['mqtt_password'])) {

@@ -13,6 +13,11 @@ export function sendCommand(id: number, payload: Record<string, unknown>) {
   return request.post<{ request_id: string; status: string }>(`/devices/${id}/command`, payload);
 }
 
+export async function getCommandResult(requestId: string) {
+  const data = await request.get<{ items: { request_id: string; status: string }[] }>('/commands', { request_id: requestId, per_page: 1 });
+  return data.items?.[0];
+}
+
 export function updateDevice(
   id: number,
   data: {

@@ -40,6 +40,7 @@ class CommandLog extends Model
     /**
      * 指令状态常量
      */
+    const STATUS_QUEUED        = 'queued';
     const STATUS_SENT          = 'sent';           // 已发送到 MQTT
     const STATUS_DELIVERED     = 'delivered';       // 设备已确认收到
     const STATUS_REPLIED_OK    = 'replied_ok';      // 设备执行成功
@@ -71,6 +72,6 @@ class CommandLog extends Model
      */
     public function scopePending($query)
     {
-        return $query->where('status', self::STATUS_SENT);
+        return $query->whereIn('status', [self::STATUS_QUEUED, self::STATUS_SENT, self::STATUS_DELIVERED]);
     }
 }

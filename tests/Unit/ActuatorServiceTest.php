@@ -98,7 +98,6 @@ class ActuatorServiceTest extends TestCase
     public function test_accepts_valid_params(): void
     {
         $m = new \ReflectionMethod(ActuatorService::class, 'validate');
-        $m->setAccessible(true);
         // 未抛异常即通过
         $m->invoke(null, $this->acCapability(), 'set_state', ['power' => true, 'mode' => 'cool', 'temp' => 26]);
         $this->assertTrue(true);
@@ -107,7 +106,6 @@ class ActuatorServiceTest extends TestCase
     public function test_accepts_boundary_values(): void
     {
         $m = new \ReflectionMethod(ActuatorService::class, 'validate');
-        $m->setAccessible(true);
         $m->invoke(null, $this->acCapability(), 'set_state', ['temp' => 16]); // 下界
         $m->invoke(null, $this->acCapability(), 'set_state', ['temp' => 30]); // 上界
         $this->assertTrue(true);
@@ -118,7 +116,6 @@ class ActuatorServiceTest extends TestCase
     public function test_default_state_built_from_controls(): void
     {
         $m = new \ReflectionMethod(ActuatorService::class, 'defaultState');
-        $m->setAccessible(true);
         $state = $m->invoke(null, $this->acCapability());
 
         $this->assertSame(['power' => false, 'mode' => 'cool', 'temp' => 26], $state);
@@ -134,7 +131,6 @@ class ActuatorServiceTest extends TestCase
         ];
 
         $m = new \ReflectionMethod(ActuatorService::class, 'statePatchFor');
-        $m->setAccessible(true);
         $patch = $m->invoke(null, $cap, 'set_brightness', ['value' => 80]);
 
         $this->assertSame(['brightness' => 80], $patch);

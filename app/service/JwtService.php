@@ -6,10 +6,10 @@
  * 使用 firebase/php-jwt 库实现标准的 JWT 签发/解码流程。
  *
  * Token 设计：
- *   - access_token:  JWT 格式，自包含用户信息，验证时不查库
+ *   - access_token:  JWT 格式，自包含用户信息，验证时查询持久化会话版本
  *   - refresh_token: 随机字符串，存储在 refresh_tokens 表中（非本类职责）
  *
- * JWT Payload 结构（编入角色/权限/位置，中间件鉴权时完全不查库）：
+ * JWT Payload 结构（编入角色/权限/位置，中间件鉴权时校验数据库会话版本）：
  *   {
  *     "sub": 1,              // 用户 ID
  *     "username": "dad",     // 用户名
@@ -24,12 +24,12 @@
 namespace app\service;
 
 use app\model\Home;
+use app\model\User;
 use app\model\HomeUser;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\SignatureInvalidException;
-use support\Redis;
 use support\Log;
 
 class JwtService
@@ -40,20 +40,10 @@ class JwtService
     private const ALGORITHM = 'HS256';
 
     /**
-     * Redis 键前缀：用户的 token 版本号
-     *
-     * access_token 签发时把当前版本号写入 payload 的 tv 字段；验证时若 token 的
-     * 版本号小于用户当前版本号，则视为已撤销。注销所有设备 / 修改密码时递增版本号，
-     * 即可让该用户已签发的所有 access_token 立即失效（无需等待过期）。
-     * 用 default 连接（DB0，带 hg: 前缀），实际键名为 'hg:user:tokenver:{id}'。
-     */
-    private const TOKEN_VERSION_KEY = 'user:tokenver:';
-
-    /**
      * 签发 access_token
      *
      * 将用户的核心信息编入 JWT payload，后续 API 请求验证时
-     * 只需解码 JWT 即可获取用户身份和权限，无需查询数据库。
+     * 只需解码 JWT 即可获取用户身份和权限，校验数据库中的 auth_version。
      *
      * @param  int    $userId      用户 ID
      * @param  string $username    用户名
@@ -85,6 +75,7 @@ class JwtService
             'locations'   => $locations,
             'home_id'     => $homeId,
             'home_role'   => $homeRole,
+            'session_schema' => 1,
             'tv'          => self::getTokenVersion($userId), // token 版本号（用于主动撤销）
             'iat'         => $now,                 // 签发时间
             'exp'         => $now + $ttl,          // 过期时间
@@ -117,48 +108,31 @@ class JwtService
             return null;
         }
 
-        // 撤销校验：token 版本号低于用户当前版本号则视为已失效（注销所有设备/改密后）
-        $tokenVersion = (int)($payload->tv ?? 0);
-        if ($tokenVersion < self::getTokenVersion((int)$payload->sub)) {
+        // 数据库是会话版本的唯一权威；缓存中断不能恢复被撤销的权限。
+        try {
+            if (($payload->session_schema ?? null) !== 1
+                || (int)($payload->tv ?? -1) !== self::getTokenVersion((int)$payload->sub)) {
+                return null;
+            }
+        } catch (\Throwable $e) {
+            Log::error('会话有效性检查失败');
             return null;
         }
-
         return $payload;
     }
 
-    /**
-     * 读取用户当前的 token 版本号
-     *
-     * Redis 不可用时返回 0（fail-open）：宁可放过校验也不因缓存故障锁死全部登录，
-     * 兼顾家庭场景的可用性。撤销失效窗口仅限 Redis 故障期间。
-     *
-     * @param  int $userId 用户 ID
-     * @return int 当前版本号，未设置或异常时为 0
-     */
     public static function getTokenVersion(int $userId): int
     {
-        try {
-            return (int)(Redis::connection('default')->get(self::TOKEN_VERSION_KEY . $userId) ?? 0);
-        } catch (\Throwable $e) {
-            Log::error("读取 token 版本号失败: {$e->getMessage()}");
-            return 0;
+        $user = User::find($userId);
+        if (!$user || !$user->is_active) {
+            throw new \RuntimeException('用户不存在或已禁用');
         }
+        return (int)$user->auth_version;
     }
 
-    /**
-     * 递增用户的 token 版本号，使其已签发的所有 access_token 立即失效
-     *
-     * 用于"注销所有设备"和"修改密码"等需要全局踢下线的场景。
-     *
-     * @param int $userId 用户 ID
-     */
     public static function bumpTokenVersion(int $userId): void
     {
-        try {
-            Redis::connection('default')->incr(self::TOKEN_VERSION_KEY . $userId);
-        } catch (\Throwable $e) {
-            Log::error("递增 token 版本号失败: {$e->getMessage()}");
-        }
+        User::where('id', $userId)->increment('auth_version');
     }
 
     /**

@@ -25,34 +25,39 @@ class NotificationService
      * @param  string $content    通知正文
      * @param  array  $extra      附加数据（如设备 ID、告警值等）
      */
-    public static function send(array $channelIds, string $title, string $content, array $extra = []): void
+    public static function send(array $channelIds, string $title, string $content, array $extra = []): array
     {
         if (empty($channelIds)) {
-            return;
+            return [];
         }
 
         // 批量查询所有目标渠道（仅启用的）
-        $channels = NotificationChannel::enabled()
-            ->whereIn('id', $channelIds)
-            ->get();
+        $query = NotificationChannel::enabled()->whereIn('id', $channelIds);
+        if (isset($extra['home_id'])) $query->where('home_id', (int)$extra['home_id']);
+        $channels = $query->get();
 
+        $results = array_fill_keys($channelIds, ['status' => 'skipped', 'error' => null]);
         foreach ($channels as $channel) {
             try {
+                $channelExtra = array_merge($extra, ['home_id' => $channel->home_id]);
                 match ($channel->type) {
                     NotificationChannel::TYPE_EMAIL       => self::sendEmail($channel->config, $title, $content),
-                    NotificationChannel::TYPE_WEBHOOK     => self::sendWebhook($channel->config, $title, $content, $extra),
+                    NotificationChannel::TYPE_WEBHOOK     => self::sendWebhook($channel->config, $title, $content, $channelExtra),
                     NotificationChannel::TYPE_TELEGRAM    => self::sendTelegram($channel->config, $title, $content),
                     NotificationChannel::TYPE_WECHAT_WORK => self::sendWechatWork($channel->config, $title, $content),
                     NotificationChannel::TYPE_DINGTALK    => self::sendDingtalk($channel->config, $title, $content),
-                    NotificationChannel::TYPE_IN_APP      => self::sendInApp($title, $content, $extra),
-                    NotificationChannel::TYPE_UNIPUSH     => self::sendUniPush($channel, $title, $content, $extra),
-                    default => Log::warning("未知的通知渠道类型: {$channel->type}"),
+                    NotificationChannel::TYPE_IN_APP      => self::sendInApp($title, $content, $channelExtra),
+                    NotificationChannel::TYPE_UNIPUSH     => self::sendUniPush($channel, $title, $content, $channelExtra),
+                    default => throw new \RuntimeException("未知的通知渠道类型"),
                 };
+                $results[$channel->id] = ['status' => 'sent', 'error' => null];
             } catch (\Throwable $e) {
+                $results[$channel->id] = ['status' => 'failed', 'error' => $e->getMessage()];
                 // 单个渠道发送失败不影响其他渠道
                 Log::error("通知发送失败 [渠道:{$channel->name}({$channel->type})]: {$e->getMessage()}");
             }
         }
+        return $results;
     }
 
     /**
@@ -64,34 +69,26 @@ class NotificationService
      */
     private static function sendEmail(array $config, string $title, string $content): void
     {
-        $to = $config['to'] ?? [];
-        if (empty($to)) {
-            return;
+        $host = $config['smtp_host'] ?? '';
+        $to = (array)($config['to'] ?? []);
+        $user = $config['smtp_user'] ?? '';
+        if (!$host || !$to || !($config['from'] ?? $user)) {
+            throw new \RuntimeException('SMTP 主机、发件人和收件人不能为空');
         }
-
-        $smtpHost = $config['smtp_host'] ?? '';
-        $smtpPort = $config['smtp_port'] ?? 587;
-        $smtpUser = $config['smtp_user'] ?? '';
-        $smtpPass = $config['smtp_pass_encrypted'] ?? '';
-
-        // 使用 PHP 内置 mail() 作为基础实现
-        // 生产环境建议替换为 PHPMailer 或 SwiftMailer 以支持 SMTP 认证
-        $headers = [
-            'From'         => $smtpUser,
-            'Content-Type' => 'text/html; charset=UTF-8',
-            'MIME-Version' => '1.0',
-        ];
-
-        $headerStr = '';
-        foreach ($headers as $key => $value) {
-            $headerStr .= "{$key}: {$value}\r\n";
+        $port = (int)($config['smtp_port'] ?? 587);
+        $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
+            $host, $port, $port === 465
+        );
+        if (isset($config['smtp_tls'])) $transport->setAutoTls((bool)$config['smtp_tls']);
+        $transport->getStream()->setTimeout(10);
+        if ($user !== '') {
+            $transport->setUsername($user);
+            $transport->setPassword($config['smtp_pass'] ?? $config['smtp_pass_encrypted'] ?? '');
         }
-
-        foreach ((array)$to as $recipient) {
-            mail($recipient, $title, $content, $headerStr);
-        }
-
-        Log::info("邮件通知已发送: {$title} → " . implode(', ', (array)$to));
+        $email = (new \Symfony\Component\Mime\Email())
+            ->from($config['from'] ?? $user)->to(...$to)->subject($title)->text($content);
+        (new \Symfony\Component\Mailer\Mailer($transport))->send($email);
+        Log::info('SMTP 邮件已提交: ' . $title);
     }
 
     /**
@@ -106,7 +103,7 @@ class NotificationService
     {
         $url = $config['url'] ?? '';
         if (empty($url)) {
-            return;
+            throw new \RuntimeException('Webhook URL 未配置');
         }
 
         $method = strtoupper($config['method'] ?? 'POST');
@@ -140,7 +137,7 @@ class NotificationService
         $chatId = $config['chat_id'] ?? '';
 
         if (empty($botToken) || empty($chatId)) {
-            return;
+            throw new \RuntimeException('Telegram 参数未配置');
         }
 
         $text = "<b>{$title}</b>\n\n{$content}";
@@ -168,7 +165,7 @@ class NotificationService
     {
         $webhookUrl = $config['webhook_url'] ?? '';
         if (empty($webhookUrl)) {
-            return;
+            throw new \RuntimeException('机器人 Webhook 未配置');
         }
 
         $body = json_encode([
@@ -194,7 +191,7 @@ class NotificationService
     {
         $webhookUrl = $config['webhook_url'] ?? '';
         if (empty($webhookUrl)) {
-            return;
+            throw new \RuntimeException('机器人 Webhook 未配置');
         }
 
         // 如果配置了加签密钥，需要在 URL 中附加签名参数
@@ -230,6 +227,8 @@ class NotificationService
     {
         $wsPayload = json_encode([
             'type' => 'notification',
+            'home_id' => $extra['home_id'] ?? null,
+            'device_id' => $extra['device_id'] ?? null,
             'data' => [
                 'title'   => $title,
                 'content' => $content,
@@ -241,7 +240,7 @@ class NotificationService
         try {
             \support\Redis::connection('pubsub')->publish('ws:broadcast', $wsPayload);
         } catch (\Throwable $e) {
-            Log::error("站内通知推送失败: {$e->getMessage()}");
+            throw $e;
         }
 
         Log::info("站内通知已推送: {$title}");
@@ -261,13 +260,15 @@ class NotificationService
         $config = $channel->config ?? [];
         if (empty($config['app_id']) || empty($config['app_key']) || empty($config['master_secret'])) {
             Log::warning("[uniPush] 渠道 {$channel->name} 未配置 app_id/app_key/master_secret");
-            return;
+            throw new \RuntimeException('uniPush 参数未配置');
         }
 
         $severity = $extra['severity'] ?? 'warning';
 
         // 按家庭取推送设备，逐台判断是否接收该级别
-        $devices = UserPushDevice::where('home_id', $channel->home_id)->get();
+        $devices = UserPushDevice::where('home_id', $channel->home_id)
+            ->whereHas('user', fn ($q) => $q->where('is_active', true)
+                ->whereHas('homeMemberships', fn ($m) => $m->where('home_id', $channel->home_id)))->get();
         $cids = $devices->filter(fn ($d) => $d->acceptsSeverity($severity))->pluck('cid')->all();
 
         if (empty($cids)) {
@@ -308,12 +309,13 @@ class NotificationService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        if ($error) {
-            throw new \RuntimeException("HTTP 请求失败: {$error}");
-        }
-
-        if ($httpCode >= 400) {
-            throw new \RuntimeException("HTTP 请求返回 {$httpCode}: {$response}");
+        unset($ch);
+        if ($error || $response === false) throw new \RuntimeException('通知 HTTP 连接失败');
+        if ($httpCode < 200 || $httpCode >= 300) throw new \RuntimeException("通知 HTTP 返回 {$httpCode}");
+        $result = json_decode($response, true);
+        if (is_array($result) && ((isset($result['errcode']) && (int)$result['errcode'] !== 0)
+            || isset($result['ok']) && $result['ok'] === false)) {
+            throw new \RuntimeException('通知渠道拒绝请求: ' . ($result['errcode'] ?? 'ok=false'));
         }
     }
 

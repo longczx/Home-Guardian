@@ -293,13 +293,16 @@ class NotificationChannelController
         }
 
         try {
-            NotificationService::send(
+            $results = NotificationService::send(
                 [$id],
                 'Home Guardian 测试通知',
                 '这是一条测试通知，如果你看到此消息说明通知渠道配置正确。',
                 ['test' => true]
             );
-            return api_success(null, '测试通知已发送');
+            if (($results[$id]['status'] ?? '') !== 'sent') {
+                return api_error($results[$id]['error'] ?? '渠道未启用', 502, 8002);
+            }
+            return api_success(null, '测试通知已提交到渠道');
         } catch (\Throwable $e) {
             return api_error('测试通知发送失败: ' . $e->getMessage(), 500, 8002);
         }

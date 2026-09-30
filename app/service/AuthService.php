@@ -10,7 +10,7 @@
  *
  * 双 Token 认证流程：
  *   1. 登录 → 返回 access_token (JWT, 2h) + refresh_token (随机串, 30d)
- *   2. API 请求 → 用 access_token 鉴权（不查库，纯 JWT 解码）
+ *   2. API 请求 → 验签并查询数据库会话版本
  *   3. access_token 过期 → 用 refresh_token 换取新的 access_token
  *   4. refresh_token 过期 → 需要重新登录
  */
@@ -28,7 +28,7 @@ class AuthService
     /**
      * 用户的家庭成员关系（单家庭版取最早加入的一条）
      *
-     * 无成员记录时兜底为默认家庭的 member（理论上迁移已归位全部存量用户）。
+     * 无成员关系不能签发家庭权限；历史用户只能通过显式迁移补关系。
      *
      * @return array{home_id:int, role:string}
      */
@@ -36,10 +36,10 @@ class AuthService
     {
         $membership = HomeUser::where('user_id', $userId)->orderBy('home_id')->first();
 
-        return [
-            'home_id' => (int)($membership->home_id ?? Home::DEFAULT_HOME_ID),
-            'role'    => $membership->role ?? HomeUser::ROLE_MEMBER,
-        ];
+        if (!$membership) {
+            throw new BusinessException('账号未加入家庭，请联系户主重新邀请', 403, 8016);
+        }
+        return ['home_id' => (int)$membership->home_id, 'role' => $membership->role];
     }
 
     /**
@@ -57,10 +57,15 @@ class AuthService
      */
     public static function login(string $username, string $password, string $deviceInfo = ''): array
     {
+        return (new User)->getConnection()->transaction(fn () => self::loginLocked($username, $password, $deviceInfo), 3);
+    }
+
+    private static function loginLocked(string $username, string $password, string $deviceInfo): array
+    {
         // 查找用户（包含角色关联，用于生成 JWT payload）
         $user = User::with('roles', 'allowedLocations')
             ->where('username', $username)
-            ->first();
+            ->lockForUpdate()->first();
 
         // 用户不存在或密码错误 — 统一返回模糊提示，防止用户名枚举
         if (!$user || !$user->verifyPassword($password)) {
@@ -134,6 +139,11 @@ class AuthService
      */
     public static function refresh(string $refreshTokenStr): array
     {
+        return (new User)->getConnection()->transaction(fn () => self::refreshLocked($refreshTokenStr), 3);
+    }
+
+    private static function refreshLocked(string $refreshTokenStr): array
+    {
         // 通过哈希值查找数据库中的 token 记录
         $tokenHash = JwtService::hashRefreshToken($refreshTokenStr);
 
@@ -147,7 +157,9 @@ class AuthService
 
         // 加载用户及关联数据
         $user = User::with('roles', 'allowedLocations')
-            ->find($refreshTokenRecord->user_id);
+            ->lockForUpdate()->find($refreshTokenRecord->user_id);
+        $refreshTokenRecord = RefreshToken::valid()->where('token_hash', $tokenHash)->lockForUpdate()->first();
+        if (!$refreshTokenRecord) throw new BusinessException('refresh_token 已撤销，请重新登录', 401, 1003);
 
         if (!$user || !$user->is_active) {
             // 用户已被删除或禁用，清理所有 token
@@ -219,9 +231,9 @@ class AuthService
      */
     public static function logoutAll(int $userId): void
     {
-        RefreshToken::where('user_id', $userId)->delete();
-
-        // 递增 token 版本号，使该用户已签发的所有 access_token 立即失效
-        JwtService::bumpTokenVersion($userId);
+        (new User)->getConnection()->transaction(function () use ($userId) {
+            JwtService::bumpTokenVersion($userId);
+            RefreshToken::where('user_id', $userId)->delete();
+        });
     }
 }

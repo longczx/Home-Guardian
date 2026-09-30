@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchValue } from '@/utils/events';
 import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getChannel, createChannel, updateChannel, CHANNEL_TYPES, type ChannelInput } from '@/api/channel';
@@ -116,7 +117,7 @@ onLoad(async (q) => {
     <view class="card">
       <view class="field row-between">
         <text class="label nomb">启用</text>
-        <switch :checked="enabled" color="#2b6fe3" @change="enabled = $event.detail.value" />
+        <switch :checked="enabled" color="#2b6fe3" @change="enabled = switchValue($event)" />
       </view>
     </view>
 

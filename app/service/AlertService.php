@@ -308,7 +308,11 @@ class AlertService
     /** 通知任务入队（由 NotificationProcess 异步发送） */
     private static function queueNotify(array $channelIds, string $title, string $content, array $extra): void
     {
+        if (isset($extra['device_id'])) {
+            $extra['home_id'] = \app\model\Device::withoutGlobalScopes()->find($extra['device_id'])?->home_id;
+        }
         $task = json_encode([
+            'task_id' => bin2hex(random_bytes(16)),
             'channel_ids' => $channelIds,
             'title'       => $title,
             'content'     => $content,

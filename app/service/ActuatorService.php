@@ -61,8 +61,8 @@ class ActuatorService
             $current = self::getState($device->id) ?: self::defaultState($cap);
             $next = array_merge($current, $params);
 
-            self::saveState($device->id, $next, false);
             $log = MqttCommandService::sendCommand($device->id, ['action' => $action, 'params' => $next]);
+            self::saveState($device->id, $next, false);
             self::pushStateWs($device, $next);
             return $log;
         }

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
-import { getDevice, getLatestTelemetry, sendCommand } from '@/api/device';
+import { getDevice, getLatestTelemetry, sendCommand, getCommandResult } from '@/api/device';
 import type { Device, ControlPoint, LatestMetric } from '@/api/types';
 import { toast } from '@/utils/guard';
 import { timeAgo } from '@/utils/format';
 import { onWs } from '@/utils/ws';
+import { withCommandResult } from '@/utils/command-result';
 
 const id = ref(0);
 const device = ref<Device | null>(null);
 const latest = ref<LatestMetric[]>([]);
 const loading = ref(false);
+const commandPending = ref(false);
+const commandStatus = ref('');
 
 const controls = computed<ControlPoint[]>(() => device.value?.capability?.controls ?? []);
 
@@ -48,6 +51,7 @@ async function load() {
 
 // 依赖联动：depends_on 的每个字段都需匹配当前 state，否则该控件禁用（灰）
 function disabled(ctrl: ControlPoint): boolean {
+  if (commandPending.value || !device.value?.is_online) return true;
   const dep = ctrl.depends_on;
   if (!dep) return false;
   const state = device.value?.state ?? {};
@@ -58,12 +62,16 @@ async function send(ctrl: ControlPoint, value: unknown) {
   if (disabled(ctrl)) return;
   const prev = stateVal(ctrl);
   setLocal(ctrl, value);
+  commandPending.value = true;
+  commandStatus.value = '等待设备确认…';
   try {
-    await sendCommand(id.value, { action: ctrl.command, params: { [ctrl.param]: value } });
+    await withCommandResult(() => sendCommand(id.value, { action: ctrl.command, params: { [ctrl.param]: value } }), 65000, getCommandResult);
+    commandStatus.value = device.value?.type === 'ac' ? '红外已发送，请核对空调实际状态' : '设备已确认执行';
   } catch (e) {
     setLocal(ctrl, prev);
-    toast((e as Error).message);
-  }
+    commandStatus.value = (e as Error).message;
+    toast(commandStatus.value);
+  } finally { commandPending.value = false; }
 }
 
 function onSwitch(ctrl: ControlPoint) {
@@ -143,6 +151,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 </script>
 
 <template>
+  <view v-if="commandStatus" class="command-status">{{ commandStatus }}</view>
   <view class="page">
     <view v-if="device" class="nav">
       <text class="dot" :class="{ gray: !device.is_online }" />
@@ -463,4 +472,8 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
   color: $hg-muted;
   font-size: 36rpx;
 }
+</style>
+
+<style scoped>
+.command-status { padding: 20rpx 32rpx; color: #53617c; background: #eef3ff; }
 </style>

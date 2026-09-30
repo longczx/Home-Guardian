@@ -148,6 +148,7 @@ class UserController
             $locations = array_filter(array_map('trim', explode("\n", $data['allowed_locations'])));
         }
         $this->syncLocations($user->id, $locations);
+        \app\service\AuthService::logoutAll($id);
 
         return redirect('/admin/users');
     }
@@ -160,6 +161,7 @@ class UserController
 
         $user = User::find($id);
         if ($user) {
+            \app\service\AuthService::logoutAll($id);
             $user->delete();
         }
         return redirect('/admin/users');

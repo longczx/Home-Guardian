@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchValue } from '@/utils/events';
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { onShow } from '@dcloudio/uni-app';
@@ -28,8 +29,8 @@ async function load() {
   }
 }
 
-async function onToggle(e: { detail: { value: boolean } }) {
-  enabled.value = e.detail.value;
+async function onToggle(e: unknown) {
+  enabled.value = switchValue(e);
   try {
     await updatePushSettings({ push_enabled: enabled.value });
     if (enabled.value) registerPush(); // 重新登记 cid

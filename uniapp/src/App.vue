@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { watch } from 'vue';
 import { onLaunch } from '@dcloudio/uni-app';
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 import { useLocaleStore } from '@/stores/locale';
 import { registerPush, setupPushListener } from '@/utils/push';
-import { connectWs } from '@/utils/ws';
+import { connectWs, closeWs } from '@/utils/ws';
 
 // 启动即恢复本地持久化的服务器配置与登录态；无当前服务器或未登录时，
 // 各页面 onShow 的守卫会把用户导向服务器列表 / 登录页。
@@ -14,6 +15,10 @@ onLaunch(() => {
   const auth = useAuthStore();
   auth.restore();
 
+  watch(() => [useServerStore().currentId, useServerStore().current?.url, auth.accessToken], () => {
+    closeWs();
+    if (auth.isLoggedIn) connectWs();
+  });
   setupPushListener();
   // 已登录则补登记推送 cid（App 端有效）+ 建立实时 WS
   if (auth.isLoggedIn) {

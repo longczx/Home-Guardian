@@ -18,7 +18,6 @@
 namespace app\process;
 
 use Workerman\Timer;
-use support\Db;
 use support\Log;
 
 class DataIngestProcess
@@ -27,6 +26,8 @@ class DataIngestProcess
      * Redis 连接
      */
     private ?\Redis $redis = null;
+    private int $retryAt = 0;
+    private int $failures = 0;
 
     /**
      * 每次批量写入的最大记录数
@@ -44,8 +45,8 @@ class DataIngestProcess
     private const QUEUE_KEY = 'hg:q:data_ingest_queue';
 
     /**
-     * 处理中队列：批量取出的数据先暂存于此，入库成功后清空。
-     * 进程异常退出后，残留在此的数据会在下次启动时移回主队列，避免丢失。
+     * 处理中队列：批量取出的数据先暂存于此，入库成功后逐条确认。
+     * 进程异常退出后，残留记录直接优先重试，依靠 event_id 避免重复入库。
      */
     private const PROCESSING_KEY = 'hg:q:data_ingest_processing';
 
@@ -63,31 +64,12 @@ class DataIngestProcess
         $this->initRedis();
 
         // 恢复上次异常退出时残留在处理中队列的数据
-        $this->recoverProcessing();
+        // 处理中记录直接优先重试，无需清空或搬回主队列。
 
         // 定时批量入库
         Timer::add(self::INTERVAL, [$this, 'processBatch']);
 
         Log::info('DataIngestProcess 数据入库进程已启动');
-    }
-
-    /**
-     * 将上次残留在处理中队列的数据移回主队列（崩溃恢复）
-     */
-    private function recoverProcessing(): void
-    {
-        try {
-            $recovered = 0;
-            // 有界循环，防止异常情况下死循环
-            while ($recovered < 100000 && $this->redis->rpoplpush(self::PROCESSING_KEY, self::QUEUE_KEY)) {
-                $recovered++;
-            }
-            if ($recovered > 0) {
-                Log::warning("已从处理中队列恢复 {$recovered} 条待入库遥测数据");
-            }
-        } catch (\Throwable $e) {
-            Log::error("恢复处理中队列失败: {$e->getMessage()}");
-        }
     }
 
     /**
@@ -115,83 +97,52 @@ class DataIngestProcess
      */
     public function processBatch(): void
     {
+        if (time() < $this->retryAt) return;
         try {
-            $items = [];
-
-            // 用 RPOPLPUSH 把数据从主队列可靠地搬到处理中队列：
-            // 即使入库阶段进程崩溃，数据仍在处理中队列里，下次启动会恢复。
-            for ($i = 0; $i < self::BATCH_SIZE; $i++) {
-                $raw = $this->redis->rpoplpush(self::QUEUE_KEY, self::PROCESSING_KEY);
-                if ($raw === false || $raw === null) {
-                    break;
-                }
-
+            if (!$this->redis) $this->initRedis();
+            $queue = new \app\service\ReliableQueue($this->redis, self::QUEUE_KEY, self::PROCESSING_KEY);
+            $records = [];
+            foreach ($queue->reserve(self::BATCH_SIZE) as $raw) {
                 $item = json_decode($raw, true);
-                if (!$item || !isset($item['ts'], $item['device_id'], $item['metric_key'])) {
-                    // 非法数据：移入死信队列，避免污染整批
-                    $this->redis->lPush(self::DEADLETTER_KEY, $raw);
+                if (!is_array($item) || !isset($item['ts'], $item['device_id'], $item['metric_key'], $item['value'])
+                    || !is_string($item['value']) || json_decode($item['value']) === null && $item['value'] !== 'null') {
+                    $queue->move($raw, self::DEADLETTER_KEY);
                     continue;
                 }
-
-                $items[] = [
-                    'ts'         => $item['ts'],
-                    'device_id'  => (int)$item['device_id'],
-                    'metric_key' => $item['metric_key'],
-                    'value'      => $item['value'],  // 已经是 JSON 字符串
-                ];
+                $item['event_id'] = $item['event_id'] ?? substr(hash('sha256', $raw), 0, 32);
+                $records[] = ['raw' => $raw, 'item' => $item];
             }
-
-            // 没有有效数据则清空处理中队列后返回
-            if (empty($items)) {
-                $this->redis->del(self::PROCESSING_KEY);
-                return;
-            }
-
-            // 优先批量插入；失败则降级为逐条插入，把坏记录单独丢死信，其余正常入库
+            if (!$records) return;
             try {
-                $this->bulkInsert($items);
+                $this->bulkInsert(array_column($records, 'item'));
+                foreach ($records as $record) $queue->acknowledge($record['raw']);
             } catch (\Throwable $e) {
-                Log::error("批量入库失败，降级为逐条入库: {$e->getMessage()}");
-                $this->insertOneByOne($items);
+                if (!self::isDataError($e)) throw $e;
+                // 仅格式/约束错误逐条分离；连接中断保留记录并退避重试。
+                foreach ($records as $record) {
+                    try {
+                        $this->bulkInsert([$record['item']]);
+                    } catch (\Throwable $error) {
+                        if (!self::isDataError($error)) throw $error;
+                        $queue->move($record['raw'], self::DEADLETTER_KEY);
+                        continue;
+                    }
+                    $queue->acknowledge($record['raw']);
+                }
             }
-
-            // 提交点：本批已落库（或坏数据已进死信），清空处理中队列
-            $this->redis->del(self::PROCESSING_KEY);
-
+            $this->failures = 0;
         } catch (\Throwable $e) {
-            Log::error("数据入库失败: {$e->getMessage()}", [
-                'items_count' => count($items ?? []),
-            ]);
-
-            // 如果是 Redis 连接断开，尝试重连（处理中队列的数据下次启动会恢复）
-            if (str_contains($e->getMessage(), 'Redis') || str_contains($e->getMessage(), 'Connection')) {
-                $this->initRedis();
-            }
+            $this->retryAt = time() + min(60, 2 ** min(++$this->failures, 6));
+            Log::error('遥测入库失败，处理中记录保留待重试: ' . $e->getMessage());
+            if ($e instanceof \RedisException) $this->redis = null;
         }
     }
 
-    /**
-     * 逐条插入（批量插入失败时的降级路径）
-     *
-     * 单条失败不影响其它记录，坏记录移入死信队列。
-     *
-     * @param array $items 待插入的数据数组
-     */
-    private function insertOneByOne(array $items): void
+    public static function isDataError(\Throwable $error): bool
     {
-        $failed = 0;
-        foreach ($items as $item) {
-            try {
-                $this->bulkInsert([$item]);
-            } catch (\Throwable $e) {
-                $failed++;
-                $this->redis->lPush(self::DEADLETTER_KEY, json_encode($item));
-                Log::error("单条遥测入库失败，已移入死信: {$e->getMessage()}", ['item' => $item]);
-            }
-        }
-        if ($failed > 0) {
-            Log::warning("本批逐条入库完成，{$failed} 条进入死信队列");
-        }
+        $state = $error instanceof \Illuminate\Database\QueryException
+            ? ($error->errorInfo[0] ?? (string)$error->getCode()) : (string)$error->getCode();
+        return str_starts_with($state, '22') || str_starts_with($state, '23');
     }
 
     /**
@@ -212,17 +163,18 @@ class DataIngestProcess
         $bindings = [];
 
         foreach ($items as $index => $item) {
-            $placeholders[] = "(?, ?, ?, ?::jsonb)";
+            $placeholders[] = "(?, ?, ?, ?::jsonb, ?)";
             $bindings[] = $item['ts'];
             $bindings[] = $item['device_id'];
             $bindings[] = $item['metric_key'];
             $bindings[] = $item['value'];
+            $bindings[] = $item['event_id'];
         }
 
-        $sql = "INSERT INTO telemetry_logs (ts, device_id, metric_key, value) VALUES "
-             . implode(', ', $placeholders);
+        $sql = "INSERT INTO telemetry_logs (ts, device_id, metric_key, value, event_id) VALUES "
+             . implode(', ', $placeholders) . ' ON CONFLICT (ts, event_id) DO NOTHING';
 
-        Db::insert($sql, $bindings);
+        (new \app\model\Device)->getConnection()->insert($sql, $bindings);
 
         // 记录入库统计（调试级别，生产环境可关闭）
         Log::debug("批量入库完成: {count} 条遥测记录", [

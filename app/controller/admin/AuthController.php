@@ -56,6 +56,7 @@ class AuthController
         // 写入 session
         $request->session()->set('admin_user', [
             'id'       => $user->id,
+            'auth_version' => \app\service\JwtService::getTokenVersion($user->id),
             'username' => $user->username,
             'fullName' => $user->full_name ?: $user->username,
         ]);

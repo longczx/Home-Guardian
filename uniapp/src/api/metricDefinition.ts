@@ -32,5 +32,5 @@ export function getMetricDefinitions() {
 
 /** 新增指标定义（需 devices.create 权限） */
 export function createMetricDefinition(data: MetricDefinitionInput) {
-  return request.post<MetricDefinition>('/metric-definitions', data as Record<string, unknown>);
+  return request.post<MetricDefinition>('/metric-definitions', { ...data });
 }

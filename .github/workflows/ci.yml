@@ -13,16 +13,36 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (PHP 8.2)
+    name: Backend (PHP 8.5)
     runs-on: ubuntu-latest
+    env:
+      TEST_REDIS_HOST: 127.0.0.1
+      TEST_PGSQL_HOST: 127.0.0.1
+      TEST_SMTP_HOST: 127.0.0.1
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 2s --health-retries 20
+      postgres:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: guardian_test
+          POSTGRES_PASSWORD: guardian_test
+          POSTGRES_DB: guardian_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U guardian_test -d guardian_test" --health-interval 2s --health-retries 20
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports: ['1025:1025']
     steps:
       - uses: actions/checkout@v7
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
-          extensions: mbstring, pdo, pdo_sqlite, sqlite3, pcntl, posix, sockets, bcmath, redis
+          php-version: '8.5'
+          extensions: mbstring, pdo, pdo_pgsql, pdo_sqlite, sqlite3, pcntl, posix, sockets, bcmath, redis
           coverage: none
           tools: composer:v2
 
@@ -46,6 +66,9 @@ jobs:
           find app config database tests -name '*.php' -print0 \
             | xargs -0 -n1 -P4 php -l > /dev/null
 
+      - name: Audit locked dependencies
+        run: composer audit
+
       - name: Run PHPUnit
         run: vendor/bin/phpunit --testdox
 
@@ -63,12 +86,15 @@ jobs:
         with:
           node-version: '20'
 
-      # 无 lockfile（手写 package.json），用 install 解析依赖
+      # 严格使用仓库锁定依赖，确保构建可复现
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
+
+      - name: Client regression tests
+        run: npm test
 
       - name: Type-check
         run: npm run type-check
@@ -78,3 +104,21 @@ jobs:
 
       - name: Build (微信小程序 compile-only)
         run: npm run build:mp-weixin
+
+  firmware:
+    name: ESP32 firmware compile
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.19
+      - name: Build with example configuration
+        run: |
+          cp include/config.example.h include/config.h
+          pio run

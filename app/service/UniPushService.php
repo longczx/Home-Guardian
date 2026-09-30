@@ -39,16 +39,19 @@ class UniPushService
         $token = self::getToken($config);
         if (!$token) {
             Log::error('[uniPush] 获取 token 失败，跳过推送');
-            return;
+            throw new \RuntimeException('uniPush 获取 token 失败');
         }
 
+        $failed = 0;
         foreach ($cids as $cid) {
             try {
                 self::pushSingle($appId, $token, $cid, $title, $body, $payload);
             } catch (\Throwable $e) {
+                $failed++;
                 Log::error("[uniPush] 推送失败 cid={$cid}: {$e->getMessage()}");
             }
         }
+        if ($failed) throw new \RuntimeException("uniPush {$failed} 个接收端投递失败");
     }
 
     private static function pushSingle(string $appId, string $token, string $cid, string $title, string $body, array $payload): void
@@ -132,12 +135,14 @@ class UniPushService
         $resp = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
+        unset($ch);
         if ($err) {
             throw new \RuntimeException("curl 错误: {$err}");
         }
-        if ($code >= 400) {
-            throw new \RuntimeException("HTTP {$code}: {$resp}");
+        if ($code < 200 || $code >= 300) throw new \RuntimeException("uniPush HTTP {$code}");
+        $json = json_decode((string)$resp, true);
+        if (!is_array($json) || (int)($json['code'] ?? -1) !== 0) {
+            throw new \RuntimeException('uniPush 接口拒绝请求');
         }
         return (string)$resp;
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchValue } from '@/utils/events';
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { getAutomations, setAutomationEnabled, deleteAutomation, type Automation } from '@/api/automation';
@@ -20,8 +21,8 @@ async function load() {
   }
 }
 
-async function toggle(a: Automation, e: { detail: { value: boolean } }) {
-  const next = e.detail.value;
+async function toggle(a: Automation, e: unknown) {
+  const next = switchValue(e);
   try {
     await setAutomationEnabled(a.id, next);
     a.is_enabled = next;
