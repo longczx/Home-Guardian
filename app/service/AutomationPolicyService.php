@@ -73,9 +73,10 @@ class AutomationPolicyService
     {
         $result = self::check($automation); $config = $automation->trigger_config;
         if ($automation->trigger_type === 'telemetry') {
-            $reading = ObservationService::latest((int)$config['device_id'], $config['metric_key']);
+            $triggerDevice = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->find((int)$config['device_id']);
+            $reading = $triggerDevice ? ObservationService::latest($triggerDevice->id, $config['metric_key']) : null;
             $passed = ObservationService::fresh($reading, (int)($config['max_age_sec'] ?? 900)) && ObservationService::compare($reading['value'], $config['condition'], $config['value']);
-            $result['checks'][] = ['label'=>'触发阈值', 'passed'=>$passed, 'reason'=>$reading ? '最新值：' . json_encode($reading['value']) : '暂无数据', 'observed_at'=>$reading['ts'] ?? null];
+            $result['checks'][] = ['label'=>'触发阈值', 'passed'=>$passed, 'reason'=>!$triggerDevice ? '触发设备已删除' : ($reading ? '最新值：' . json_encode($reading['value']) : '暂无数据'), 'observed_at'=>$reading['ts'] ?? null];
             if (!$passed) $result['eligible'] = false;
         } elseif ($automation->trigger_type === 'schedule') {
             $due = (new \Cron\CronExpression($config['cron']))->isDue(now()->setTimezone($config['timezone'] ?? 'Asia/Shanghai'));

@@ -179,6 +179,18 @@ class HomeExperienceTest extends TestCase
         AutomationService::evaluateTelemetry([$rule],$d->id,'door_open',false);
         AutomationService::evaluateTelemetry([$rule],$d->id,'door_open',true); self::assertSame(2,CommandLog::where('device_id',$d->id)->count());
     }
+    public function test_full_home_preview_reports_deleted_devices_without_reading_orphan_telemetry(): void
+    {
+        $device=$this->device(); $rule=$this->rule($device); $deviceId=$device->id; $device->delete();
+        Redis::connection('default')->setex("device:observations:{$deviceId}",60,json_encode(['temp'=>['value'=>99,'ts'=>now()->toIso8601String()]]));
+        $controller=new HomeExperienceController;
+        $response=$controller->preview($this->request(),$rule->id);self::assertSame(200,$response->getStatusCode());
+        $data=json_decode($response->rawBody(),true)['data'];self::assertFalse($data['eligible']);
+        self::assertSame('触发设备已删除',$data['checks'][2]['reason']);
+        self::assertSame(403,$controller->preview($this->request([],['bedroom']),$rule->id)->getStatusCode());
+        self::assertSame(0,CommandLog::where('device_id',$deviceId)->count());
+        Redis::connection('default')->del("device:observations:{$deviceId}");
+    }
     public function test_postgres_migration_backfills_rooms_and_rolls_back_cleanly(): void
     {
         if (!getenv('TEST_PGSQL_HOST')) $this->markTestSkipped('Requires PostgreSQL');
