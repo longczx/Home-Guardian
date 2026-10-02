@@ -58,7 +58,7 @@ onShow(load);
 
 <template>
   <view class="page">
-    <view class="tip">简单规则（单触发+单动作）可在此新建/编辑；多动作复杂规则请去后台。</view>
+    <view class="tip">支持家庭模式、组合条件和多个动作；打开规则可试运行并查看不执行原因。</view>
     <view class="list">
       <view v-for="a in items" :key="a.id" class="row">
         <view class="mid" @tap="edit(a)">

@@ -47,8 +47,9 @@ class AutomationRunService
         $states = array_column($results, 'status');
         $pending = in_array('pending', $states, true);
         $failed = in_array('failed', $states, true);
+        $skipped = in_array('skipped', $states, true);
         $run->update(['action_results' => $results,
-            'status' => $pending ? 'running' : ($failed ? (in_array('success', $states, true) ? 'partial_failed' : 'failed') : 'success'),
+            'status' => $pending ? 'running' : ($failed || $skipped ? (in_array('success', $states, true) ? 'partial_failed' : ($failed ? 'failed' : 'skipped')) : 'success'),
             'finished_at' => $pending ? null : now()]);
         return $run;
     }

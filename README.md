@@ -641,3 +641,5 @@ docker compose -p hg-review -f docker-compose.test.yml down
 ## 许可证
 
 本项目采用 MIT License 开源。
+
+家庭模式、组合自动化、人工优先及状态说明见 [家庭使用体验第一版](docs/guide/home-experience.md)。

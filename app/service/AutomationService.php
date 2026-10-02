@@ -28,7 +28,7 @@ class AutomationService
      */
     private const RULES_CHANGED_KEY = 'automation:rules:changed';
 
-    private static function validatedInput(array $data, ?Automation $existing = null): array
+    public static function validatedInput(array $data, ?Automation $existing = null): array
     {
         $data = array_intersect_key($data, array_flip(['name', 'description', 'trigger_type',
             'trigger_config', 'actions', 'is_enabled', 'created_by']));
@@ -39,7 +39,7 @@ class AutomationService
         $merged = array_merge($existing?->toArray() ?? [], $data);
         $config = $merged['trigger_config'] ?? [];
         $actions = $merged['actions'] ?? [];
-        if (!is_array($config) || !is_array($actions) || !$actions) {
+        if (!is_array($config) || !is_array($actions) || !$actions || count($actions) > 20) {
             throw new BusinessException('触发配置和动作必须为有效对象/数组', 422, 4002);
         }
         $checkDevice = static function ($id) use ($homeId): void {
@@ -52,8 +52,8 @@ class AutomationService
         };
         if (($merged['trigger_type'] ?? '') === Automation::TRIGGER_TELEMETRY) {
             $checkDevice($config['device_id'] ?? 0);
-            if (!isset($config['metric_key'], $config['condition'], $config['value'])
-                || !is_numeric($config['value']) || !in_array($config['condition'], ['GREATER_THAN','LESS_THAN','EQUALS','NOT_EQUALS'], true)) {
+            if (!is_string($config['metric_key'] ?? null) || !preg_match('/^[a-zA-Z0-9_]{1,64}$/', $config['metric_key']) || !isset($config['condition'], $config['value'])
+                || !(is_numeric($config['value']) || is_bool($config['value'])) || !in_array($config['condition'], ['GREATER_THAN','LESS_THAN','EQUALS','NOT_EQUALS'], true)) {
                 throw new BusinessException('遥测触发条件无效', 422, 4002);
             }
             foreach (['duration_sec', 'cooldown_sec'] as $key) {
@@ -66,11 +66,15 @@ class AutomationService
                 throw new BusinessException('定时表达式无效', 422, 4002);
             }
         } else throw new BusinessException('触发类型无效', 422, 4002);
+        AutomationPolicyService::validate($config, $checkDevice);
         foreach ($actions as $action) {
+            if (!is_array($action)) throw new BusinessException('动作必须为对象', 422, 4002);
             if (($action['type'] ?? '') === Automation::ACTION_DEVICE_COMMAND) {
                 $checkDevice($action['device_id'] ?? 0);
                 if (!is_array($action['payload'] ?? null) || !is_string($action['payload']['action'] ?? null)
                     || !is_array($action['payload']['params'] ?? [])) throw new BusinessException('设备动作格式无效', 422, 4002);
+                $target = Device::withoutGlobalScopes()->where('home_id', $homeId)->find($action['device_id']);
+                ActuatorService::validate($target->capability ?? [], $action['payload']['action'], $action['payload']['params'] ?? []);
             } elseif (($action['type'] ?? '') === Automation::ACTION_NOTIFY) {
                 $ids = $action['channel_ids'] ?? [];
                 if (!is_array($ids) || !$ids || \app\model\NotificationChannel::withoutGlobalScopes()
@@ -145,18 +149,28 @@ class AutomationService
      *
      * @param Automation $automation 自动化规则实例
      */
-    public static function executeActions(Automation $automation, array $context = []): void
+    public static function executeActions(Automation $automation, array $context = []): bool
     {
         // Database defaults are not hydrated on a newly created Eloquent instance.
         if (!$automation->home_id) $automation->refresh();
         $actions = $automation->actions ?? [];
-        $deviceIds = array_column($actions, 'device_id');
-        if (isset($automation->trigger_config['device_id'])) $deviceIds[] = $automation->trigger_config['device_id'];
+        $deviceIds = AutomationPolicyService::deviceIds($automation);
+        $policy = AutomationPolicyService::check($automation);
+        if (!$policy['eligible']) {
+            // Keep useful skip explanations without a new row for every sensor report.
+            if (Redis::connection('default')->set("automation:skip:{$automation->id}", '1', 'EX', 60, 'NX')) {
+                $locations = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->whereIn('id', $deviceIds)->pluck('location')->unique()->values()->all();
+                \app\model\AutomationRun::create(['home_id'=>$automation->home_id, 'automation_id'=>$automation->id, 'automation_name'=>$automation->name,
+                    'trigger_type'=>$automation->trigger_type, 'trigger_context'=>array_merge($automation->trigger_config, $context, ['policy'=>$policy]),
+                    'locations'=>$locations, 'action_results'=>[], 'started_at'=>now(), 'finished_at'=>now(), 'status'=>'skipped','submission_finished'=>true]);
+            }
+            return false;
+        }
         $locations = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->whereIn('id', $deviceIds)
             ->pluck('location')->unique()->values()->all();
         $run = \app\model\AutomationRun::create(['home_id'=>$automation->home_id, 'automation_id'=>$automation->id,
             'automation_name'=>$automation->name, 'trigger_type'=>$automation->trigger_type,
-            'trigger_context'=>array_merge($automation->trigger_config ?? [], $context), 'locations'=>$locations,
+            'trigger_context'=>array_merge($automation->trigger_config ?? [], $context, ['policy'=>$policy]), 'locations'=>$locations,
             'action_results'=>[], 'started_at'=>now(), 'status'=>'running']);
         $results = [];
 
@@ -169,7 +183,7 @@ class AutomationService
                 };
                 $results[] = array_merge(['index'=>$index, 'type'=>$action['type'], 'status'=>'pending'], $result);
             } catch (\Throwable $e) {
-                $results[] = ['index'=>$index, 'type'=>$action['type'] ?? '', 'status'=>'failed',
+                $results[] = ['index'=>$index, 'type'=>$action['type'] ?? '', 'status'=>$e instanceof BusinessException && in_array($e->getBusinessCode(), [2110,2111,2112,2113], true) ? 'skipped' : 'failed',
                     'error'=>$e instanceof BusinessException ? $e->getMessage() : '提交动作失败，请检查服务日志'];
                 Log::error("自动化 [{$automation->name}] 动作 #{$index} 执行失败: {$e->getMessage()}");
             }
@@ -180,6 +194,7 @@ class AutomationService
         $automation->update(['last_triggered_at' => now()]);
         $run->update(['submission_finished'=>true]);
         AutomationRunService::refresh($run);
+        return true;
     }
 
     /**
@@ -200,7 +215,7 @@ class AutomationService
 
         $device = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->find($deviceId);
         if (!$device) throw new BusinessException('自动化目标设备不属于当前家庭', 422, 4002);
-        $command = ActuatorService::applyCommand($device, $payload['action'] ?? '', $payload['params'] ?? []);
+        $command = DeviceControlService::send($device, $payload['action'] ?? '', $payload['params'] ?? []);
 
         Log::info("自动化: 已向设备 {$deviceId} 发送控制指令", $payload);
         return ['device_id'=>$deviceId, 'action'=>$payload['action'] ?? '', 'command_id'=>$command->id, 'request_id'=>$command->request_id];
@@ -259,10 +274,10 @@ class AutomationService
      * @param string   $metricKey   遥测指标名
      * @param mixed    $value       遥测值
      */
-    public static function evaluateTelemetry(iterable $automations, int $deviceId, string $metricKey, mixed $value): void
+    public static function evaluateTelemetry(iterable $automations, int $deviceId, string $metricKey, mixed $value, ?string $observedAt = null): void
     {
         foreach ($automations as $automation) {
-            self::matchAndExecute($automation, $deviceId, $metricKey, $value);
+            self::matchAndExecute($automation, $deviceId, $metricKey, $value, $observedAt);
         }
     }
 
@@ -274,7 +289,7 @@ class AutomationService
      * @param string     $metricKey  指标名
      * @param mixed      $value      遥测值
      */
-    private static function matchAndExecute(Automation $automation, int $deviceId, string $metricKey, mixed $value): void
+    private static function matchAndExecute(Automation $automation, int $deviceId, string $metricKey, mixed $value, ?string $observedAt = null): void
     {
         $config = $automation->trigger_config;
 
@@ -286,20 +301,19 @@ class AutomationService
             return;
         }
 
+        if (!ObservationService::fresh(['ts'=>$observedAt ?? now()->toIso8601String()], (int)($config['max_age_sec'] ?? 900))) {
+            self::clearDuration($automation->id);
+            return;
+        }
+        $redis = Redis::connection('default');
+        $sampleKey = "automation:sample:{$automation->id}";
+        $previous = (int)$redis->get($sampleKey);
+        if ($previous && time() - $previous > (int)($config['max_age_sec'] ?? 900)) self::clearDuration($automation->id);
+        $redis->setex($sampleKey, 86400, time());
         $condition = $config['condition'] ?? '';
         $threshold = $config['value'] ?? null;
 
-        if (!is_numeric($value) || !is_numeric($threshold)) {
-            return;
-        }
-
-        $met = match ($condition) {
-            'GREATER_THAN' => (float)$value > (float)$threshold,
-            'LESS_THAN'    => (float)$value < (float)$threshold,
-            'EQUALS'       => abs((float)$value - (float)$threshold) < 0.0001,
-            'NOT_EQUALS'   => abs((float)$value - (float)$threshold) >= 0.0001,
-            default        => false,
-        };
+        $met = ObservationService::compare($value, $condition, $threshold);
 
         if (!$met) {
             // 条件不满足，清除防抖计时，避免"持续满足"被旧记录污染
@@ -319,8 +333,9 @@ class AutomationService
             if ($last && time() - $last < $cooldown) return;
             // 持续满足只触发一次；条件恢复后才解除，进程重启仍保留状态。
             if (!$redis->setnx($latch, '1')) return;
-            $redis->set("automation:last:{$automation->id}", time());
-            self::executeActions($automation, ['device_id'=>$deviceId, 'metric_key'=>$metricKey, 'observed_value'=>$value]);
+            if (self::executeActions($automation, ['device_id'=>$deviceId, 'metric_key'=>$metricKey, 'observed_value'=>$value])) {
+                $redis->set("automation:last:{$automation->id}", time());
+            } else $redis->del($latch);
         }
     }
 

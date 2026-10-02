@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
 import { getAlertLogs, acknowledgeAlert, resolveAlert } from '@/api/alert';
+import { handleAlert } from '@/api/experience';
 import type { AlertLog } from '@/api/types';
 import { ensureReady, toast } from '@/utils/guard';
 import { timeAgo, severityColor } from '@/utils/format';
@@ -67,6 +68,12 @@ async function onResolve(l: AlertLog) {
   }
 }
 
+function handling(l: AlertLog) {
+  uni.showModal({ title: '记录处理情况', editable: true, placeholderText: '如：已检查门窗，等待温度恢复', content: l.handling_note || '', success: async (r) => {
+    if (!r.confirm) return;
+    try { await handleAlert(l.id, r.content || ''); await load(); toast('已记录，实际恢复以传感器为准'); } catch (e) { toast((e as Error).message); }
+  } });
+}
 // 实时：新告警/告警恢复时刷新列表
 let unsubs: Array<() => void> = [];
 onShow(() => {
@@ -122,11 +129,12 @@ onPullDownRefresh(async () => {
             {{ l.device?.name || '设备' }}<text v-if="l.device?.location"> · {{ l.device.location }}</text>
             <text v-if="l.message"> · {{ l.message }}</text>
           </text>
+          <text v-if="l.handling_note" class="desc">处理：{{ l.handling_note }}</text><text class="desc">{{ l.recovered_at ? "传感器已恢复：" + l.recovered_at : "尚无传感器恢复记录" }}</text>
           <view class="foot">
             <text class="time">
-              {{ timeAgo(l.triggered_at) }} {{ t('alert.triggeredAt') }}<text v-if="l.resolved_at"> · {{ t('alert.recovered') }}</text>
+              {{ timeAgo(l.triggered_at) }} {{ t('alert.triggeredAt') }}<text v-if="l.resolved_at"> · {{ l.recovered_at ? '传感器已恢复' : '人工标记完成' }}</text>
             </text>
-            <view class="acts">
+            <view class="acts"><text class="act" @tap="handling(l)">处理备注</text>
               <text v-if="l.status === 'triggered'" class="act solid" @tap="onAck(l)">{{ t('alert.ack') }}</text>
               <text v-if="l.status !== 'resolved'" class="act" @tap="onResolve(l)">{{ t('alert.resolve') }}</text>
             </view>

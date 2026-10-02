@@ -206,7 +206,7 @@ class AlertEngineProcess
                 }
 
                 // 同时检查遥测条件型自动化规则（使用内存缓存，不查库）
-                AutomationService::evaluateTelemetry($this->automations, $deviceId, $metricKey, $value);
+                AutomationService::evaluateTelemetry($this->automations, $deviceId, $metricKey, $value, $data['ts'] ?? '1970-01-01');
             }
         } catch (\Throwable $e) {
             Log::error("告警引擎处理异常: {$e->getMessage()}");

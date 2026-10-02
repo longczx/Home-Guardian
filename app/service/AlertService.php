@@ -169,8 +169,8 @@ class AlertService
 
         $affected = AlertLog::where('rule_id', $rule->id)
             ->where('device_id', $deviceId)
-            ->whereIn('status', [AlertLog::STATUS_TRIGGERED, AlertLog::STATUS_ACKNOWLEDGED])
-            ->update(['status' => AlertLog::STATUS_RESOLVED, 'resolved_at' => now()]);
+            ->whereNull('recovered_at')
+            ->update(['status' => AlertLog::STATUS_RESOLVED, 'resolved_at' => now(), 'recovered_at'=>now()]);
 
         if ($cache) { try { $cache->del($activeKey); } catch (\Throwable $e) {} }
 
@@ -224,6 +224,7 @@ class AlertService
             throw new BusinessException('告警记录不存在', 404, 3002);
         }
 
+        if ($alertLog->status !== AlertLog::STATUS_TRIGGERED) return $alertLog;
         $alertLog->update([
             'status'          => AlertLog::STATUS_ACKNOWLEDGED,
             'acknowledged_by' => $userId,
@@ -240,7 +241,7 @@ class AlertService
      *
      * @throws BusinessException 告警不存在
      */
-    public static function resolveAlert(int $alertLogId): AlertLog
+    public static function resolveAlert(int $alertLogId, ?int $userId = null): AlertLog
     {
         $alertLog = AlertLog::find($alertLogId);
         if (!$alertLog) {
@@ -249,14 +250,8 @@ class AlertService
 
         $alertLog->update([
             'status'      => AlertLog::STATUS_RESOLVED,
-            'resolved_at' => now(),
+            'resolved_at' => now(), 'handled_by'=>$userId, 'handled_at'=>now(),
         ]);
-
-        // 清激活标记，允许该规则+设备后续再次触发
-        $cache = self::cache();
-        if ($cache) {
-            try { $cache->del("alert:active:{$alertLog->rule_id}:{$alertLog->device_id}"); } catch (\Throwable $e) {}
-        }
 
         return $alertLog->fresh();
     }

@@ -15,10 +15,11 @@ use app\exception\BusinessException;
 class DeviceService
 {
     private const INPUT_FIELDS = ['name', 'type', 'location', 'firmware_version',
-        'mqtt_username', 'mqtt_password', 'gateway_uid', 'metric_fields', 'capability'];
+        'mqtt_username', 'mqtt_password', 'gateway_uid', 'metric_fields', 'capability', 'report_interval_sec'];
 
     public static function writeInput(array $input, ?Device $device = null): array
     {
+        if (array_key_exists('report_interval_sec', $input) && (filter_var($input['report_interval_sec'], FILTER_VALIDATE_INT) === false || $input['report_interval_sec'] < 10 || $input['report_interval_sec'] > 86400)) throw new BusinessException('上报周期必须为 10-86400 秒', 422, 1000);
         $fields = self::INPUT_FIELDS;
         if (!$device) $fields[] = 'device_uid';
         $data = array_intersect_key($input, array_flip($fields));
@@ -281,12 +282,12 @@ class DeviceService
      */
     public static function sweepOfflineDevices(int $timeoutSec): array
     {
-        $threshold = now()->subSeconds($timeoutSec);
-
-        $stale = Device::where('is_online', true)
-            ->whereNotNull('last_seen')
-            ->where('last_seen', '<', $threshold)
-            ->get(['id', 'device_uid', 'location']);
+        $stale = Device::where('is_online', true)->whereNotNull('last_seen')
+            ->get(['id', 'device_uid', 'location', 'type', 'last_seen', 'report_interval_sec'])
+            ->filter(function ($device) use ($timeoutSec) {
+                $window = $device->type === 'sensor' ? max($timeoutSec, (int)$device->report_interval_sec * 3) : $timeoutSec;
+                return $device->last_seen->lt(now()->subSeconds($window));
+            });
 
         if ($stale->isEmpty()) {
             return [];

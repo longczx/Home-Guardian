@@ -21,7 +21,7 @@ class AlertLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'home_id',
+        'home_id', 'handling_note', 'handled_by', 'handled_at', 'recovered_at',
         'rule_id',
         'device_id',
         'triggered_at',
@@ -35,6 +35,7 @@ class AlertLog extends Model
 
     protected $casts = [
         'triggered_value' => 'array',    // JSONB
+        'handled_at' => 'datetime', 'recovered_at' => 'datetime',
         'triggered_at'    => 'datetime',
         'acknowledged_at' => 'datetime',
         'resolved_at'     => 'datetime',

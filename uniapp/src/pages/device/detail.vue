@@ -4,6 +4,7 @@ import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
 import { getDevice, getLatestTelemetry, sendCommand, getCommandResult } from '@/api/device';
 import type { Device, ControlPoint, LatestMetric } from '@/api/types';
 import { toast } from '@/utils/guard';
+import { setFavorite, setOverride } from '@/api/experience';
 import { timeAgo } from '@/utils/format';
 import { onWs } from '@/utils/ws';
 import { withCommandResult } from '@/utils/command-result';
@@ -18,6 +19,16 @@ function openDiagnostics() {
   uni.navigateTo({ url: '/pages/device/diagnostics?id=' + id.value });
 }
 
+async function favorite() {
+  if (!device.value) return;
+  try { await setFavorite(id.value, !device.value.is_favorite); device.value.is_favorite = !device.value.is_favorite; } catch (e) { toast((e as Error).message); }
+}
+function override() {
+  uni.showActionSheet({ itemList: ['恢复自动化', '暂停 30 分钟', '暂停 2 小时'], success: async (r) => {
+    try { await setOverride(id.value, [0, 30, 120][r.tapIndex]); await load(); } catch (e) { toast((e as Error).message); }
+  } });
+}
+const overrideActive = computed(() => !!device.value?.manual_override_until && Date.parse(device.value.manual_override_until) > Date.now());
 const controls = computed<ControlPoint[]>(() => device.value?.capability?.controls ?? []);
 
 // 主显示：首个遥测指标的最新值（无遥测则不显示 hero 数字）
@@ -25,7 +36,8 @@ const hero = computed(() => {
   const f = device.value?.metric_fields?.[0];
   if (!f) return null;
   const m = latest.value.find((x) => x.metric_key === f.key);
-  return m ? { value: String(m.value), unit: f.unit || '', label: f.label } : null;
+  const age = m ? (Date.now() - Date.parse(m.ts)) / 1000 : Infinity;
+  return m ? { value: age > (device.value?.report_interval_sec ?? 300) * 3 ? '数据过期' : String(m.value), unit: f.unit || '', label: f.label } : null;
 });
 
 function stateVal(ctrl: ControlPoint): unknown {
@@ -156,6 +168,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 <template>
   <view v-if="commandStatus" class="command-status">{{ commandStatus }}</view>
   <view class="page">
+    <view v-if="device" class="experience"><button size="mini" @tap="favorite">{{ device.is_favorite ? '★ 已常用' : '☆ 设为常用' }}</button><button v-if="controls.length" size="mini" @tap="override">自动化接管设置</button><text v-if="overrideActive">人工接管至 {{ device.manual_override_until }}</text><text v-if="controls.length">{{ device.state_note }}</text><text v-if="device.reported_at">最近状态上报：{{ device.reported_at }}</text><text v-if="device.reported_state">设备上报：{{ JSON.stringify(device.reported_state) }}</text></view>
     <view v-if="device" class="nav">
       <text class="dot" :class="{ gray: !device.is_online }" />
       <text class="st">{{ device.is_online ? '在线' : '离线' }} · {{ device.type }}<text v-if="device.gateway_uid"> · 网关 {{ device.gateway_uid }}</text></text>
@@ -250,6 +263,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 </template>
 
 <style lang="scss" scoped>
+.experience { margin: 24rpx; padding: 24rpx; background: $hg-card; border-radius: 20rpx; } .experience text { display: block; font-size: 24rpx; color: $hg-muted; margin-top: 12rpx; }
 .page {
   padding: 24rpx 32rpx 60rpx;
 }

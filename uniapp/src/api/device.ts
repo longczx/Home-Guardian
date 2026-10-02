@@ -22,6 +22,7 @@ export function updateDevice(
   id: number,
   data: {
     name?: string;
+  report_interval_sec?: number;
     location?: string;
     type?: string;
     capability?: Capability | null;

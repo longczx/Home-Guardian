@@ -271,6 +271,13 @@ class MqttSubscriber
         try {
             $cacheKey = "hg:device:latest:{$deviceId}";
             $this->redisCache->setEx($cacheKey, 3600, json_encode($data));
+            $observationKey = "hg:device:observations:{$deviceId}";
+            $observations = json_decode($this->redisCache->get($observationKey) ?: '{}', true) ?: [];
+            foreach ($data as $key => $value) {
+                if ($key === 'timestamp' || $key === 'request_id') continue;
+                $observations[$key] = ['value'=>$value, 'ts'=>date('c')];
+            }
+            $this->redisCache->setEx($observationKey, 86400, json_encode($observations));
         } catch (\Throwable $e) {
             Log::error("Redis 缓存写入失败: {$e->getMessage()}");
             // 尝试重连

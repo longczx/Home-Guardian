@@ -125,23 +125,10 @@ class TelemetryController
             return api_error('无权访问该设备数据', 403, 1004);
         }
 
-        // 尝试从 Redis 获取最新数据
-        $cacheKey = "device:latest:{$deviceId}";
-        $cached = \support\Redis::connection('default')->get($cacheKey);
-
-        if ($cached) {
-            $data = json_decode($cached, true) ?: [];
-            // 转换为与数据库查询一致的格式: [{metric_key, value, ts}, ...]
-            $now = date('Y-m-d\TH:i:sP');
+        $observations = json_decode(\support\Redis::connection('default')->get("device:observations:{$deviceId}") ?: '{}', true) ?: [];
+        if ($observations) {
             $result = [];
-            foreach ($data as $key => $value) {
-                if ($key === 'timestamp' || $key === 'request_id') continue;
-                $result[] = [
-                    'metric_key' => $key,
-                    'value'      => $value,
-                    'ts'         => $now,
-                ];
-            }
+            foreach ($observations as $key => $reading) $result[] = ['metric_key'=>$key, 'value'=>$reading['value'], 'ts'=>$reading['ts']];
             return api_success($result);
         }
 

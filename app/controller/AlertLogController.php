@@ -159,7 +159,7 @@ class AlertLogController
             return $resp;
         }
 
-        $alertLog = AlertService::resolveAlert($id);
+        $alertLog = AlertService::resolveAlert($id, $request->userId());
 
         AuditService::log($request, 'update', 'alert_log', $id, [
             'action' => 'resolve',
@@ -263,7 +263,7 @@ class AlertLogController
             ->where('device_id', $deviceId)
             ->whereIn('status', [AlertLog::STATUS_TRIGGERED, AlertLog::STATUS_ACKNOWLEDGED])
             ->update([
-                'status' => AlertLog::STATUS_RESOLVED,
+                'status' => AlertLog::STATUS_RESOLVED, 'resolved_at'=>now(), 'handled_by'=>$request->userId(), 'handled_at'=>now(),
             ]);
 
         return api_success(['updated' => $count], "已批量解决 {$count} 条告警");

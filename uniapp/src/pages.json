@@ -1,5 +1,7 @@
 {
   "pages": [
+    { "path": "pages/manage/rooms", "style": { "navigationBarTitleText": "房间管理" } },
+    { "path": "pages/manage/home-mode", "style": { "navigationBarTitleText": "家庭模式" } },
     { "path": "pages/device/diagnostics", "style": { "navigationBarTitleText": "设备诊断", "enablePullDownRefresh": true } },
     { "path": "pages/manage/automation-runs", "style": { "navigationBarTitleText": "自动化执行记录", "enablePullDownRefresh": true } },
     { "path": "pages/manage/backups", "style": { "navigationBarTitleText": "备份与恢复", "enablePullDownRefresh": true } },

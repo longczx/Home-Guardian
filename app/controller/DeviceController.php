@@ -115,7 +115,8 @@ class DeviceController
         }
 
         // 附带执行器当前状态（供前端动态控制 UI 初始化）
-        $data = $device->toArray();
+        $data = \app\service\DevicePresentationService::describe($device);
+        $data['is_favorite'] = (new Device)->getConnection()->table('device_preferences')->where('user_id', $request->userId())->where('device_id', $id)->where('is_favorite', true)->exists();
         $data['state'] = $device->capability
             ? (ActuatorService::getState($device->id) ?? (object)[])
             : (object)[];
@@ -340,7 +341,7 @@ class DeviceController
 
         // 经执行器服务：按设备能力校验 → 合并/直发 → 状态双写 → 推 WS
         // 校验失败抛 BusinessException，由全局异常处理器转为 JSON 错误响应
-        $commandLog = ActuatorService::applyCommand($device, $action, $params);
+        $commandLog = \app\service\DeviceControlService::send($device, $action, $params, true);
 
         AuditService::log($request, 'command_send', 'device', $id, [
             'request_id' => $commandLog->request_id,
