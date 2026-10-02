@@ -61,7 +61,15 @@ class HomeExperienceController
     {
         $automation = Automation::withoutGlobalScopes()->where('home_id', $request->user->home_id)->find($id);
         if (!$automation) return api_error('自动化规则不存在', 404, 4001);
-        foreach (AutomationPolicyService::deviceIds($automation) as $deviceId) if (!$this->device($request, (int)$deviceId)) return api_error('无权读取规则涉及的设备', 403, 1004);
+        foreach (AutomationPolicyService::deviceIds($automation) as $deviceId) {
+            $device = Device::withoutGlobalScopes()->find((int)$deviceId);
+            if (!$device) {
+                // Full-home administrators may diagnose stale rules; restricted users cannot infer a deleted device's location.
+                if (!empty($request->user->locations)) return api_error('无权读取规则涉及的设备', 403, 1004);
+                continue;
+            }
+            if ((int)$device->home_id !== (int)$request->user->home_id || !$request->canAccessLocation($device->location)) return api_error('无权读取规则涉及的设备', 403, 1004);
+        }
         return api_success(AutomationPolicyService::preview($automation));
     }
     public function rooms(Request $request)
