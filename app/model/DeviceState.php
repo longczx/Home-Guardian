@@ -26,13 +26,13 @@ class DeviceState extends Model
 
     protected $fillable = [
         'device_id',
-        'state',
+        'state', 'reported_state',
         'reported_at',
         'updated_at',
     ];
 
     protected $casts = [
-        'state'       => 'array',
+        'state'       => 'array', 'reported_state' => 'array',
         'reported_at' => 'datetime',
         'updated_at'  => 'datetime',
     ];

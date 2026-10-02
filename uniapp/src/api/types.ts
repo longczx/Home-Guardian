@@ -53,6 +53,16 @@ export interface Device {
   gateway_uid: string | null;
   capability: Capability | null;
   state?: Record<string, unknown>;
+  reported_state?: Record<string, unknown> | null;
+  reported_at?: string | null;
+  state_source?: string;
+  state_note?: string;
+  last_command_status?: string | null;
+  manual_override_until?: string | null;
+  is_favorite?: boolean;
+  report_interval_sec?: number;
+  data_stale?: boolean;
+  latest_metrics?: { metric_key: string; value: unknown; ts: string; fresh: boolean }[];
 }
 
 export interface LatestMetric {
@@ -79,5 +89,8 @@ export interface AlertLog {
   resolved_at: string | null;
   acknowledged_at: string | null;
   triggered_value: unknown;
+  handling_note?: string | null;
+  handled_at?: string | null;
+  recovered_at?: string | null;
   message: string | null;
 }

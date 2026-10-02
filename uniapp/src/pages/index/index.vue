@@ -3,24 +3,33 @@ import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app';
 import PageHeader from '@/components/PageHeader.vue';
-import { getDevices, sendCommand } from '@/api/device';
-import { getAlertLogs as fetchAlerts } from '@/api/alert';
+import { sendCommand, getCommandResult } from '@/api/device';
+import { getHomeOverview, modes, type HomeMode } from '@/api/experience';
+import { withCommandResult } from '@/utils/command-result';
+import { useAuthStore } from '@/stores/auth';
 import type { Device, ControlPoint } from '@/api/types';
 import { ensureReady, toast } from '@/utils/guard';
 import { timeAgo } from '@/utils/format';
 import { onWs } from '@/utils/ws';
 
 const { t } = useI18n();
+const auth = useAuthStore();
+const mode = ref<HomeMode>('home');
+const onlyFavorites = ref(false);
+const pendingDevices = ref<number[]>([]);
+function openMode() { uni.navigateTo({ url: '/pages/manage/home-mode' }); }
+function openAlerts() { uni.switchTab({ url: '/pages/alerts/alerts' }); }
 const ALL = '\u0000all'; // 房间「全部」的内部标识，避免与真实房间名冲突
 const devices = ref<Device[]>([]);
 const activeAlerts = ref(0);
 const room = ref(ALL);
+const configuredRooms = ref<string[]>([]);
 const loading = ref(false);
 
 const rooms = computed(() => {
   const set = new Set<string>();
   devices.value.forEach((d) => d.location && set.add(d.location));
-  return [ALL, ...Array.from(set)];
+  return [ALL, ...Array.from(new Set([...configuredRooms.value, ...Array.from(set)]))];
 });
 
 function roomLabel(r: string): string {
@@ -28,7 +37,7 @@ function roomLabel(r: string): string {
 }
 
 const filtered = computed(() =>
-  room.value === ALL ? devices.value : devices.value.filter((d) => d.location === room.value),
+  devices.value.filter((d) => (room.value === ALL || d.location === room.value) && (!onlyFavorites.value || d.is_favorite)).sort((a, b) => Number(!!b.is_favorite) - Number(!!a.is_favorite)),
 );
 
 const stats = computed(() => {
@@ -51,8 +60,10 @@ function switchState(d: Device, ctrl: ControlPoint): boolean {
 /** 首个遥测指标的展示值 */
 function primaryMetric(d: Device): { text: string; unit: string } | null {
   const f = d.metric_fields?.[0];
-  if (!f || !d.state) return null;
-  const v = d.state[f.key];
+  if (!f) return null;
+  const reading = d.latest_metrics?.find((m) => m.metric_key === f.key);
+  if (!reading?.fresh) return { text: '数据过期', unit: '' };
+  const v = reading.value;
   if (v === undefined || v === null) return null;
   return { text: String(v), unit: f.unit || '' };
 }
@@ -61,13 +72,11 @@ async function load() {
   if (!ensureReady()) return;
   loading.value = true;
   try {
-    const [devPage, alertPage] = await Promise.all([
-      getDevices({ per_page: 100 }),
-      fetchAlerts({ status: 'triggered', per_page: 1 }),
-    ]);
-    // 网关是通信中枢，不作为可控/可看的家居设备展示在首页
-    devices.value = (devPage.items ?? []).filter((d) => d.type !== 'gateway');
-    activeAlerts.value = alertPage.total;
+    const overview = await getHomeOverview();
+    devices.value = overview.devices.filter((d) => d.type !== 'gateway');
+    mode.value = overview.mode;
+    configuredRooms.value = overview.rooms;
+    activeAlerts.value = overview.active_alerts;
   } catch (e) {
     toast((e as Error).message);
   } finally {
@@ -76,16 +85,20 @@ async function load() {
 }
 
 async function toggle(d: Device, ctrl: ControlPoint) {
+  if (pendingDevices.value.includes(d.id) || !d.is_online) return;
+  pendingDevices.value.push(d.id);
   const next = !switchState(d, ctrl);
   // 乐观更新
   if (!d.state) d.state = {};
   d.state[ctrl.state_key || ctrl.key] = next;
   try {
-    await sendCommand(d.id, { action: ctrl.command, params: { [ctrl.param]: next } });
+    await withCommandResult(() => sendCommand(d.id, { action: ctrl.command, params: { [ctrl.param]: next } }), 65000, getCommandResult);
+    toast(d.type === 'ac' ? '红外已发送，实际状态请核对' : '设备已确认');
+    await load();
   } catch (e) {
     d.state[ctrl.state_key || ctrl.key] = !next; // 回滚
     toast((e as Error).message);
-  }
+  } finally { pendingDevices.value = pendingDevices.value.filter((id) => id !== d.id); }
 }
 
 function openDevice(d: Device) {
@@ -110,6 +123,8 @@ function subscribe() {
     onWs('telemetry', (m) => {
       const d = find(m.device_id);
       if (d && m.data && typeof m.data === 'object') {
+        d.latest_metrics = Object.entries(m.data as Record<string, unknown>).filter(([key]) => key !== 'timestamp' && key !== 'request_id').map(([metric_key, value]) => ({ metric_key, value, ts: new Date().toISOString(), fresh: true }));
+        d.data_stale = false;
         d.state = { ...(d.state || {}), ...(m.data as Record<string, unknown>) };
         d.is_online = true;
       }
@@ -135,6 +150,7 @@ onPullDownRefresh(async () => {
   <view class="page">
     <PageHeader :title="t('home.title')" :subtitle="loading ? t('home.refreshing') : t('home.connected')" />
 
+    <view class="mode-line"><text @tap="auth.canManage && openMode()">家庭模式：{{ modes.find((m) => m.value === mode)?.label }} {{ auth.canManage ? '›' : '' }}</text><text @tap="onlyFavorites = !onlyFavorites">{{ onlyFavorites ? '查看全部' : '只看常用' }}</text></view>
     <!-- 状态横幅 -->
     <view class="banner">
       <view class="stat">
@@ -148,7 +164,7 @@ onPullDownRefresh(async () => {
       <view class="stat">
         <text class="big">{{ stats.offline }}</text><text class="lbl">{{ t('home.offline') }}</text>
       </view>
-      <view v-if="activeAlerts > 0" class="alert-chip" @tap="uni.switchTab({ url: '/pages/alerts/alerts' })">
+      <view v-if="activeAlerts > 0" class="alert-chip" @tap="openAlerts">
         <view class="dot" />
         <text>{{ t('home.activeAlerts', { n: activeAlerts }) }}</text>
       </view>
@@ -179,10 +195,11 @@ onPullDownRefresh(async () => {
           <view class="dev-dot" :class="{ gray: !d.is_online }" />
         </view>
         <view class="dev-mid">
-          <text class="dev-name">{{ d.name }}</text>
+          <text class="dev-name">{{ d.is_favorite ? '★ ' : '' }}{{ d.name }}</text>
           <text class="dev-meta">{{ d.location || '未分组' }} · {{ d.is_online ? timeAgo(d.last_seen) : '离线' }}</text>
         </view>
 
+        <text v-if="d.capability" class="dev-meta">{{ d.type === 'ac' ? '期望状态 · 实际未验证' : d.state_source === 'device_report' ? '有设备上报' : '期望状态' }}{{ pendingDevices.includes(d.id) ? ' · 等待回执' : '' }}</text>
         <!-- 快捷开关 or 遥测值 -->
         <view class="dev-foot">
           <view
@@ -205,6 +222,7 @@ onPullDownRefresh(async () => {
 </template>
 
 <style lang="scss" scoped>
+.mode-line { display: flex; justify-content: space-between; margin: 0 32rpx 20rpx; font-size: 26rpx; color: $hg-accent; }
 .page {
   min-height: 100vh;
   padding-bottom: 40rpx;

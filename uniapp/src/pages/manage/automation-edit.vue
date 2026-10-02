@@ -3,8 +3,9 @@ import { switchValue } from '@/utils/events';
 import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
-  getAutomation, createAutomation, updateAutomation, type AutomationInput,
+  getAutomation, createAutomation, updateAutomation, type AutomationInput, type AutomationAction,
 } from '@/api/automation';
+import { modes, previewAutomation, type RulePreview } from '@/api/experience';
 import { getDevices } from '@/api/device';
 import { getChannels, type NotificationChannel } from '@/api/channel';
 import { CONDITIONS } from '@/api/alertRule';
@@ -16,7 +17,37 @@ const saving = ref(false);
 const devices = ref<Device[]>([]);
 const channels = ref<NotificationChannel[]>([]);
 
-// 简化模型：单触发 + 单动作
+const policyModes = ref<string[]>([]);
+const conditionLogic = ref('all');
+const conditions = ref<{ device_id: number; metric_key: string; condition: string; value: number; max_age_sec: number }[]>([]);
+const maxAge = ref(900); const windowStart = ref(''); const windowEnd = ref('');
+const preview = ref<RulePreview | null>(null);
+const originalConfig = ref<Record<string, unknown>>({});
+const actionDrafts = ref<AutomationAction[]>([]); const selectedAction = ref(0);
+function toggleMode(mode: string) { policyModes.value = policyModes.value.includes(mode) ? policyModes.value.filter((m) => m !== mode) : [...policyModes.value, mode]; }
+function addCondition() {
+  if (!devices.value.length || conditions.value.length >= 10) return toast('请先添加设备，组合条件最多 10 项');
+  uni.showActionSheet({ itemList: devices.value.map((d) => d.name), success: (r) => { const d = devices.value[r.tapIndex]; conditions.value.push({ device_id: d.id, metric_key: d.metric_fields?.[0]?.key || '', condition: 'EQUALS', value: 0, max_age_sec: 900 }); } });
+}
+function chooseExtraCondition(index: number) { uni.showActionSheet({ itemList: CONDITIONS.map((c) => c.label), success: (r) => { conditions.value[index].condition = CONDITIONS[r.tapIndex].value; } }); }
+async function inspect() { if (!editId.value) return toast('先保存规则后可试运行'); try { preview.value = await previewAutomation(editId.value); } catch (e) { toast((e as Error).message); } }
+function selectAction(index: number) {
+  const payload = buildPayload(); if (!payload) return;
+  actionDrafts.value = payload.actions; selectedAction.value = index;
+  const action = actionDrafts.value[index];
+  f.value.actionType = action.type; f.value.actDeviceId = action.device_id; f.value.actName = action.payload?.action || ''; f.value.actionParams = JSON.stringify(action.payload?.params ?? {}); f.value.channelIds = action.channel_ids || [];
+}
+function addAction() {
+  const payload = buildPayload(); if (!payload) return;
+  actionDrafts.value = [...payload.actions, { type: 'device_command' }]; selectedAction.value = actionDrafts.value.length - 1;
+  f.value.actionType = 'device_command'; f.value.actDeviceId = undefined; f.value.actName = ''; f.value.actionParams = '{}'; f.value.channelIds = [];
+}
+function removeAction(index: number) {
+  if (actionDrafts.value.length <= 1) return toast('至少保留一个动作');
+  actionDrafts.value.splice(index, 1); selectedAction.value = 0;
+  const action = actionDrafts.value[0]; f.value.actionType = action.type; f.value.actDeviceId = action.device_id; f.value.actName = action.payload?.action || ''; f.value.actionParams = JSON.stringify(action.payload?.params ?? {}); f.value.channelIds = action.channel_ids || [];
+}
+// One trigger can carry several independent conditions and actions.
 const f = ref({
   name: '',
   description: '',
@@ -126,6 +157,7 @@ function buildPayload(): AutomationInput | null {
     trigger_config = { cron, timezone: 'Asia/Shanghai' };
   }
 
+  trigger_config = { ...originalConfig.value, ...trigger_config, modes: policyModes.value, conditions: conditions.value, condition_logic: conditionLogic.value, max_age_sec: Number(maxAge.value), time_window: windowStart.value && windowEnd.value ? { start: windowStart.value, end: windowEnd.value } : undefined };
   let action;
   if (f.value.actionType === 'device_command') {
     if (!f.value.actDeviceId) { toast('请选择执行设备'); return null; }
@@ -146,7 +178,7 @@ function buildPayload(): AutomationInput | null {
     description: f.value.description.trim() || undefined,
     trigger_type: f.value.triggerType,
     trigger_config,
-    actions: [action],
+    actions: actionDrafts.value.length ? actionDrafts.value.map((a, i) => i === selectedAction.value ? action : a) : [action],
     is_enabled: f.value.isEnabled,
   };
 }
@@ -175,6 +207,10 @@ onLoad(async (q) => {
       const a = await getAutomation(editId.value);
       const tc = a.trigger_config || {};
       const act = a.actions?.[0];
+      originalConfig.value = tc; policyModes.value = (tc.modes as string[]) || []; conditionLogic.value = (tc.condition_logic as string) || 'all';
+      conditions.value = (tc.conditions as typeof conditions.value) || []; maxAge.value = Number(tc.max_age_sec ?? 900);
+      const window = tc.time_window as { start: string; end: string } | undefined; windowStart.value = window?.start || ''; windowEnd.value = window?.end || '';
+      actionDrafts.value = a.actions || [];
       f.value = {
         name: a.name,
         description: a.description || '',
@@ -215,6 +251,14 @@ onLoad(async (q) => {
       </view>
     </view>
 
+    <view class="card"><text class="ct">执行限制与组合条件</text>
+      <view class="field"><text class="label">适用家庭模式（不选则不限）</text><view class="chips"><text v-for="mode in modes" :key="mode.value" class="chip" :class="{ on: policyModes.includes(mode.value) }" @tap="toggleMode(mode.value)">{{ mode.label }}</text></view></view>
+      <view class="field"><text class="label">触发数据有效期（秒）</text><input v-model.number="maxAge" type="number" class="input" /><text class="hint">过期数据不用于试运行判断；组合条件分别判断有效期。</text></view>
+      <view class="field"><text class="label">允许执行时间（北京时间，可跨午夜；留空则不限）</text><input v-model="windowStart" class="input" placeholder="开始 HH:MM" /><input v-model="windowEnd" class="input" placeholder="结束 HH:MM" /></view>
+      <view class="chips"><text class="chip" :class="{ on: conditionLogic === 'all' }" @tap="conditionLogic = 'all'">全部条件满足</text><text class="chip" :class="{ on: conditionLogic === 'any' }" @tap="conditionLogic = 'any'">任一条件满足</text></view>
+      <view v-for="(condition, index) in conditions" :key="index" class="field"><text class="label">{{ devices.find((d) => d.id === condition.device_id)?.name }} <text @tap="conditions.splice(index, 1)">删除</text></text><input v-model="condition.metric_key" class="input" placeholder="指标，如 temperature / door_open" /><view class="picker" @tap="chooseExtraCondition(index)">{{ CONDITIONS.find((c) => c.value === condition.condition)?.label }}</view><input v-model.number="condition.value" class="input" type="number" placeholder="比较值（布尔：1 是，0 否）" /><input v-model.number="condition.max_age_sec" class="input" type="number" placeholder="有效期秒数" /></view>
+      <button size="mini" @tap="addCondition">增加组合条件</button>
+    </view>
     <!-- 触发 -->
     <view class="card">
       <text class="ct">触发条件</text>
@@ -312,8 +356,10 @@ onLoad(async (q) => {
       </view>
     </view>
 
+    <view class="card"><text class="ct">动作列表</text><view v-for="(action, index) in actionDrafts" :key="index" class="field"><text @tap="selectAction(index)">{{ selectedAction === index ? '正在编辑 ' : '点击编辑 ' }}动作 {{ index + 1 }}：{{ action.type === 'notify' ? '通知' : action.payload?.action || '待填写' }}</text><text class="hint" @tap="removeAction(index)">删除动作</text></view><button size="mini" @tap="addAction">添加动作（先填写当前动作）</button><text class="hint">按顺序提交；每个动作独立记录回执结果。人工控制后暂停该设备自动化 30 分钟。</text></view>
+    <view v-if="editId" class="card"><button @tap="inspect">试运行已保存版本（不发送指令）</button><text v-if="preview" class="hint">{{ preview.eligible ? '当前快照满足条件' : '当前快照不满足条件' }}。{{ preview.note }}</text><text v-for="(check, i) in [...(preview?.checks || []), ...(preview?.conditions || [])]" :key="i" class="hint">{{ check.passed ? '✓' : '×' }} {{ check.label }}：{{ check.reason }}</text></view>
     <button class="btn btn-primary" :loading="saving" @tap="save">保存</button>
-    <text class="foot-hint">多动作/复杂规则请在后台配置。</text>
+    <text class="foot-hint">支持数值和布尔指标（1/0）；只有条件再次恢复并满足时才重新触发。</text>
   </view>
 </template>
 

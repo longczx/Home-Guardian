@@ -198,6 +198,25 @@ Route::group('/api/provisioning', function () {
 */
 Route::group('/api', function () {
 
+    Route::get('/rooms', [app\controller\HomeExperienceController::class, 'rooms'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::put('/rooms', [app\controller\HomeExperienceController::class, 'saveRoom'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+    Route::delete('/rooms/{id:\d+}', [app\controller\HomeExperienceController::class, 'deleteRoom'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+    Route::get('/home/overview', [app\controller\HomeExperienceController::class, 'overview'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::put('/home/mode', [app\controller\HomeExperienceController::class, 'mode'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN), AuditLogMiddleware::class]);
+    Route::put('/devices/{id:\d+}/favorite', [app\controller\HomeExperienceController::class, 'favorite'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::put('/devices/{id:\d+}/override', [app\controller\HomeExperienceController::class, 'override'])
+        ->middleware([new PermissionMiddleware('commands.send'), AuditLogMiddleware::class]);
+    Route::get('/automations/{id:\d+}/preview', [app\controller\HomeExperienceController::class, 'preview'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::patch('/alert-logs/{id:\d+}/handling', [app\controller\HomeExperienceController::class, 'handling'])
+        ->middleware([new PermissionMiddleware('alerts.ack'), AuditLogMiddleware::class]);
+
     /* ---------- 认证相关（仅需登录） ---------- */
     Route::get('/auth/me', [app\controller\AuthController::class, 'me']);
     Route::post('/auth/logout', [app\controller\AuthController::class, 'logout']);

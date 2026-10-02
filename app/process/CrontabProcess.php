@@ -84,7 +84,7 @@ class CrontabProcess
 
                     $cron = new CronExpression($cronExpr);
 
-                    if (!$cron->isDue()) {
+                    if (!$cron->isDue(now()->setTimezone($config['timezone'] ?? 'Asia/Shanghai'))) {
                         continue;
                     }
 

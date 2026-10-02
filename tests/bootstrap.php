@@ -49,6 +49,7 @@ $capsule->bootEloquent();
 $capsule->schema()->create('devices', function ($table) {
     $table->id();
     $table->unsignedBigInteger('home_id')->default(1);
+    $table->timestamp('manual_override_until')->nullable(); $table->unsignedInteger('report_interval_sec')->default(300);
     $table->string('device_uid')->unique();
     $table->string('name');
     $table->string('type')->default('sensor');
@@ -135,7 +136,7 @@ $capsule->schema()->create('automations', function ($table) {
 });
 
 $capsule->schema()->create('homes', function ($table) {
-    $table->id(); $table->string('name'); $table->unsignedBigInteger('created_by')->nullable(); $table->timestamps();
+    $table->id(); $table->string('name'); $table->string('mode')->default('home'); $table->timestamp('mode_changed_at')->nullable(); $table->unsignedBigInteger('created_by')->nullable(); $table->timestamps();
 });
 $capsule->schema()->create('automation_runs', function ($table) {
     $table->id(); $table->unsignedBigInteger('home_id'); $table->unsignedBigInteger('automation_id');
@@ -145,7 +146,7 @@ $capsule->schema()->create('automation_runs', function ($table) {
     $table->timestamp('started_at'); $table->timestamp('finished_at')->nullable();
 });
 $capsule->schema()->create('device_states', function ($table) {
-    $table->unsignedBigInteger('device_id')->primary(); $table->json('state');
+    $table->unsignedBigInteger('device_id')->primary(); $table->json('state'); $table->json('reported_state')->nullable();
     $table->timestamp('reported_at')->nullable(); $table->timestamp('updated_at')->nullable();
 });
 $capsule->schema()->create('telemetry_logs', function ($table) {
@@ -158,3 +159,8 @@ $capsule->schema()->create('notification_deliveries', function ($table) {
     $table->unsignedInteger('attempts')->default(0); $table->text('last_error')->nullable();
     $table->timestamp('next_attempt_at')->nullable(); $table->timestamp('sent_at')->nullable(); $table->timestamps();
 });
+
+$capsule->schema()->create('device_preferences', function ($t) { $t->id(); $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('device_id'); $t->boolean('is_favorite')->default(false); $t->unique(['user_id','device_id']); });
+$capsule->schema()->create('alert_logs', function ($t) { $t->id(); $t->unsignedBigInteger('home_id')->default(1); $t->unsignedBigInteger('rule_id'); $t->unsignedBigInteger('device_id'); $t->string('status'); $t->string('severity')->nullable(); $t->json('triggered_value')->nullable(); $t->timestamp('triggered_at'); $t->timestamp('acknowledged_at')->nullable(); $t->unsignedBigInteger('acknowledged_by')->nullable(); $t->timestamp('resolved_at')->nullable(); $t->text('handling_note')->nullable(); $t->unsignedBigInteger('handled_by')->nullable(); $t->timestamp('handled_at')->nullable(); $t->timestamp('recovered_at')->nullable(); });
+
+$capsule->schema()->create('rooms', function ($t) { $t->id(); $t->unsignedBigInteger('home_id'); $t->string('name'); $t->integer('sort_order')->default(0); $t->unique(['home_id','name']); });

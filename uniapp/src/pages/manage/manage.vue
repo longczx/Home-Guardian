@@ -15,6 +15,8 @@ onShow(() => {
 });
 
 const items = computed(() => [
+  { key: 'rooms', title: '房间管理', sub: '添加房间、调整首页顺序', url: '/pages/manage/rooms' },
+  { key: 'home-mode', title: '家庭模式', sub: '在家、离家、睡眠及规则适用范围', url: '/pages/manage/home-mode' },
   { key: 'devices', title: t('manage.devices'), sub: t('manage.devicesSub'), url: '/pages/manage/devices' },
   { key: 'alert-rules', title: t('manage.rules'), sub: t('manage.rulesSub'), url: '/pages/manage/alert-rules' },
   { key: 'channels', title: t('manage.channels'), sub: t('manage.channelsSub'), url: '/pages/manage/channels' },

@@ -88,8 +88,9 @@ class ActuatorService
      *
      * @throws BusinessException
      */
-    private static function validate(array $cap, string $action, array $params): void
+    public static function validate(array $cap, string $action, array $params): void
     {
+        if (empty($cap['controls']) || !is_array($cap['controls'])) throw new BusinessException('该设备未配置控制能力', 422, 2100);
         // action => [param => controlPoint]
         $commands = [];
         foreach ($cap['controls'] as $c) {
@@ -239,6 +240,7 @@ class ActuatorService
         $attrs = ['state' => $state, 'updated_at' => now()];
         if ($reported) {
             $attrs['reported_at'] = now();
+            $attrs['reported_state'] = $state;
         }
 
         DeviceState::updateOrCreate(['device_id' => $deviceId], $attrs);

@@ -14,6 +14,7 @@ const name = ref('');
 const location = ref('');
 const type = ref('');
 const saving = ref(false);
+const reportInterval = ref(300);
 
 // 设备类型：决定 App 里的归类与图标；ac/switch/light/curtain 为执行器类，
 // 配合「能力模板」才会渲染出控制卡。gateway 另有含义（见 chooseType 提示）。
@@ -137,6 +138,7 @@ async function load() {
   try {
     const [d, list] = await Promise.all([getDevice(id.value), getMetricDefinitions().catch(() => [])]);
     device.value = d;
+    reportInterval.value = d.report_interval_sec ?? 300;
     name.value = d.name;
     location.value = d.location || '';
     type.value = d.type || '';
@@ -165,6 +167,7 @@ async function save() {
   saving.value = true;
   try {
     await updateDevice(id.value, {
+      report_interval_sec: Number(reportInterval.value),
       name: name.value.trim(),
       location: location.value.trim(),
       type: type.value || undefined,
@@ -228,6 +231,7 @@ onLoad((q) => {
       </view>
     </view>
 
+    <view class="card"><text class="label">预计上报周期（秒，10-86400）</text><input v-model.number="reportInterval" type="number" /><text class="hint">超过周期三倍，数据标记过期；也用于传感器离线判断。网关心跳单独判断。</text></view>
     <!-- 遥测指标：从字典勾选 -->
     <view class="card">
       <view class="mhead">

@@ -26,6 +26,7 @@ onPullDownRefresh(() => load(true));
       <text>{{ run.started_at }} · {{ run.trigger_type === 'schedule' ? '定时触发' : '数据条件触发' }}</text>
       <text v-if="run.trigger_type === 'telemetry'">{{ run.trigger_context.metric_key }}：{{ run.trigger_context.observed_value }}；阈值 {{ run.trigger_context.value }}</text>
       <text v-else>计划：{{ run.trigger_context.cron }}</text>
+      <text v-for="(check, index) in (run.trigger_context.policy as any)?.checks" :key="'check-' + index">{{ check.passed ? '✓' : '跳过' }} {{ check.label }}：{{ check.reason }}</text>
       <view v-for="action in run.action_results" :key="action.index" class="row">
         <text>动作 {{ action.index + 1 }}：{{ action.type === 'notify' ? '通知' : action.action || '设备控制' }} · {{ statusLabel(action.status) }}</text>
         <text v-if="action.command_status">{{ statusLabel(action.command_status) }}</text>

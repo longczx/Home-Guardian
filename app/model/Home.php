@@ -21,11 +21,12 @@ class Home extends Model
     protected $table = 'homes';
 
     protected $fillable = [
-        'name',
+        'name', 'mode', 'mode_changed_at',
         'created_by',
     ];
 
     protected $casts = [
+        'mode_changed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -35,7 +35,7 @@ class Device extends Model
      * mqtt_password_hash 不在此列，密码哈希由 Service 层控制写入。
      */
     protected $fillable = [
-        'home_id',
+        'home_id', 'manual_override_until', 'report_interval_sec',
         'device_uid',
         'name',
         'type',
@@ -63,6 +63,7 @@ class Device extends Model
      * 属性类型转换
      */
     protected $casts = [
+        'manual_override_until' => 'datetime', 'report_interval_sec' => 'integer',
         'is_online'     => 'boolean',
         'last_seen'     => 'datetime',
         'created_at'    => 'datetime',
