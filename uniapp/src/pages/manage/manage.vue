@@ -19,6 +19,8 @@ const items = computed(() => [
   { key: 'alert-rules', title: t('manage.rules'), sub: t('manage.rulesSub'), url: '/pages/manage/alert-rules' },
   { key: 'channels', title: t('manage.channels'), sub: t('manage.channelsSub'), url: '/pages/manage/channels' },
   { key: 'automations', title: t('manage.automations'), sub: t('manage.automationsSub'), url: '/pages/manage/automations' },
+  { key: 'automation-runs', title: '自动化执行记录', sub: '查看触发原因与每个动作的结果', url: '/pages/manage/automation-runs' },
+  ...(auth.user?.home_role === 'owner' ? [{ key: 'backups', title: '备份与恢复', sub: '查看服务器备份结果与恢复说明', url: '/pages/manage/backups' }] : []),
 ]);
 
 function open(url: string) {

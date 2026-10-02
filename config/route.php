@@ -254,6 +254,14 @@ Route::group('/api', function () {
         ->middleware([new PermissionMiddleware('devices.view')]);
 
     /* ---------- 设备管理 ---------- */
+    Route::get('/backups', [app\controller\BackupController::class, 'index'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_OWNER)]);
+    Route::get('/automation-runs', [app\controller\AutomationRunController::class, 'index'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::get('/devices/{id:\d+}/diagnostics', [app\controller\DeviceDiagnosticsController::class, 'show'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
+    Route::post('/devices/{id:\d+}/diagnostics/probe', [app\controller\DeviceDiagnosticsController::class, 'probe'])
+        ->middleware([new PermissionMiddleware('commands.send'), new app\middleware\RateLimitMiddleware('diagnostics', 5, 60), AuditLogMiddleware::class]);
     Route::get('/devices', [app\controller\DeviceController::class, 'index'])
         ->middleware([new PermissionMiddleware('devices.view')]);
     Route::get('/devices/{id:\d+}', [app\controller\DeviceController::class, 'show'])

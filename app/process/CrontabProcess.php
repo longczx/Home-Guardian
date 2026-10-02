@@ -39,6 +39,13 @@ class CrontabProcess
         // 每 60 秒做一次设备心跳超时扫描（兜底 LWT 未触发的静默离线）
         Timer::add(60, [$this, 'sweepOfflineDevices']);
         Timer::add(5, [$this, 'expireCommands']);
+        Timer::add(10, function () {
+            try {
+                foreach (\app\model\AutomationRun::withoutGlobalScopes()->where('status', 'running')->orderBy('id')->limit(100)->get() as $run) {
+                    \app\service\AutomationRunService::refresh($run);
+                }
+            } catch (\Throwable $e) { Log::error('自动化执行记录更新失败: ' . $e->getMessage()); }
+        });
 
         Log::info('CrontabProcess 定时自动化进程已启动');
     }

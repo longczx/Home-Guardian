@@ -145,24 +145,41 @@ class AutomationService
      *
      * @param Automation $automation 自动化规则实例
      */
-    public static function executeActions(Automation $automation): void
+    public static function executeActions(Automation $automation, array $context = []): void
     {
+        // Database defaults are not hydrated on a newly created Eloquent instance.
+        if (!$automation->home_id) $automation->refresh();
         $actions = $automation->actions ?? [];
+        $deviceIds = array_column($actions, 'device_id');
+        if (isset($automation->trigger_config['device_id'])) $deviceIds[] = $automation->trigger_config['device_id'];
+        $locations = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->whereIn('id', $deviceIds)
+            ->pluck('location')->unique()->values()->all();
+        $run = \app\model\AutomationRun::create(['home_id'=>$automation->home_id, 'automation_id'=>$automation->id,
+            'automation_name'=>$automation->name, 'trigger_type'=>$automation->trigger_type,
+            'trigger_context'=>array_merge($automation->trigger_config ?? [], $context), 'locations'=>$locations,
+            'action_results'=>[], 'started_at'=>now(), 'status'=>'running']);
+        $results = [];
 
         foreach ($actions as $index => $action) {
             try {
-                match ($action['type'] ?? '') {
+                $result = match ($action['type'] ?? '') {
                     Automation::ACTION_DEVICE_COMMAND => self::executeDeviceCommand($action, $automation),
                     Automation::ACTION_NOTIFY         => self::executeNotify($action, $automation),
-                    default => Log::warning("未知的自动化动作类型: " . ($action['type'] ?? 'null')),
+                    default => throw new BusinessException('未知的自动化动作类型', 422, 4002),
                 };
+                $results[] = array_merge(['index'=>$index, 'type'=>$action['type'], 'status'=>'pending'], $result);
             } catch (\Throwable $e) {
+                $results[] = ['index'=>$index, 'type'=>$action['type'] ?? '', 'status'=>'failed',
+                    'error'=>$e instanceof BusinessException ? $e->getMessage() : '提交动作失败，请检查服务日志'];
                 Log::error("自动化 [{$automation->name}] 动作 #{$index} 执行失败: {$e->getMessage()}");
             }
+            $run->update(['action_results'=>$results]);
         }
 
         // 更新最后触发时间
         $automation->update(['last_triggered_at' => now()]);
+        $run->update(['submission_finished'=>true]);
+        AutomationRunService::refresh($run);
     }
 
     /**
@@ -172,21 +189,21 @@ class AutomationService
      *
      * @param array $action 动作配置，如 {"type": "device_command", "device_id": 2, "payload": {"action": "turn_on"}}
      */
-    private static function executeDeviceCommand(array $action, Automation $automation): void
+    private static function executeDeviceCommand(array $action, Automation $automation): array
     {
         $deviceId = $action['device_id'] ?? null;
         $payload = $action['payload'] ?? [];
 
         if (!$deviceId) {
-            Log::warning('自动化设备控制动作缺少 device_id');
-            return;
+            throw new BusinessException('自动化设备控制动作缺少 device_id', 422, 4002);
         }
 
         $device = Device::withoutGlobalScopes()->where('home_id', $automation->home_id)->find($deviceId);
         if (!$device) throw new BusinessException('自动化目标设备不属于当前家庭', 422, 4002);
-        ActuatorService::applyCommand($device, $payload['action'] ?? '', $payload['params'] ?? []);
+        $command = ActuatorService::applyCommand($device, $payload['action'] ?? '', $payload['params'] ?? []);
 
         Log::info("自动化: 已向设备 {$deviceId} 发送控制指令", $payload);
+        return ['device_id'=>$deviceId, 'action'=>$payload['action'] ?? '', 'command_id'=>$command->id, 'request_id'=>$command->request_id];
     }
 
     /**
@@ -197,18 +214,19 @@ class AutomationService
      * @param array      $action     动作配置，如 {"type": "notify", "channel_ids": [1, 3]}
      * @param Automation $automation 所属的自动化规则（用于生成通知标题）
      */
-    private static function executeNotify(array $action, Automation $automation): void
+    private static function executeNotify(array $action, Automation $automation): array
     {
         $channelIds = \app\model\NotificationChannel::withoutGlobalScopes()
             ->where('home_id', $automation->home_id)->whereIn('id', $action['channel_ids'] ?? [])->pluck('id')->all();
 
         if (empty($channelIds)) {
-            return;
+            throw new BusinessException('没有可用的通知渠道', 422, 4002);
         }
 
         // 推入通知队列由 NotificationProcess 异步发送，避免在告警引擎事件循环里同步阻塞
+        $taskId = bin2hex(random_bytes(16));
         $task = json_encode([
-            'task_id' => bin2hex(random_bytes(16)),
+            'task_id' => $taskId,
             'channel_ids' => $channelIds,
             'title'       => "自动化触发: {$automation->name}",
             'content'     => $automation->description ?: "自动化规则 [{$automation->name}] 已触发执行",
@@ -216,6 +234,7 @@ class AutomationService
         ], JSON_UNESCAPED_UNICODE);
 
         Redis::connection('queue')->lPush('notify:queue', $task);
+        return ['task_id'=>$taskId, 'channel_ids'=>$channelIds];
     }
 
     /**
@@ -301,7 +320,7 @@ class AutomationService
             // 持续满足只触发一次；条件恢复后才解除，进程重启仍保留状态。
             if (!$redis->setnx($latch, '1')) return;
             $redis->set("automation:last:{$automation->id}", time());
-            self::executeActions($automation);
+            self::executeActions($automation, ['device_id'=>$deviceId, 'metric_key'=>$metricKey, 'observed_value'=>$value]);
         }
     }
 

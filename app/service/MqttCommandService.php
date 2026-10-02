@@ -109,7 +109,7 @@ class MqttCommandService
         if (!in_array($status, [CommandLog::STATUS_REPLIED_OK, CommandLog::STATUS_REPLIED_ERROR], true)) return;
 
         $changed = CommandLog::where('id', $commandLog->id)->pending()->update([
-            'status' => $status, 'replied_at' => now(),
+            'status' => $status, 'replied_at' => now(), 'reply' => json_encode($replyData, JSON_UNESCAPED_UNICODE),
         ]);
         if (!$changed) return;
 

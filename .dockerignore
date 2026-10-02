@@ -19,3 +19,4 @@ PROJECT_BLUEPRINT.md
 firmware/include/config.h
 uniapp/dist/
 docker-compose.test.yml
+**/__pycache__/
