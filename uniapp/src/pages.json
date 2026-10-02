@@ -1,5 +1,8 @@
 {
   "pages": [
+    { "path": "pages/device/diagnostics", "style": { "navigationBarTitleText": "设备诊断", "enablePullDownRefresh": true } },
+    { "path": "pages/manage/automation-runs", "style": { "navigationBarTitleText": "自动化执行记录", "enablePullDownRefresh": true } },
+    { "path": "pages/manage/backups", "style": { "navigationBarTitleText": "备份与恢复", "enablePullDownRefresh": true } },
     { "path": "pages/manage/deliveries", "style": { "navigationBarTitleText": "通知投递记录" } },
     {
       "path": "pages/index/index",

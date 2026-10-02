@@ -14,6 +14,9 @@ const latest = ref<LatestMetric[]>([]);
 const loading = ref(false);
 const commandPending = ref(false);
 const commandStatus = ref('');
+function openDiagnostics() {
+  uni.navigateTo({ url: '/pages/device/diagnostics?id=' + id.value });
+}
 
 const controls = computed<ControlPoint[]>(() => device.value?.capability?.controls ?? []);
 
@@ -159,6 +162,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
     </view>
 
     <!-- Hero -->
+    <button @tap="openDiagnostics">设备诊断</button>
     <view v-if="hero" class="hero">
       <view class="hero-num">
         <text class="num">{{ hero.value }}</text><text class="unit">{{ hero.unit }}</text>

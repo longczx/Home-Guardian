@@ -15,3 +15,5 @@
 uniapp/node_modules/
 uniapp/dist/
 uniapp/unpackage/
+__pycache__/
+*.pyc

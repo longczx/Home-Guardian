@@ -125,7 +125,7 @@ $capsule->schema()->create('refresh_tokens', function ($table) {
 $capsule->schema()->create('command_logs', function ($table) {
     $table->id(); $table->string('request_id')->unique(); $table->unsignedBigInteger('device_id');
     $table->string('topic'); $table->json('payload'); $table->string('status');
-    $table->timestamp('sent_at'); $table->timestamp('replied_at')->nullable();
+    $table->timestamp('sent_at'); $table->timestamp('replied_at')->nullable(); $table->json('reply')->nullable();
 });
 $capsule->schema()->create('automations', function ($table) {
     $table->id(); $table->unsignedBigInteger('home_id')->default(1); $table->string('name');
@@ -136,6 +136,20 @@ $capsule->schema()->create('automations', function ($table) {
 
 $capsule->schema()->create('homes', function ($table) {
     $table->id(); $table->string('name'); $table->unsignedBigInteger('created_by')->nullable(); $table->timestamps();
+});
+$capsule->schema()->create('automation_runs', function ($table) {
+    $table->id(); $table->unsignedBigInteger('home_id'); $table->unsignedBigInteger('automation_id');
+    $table->string('automation_name'); $table->string('trigger_type'); $table->json('trigger_context');
+    $table->json('locations'); $table->json('action_results'); $table->string('status');
+    $table->boolean('submission_finished')->default(false);
+    $table->timestamp('started_at'); $table->timestamp('finished_at')->nullable();
+});
+$capsule->schema()->create('device_states', function ($table) {
+    $table->unsignedBigInteger('device_id')->primary(); $table->json('state');
+    $table->timestamp('reported_at')->nullable(); $table->timestamp('updated_at')->nullable();
+});
+$capsule->schema()->create('telemetry_logs', function ($table) {
+    $table->timestamp('ts'); $table->unsignedBigInteger('device_id'); $table->string('metric_key'); $table->json('value');
 });
 $capsule->schema()->create('notification_deliveries', function ($table) {
     $table->id(); $table->unsignedBigInteger('home_id'); $table->string('delivery_key', 64)->unique();

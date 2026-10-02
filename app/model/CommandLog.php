@@ -29,10 +29,12 @@ class CommandLog extends Model
         'status',
         'sent_at',
         'replied_at',
+        'reply',
     ];
 
     protected $casts = [
         'payload'    => 'array',   // JSONB → PHP 数组
+        'reply' => 'array',
         'sent_at'    => 'datetime',
         'replied_at' => 'datetime',
     ];
