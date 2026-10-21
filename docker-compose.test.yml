@@ -63,7 +63,6 @@ services:
     working_dir: /app
     volumes:
       - .:/source:ro
-      - test_vendor:/source/vendor:ro
     environment:
       DB_HOST: postgres
       POSTGRES_USER: guardian_test
