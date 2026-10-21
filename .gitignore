@@ -10,6 +10,7 @@
 
 # Build output
 /public/app/
+/output/firmware/
 
 # uni-app client
 uniapp/node_modules/

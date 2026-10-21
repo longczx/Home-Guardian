@@ -6,7 +6,7 @@
 // =====================================================================
 
 // ─── 固件版本 ─────────────────────────────────────────
-#define FIRMWARE_VERSION       "1.1.0"
+#define FIRMWARE_VERSION       "1.2.0"
 
 // ─── 上报间隔（毫秒）─────────────────────────────────
 #define TELEMETRY_INTERVAL_MS  5000
@@ -43,7 +43,8 @@
 #define IR_LED_PIN             25                    // 红外发射管 GPIO（需经三极管驱动，勿直连）
 //  AC_PROTOCOL 只是【首次开机默认协议】。协议可在 App 里运行时切换并持久化到 NVS——
 //  无需接收器识别、也无需反复烧录：在 App 空调控制页逐个试协议，空调有反应即选定。
-//  常见：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …（海信多为 COOLIX/HITACHI 系）
+//  海信/科龙部分机型：KELON168（DG11R2-01 等）；必须现场确认，不能仅凭品牌判断。
+//  其他候选：COOLIX / HITACHI_AC / HAIER_AC / MIDEA / GREE / TCL112AC …
 #define AC_PROTOCOL            decode_type_t::COOLIX
 //  空调在后台是一台挂在本网关下的【独立设备】(type=ac)，与传感器一样有自己的
 //  在线状态和控制卡。uid 默认由网关 UID 派生（如 esp32-aabbcc-ac）；

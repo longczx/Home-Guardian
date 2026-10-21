@@ -84,7 +84,7 @@ async function send(ctrl: ControlPoint, value: unknown) {
   commandStatus.value = '等待设备确认…';
   try {
     await withCommandResult(() => sendCommand(id.value, { action: ctrl.command, params: { [ctrl.param]: value } }), 65000, getCommandResult);
-    commandStatus.value = device.value?.type === 'ac' ? '红外已发送，请核对空调实际状态' : '设备已确认执行';
+    commandStatus.value = device.value?.type === 'ac' ? '发射器已确认尝试发送，请观察空调是否响应' : '设备已确认执行';
   } catch (e) {
     setLocal(ctrl, prev);
     commandStatus.value = (e as Error).message;
@@ -196,6 +196,9 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 
     <!-- 动态控制 -->
     <view v-if="controls.length" class="ctl-card">
+      <view v-if="device?.type === 'ac'" class="ir-tip">
+        红外发射无法确认空调是否接收。海信/科龙可试 KELON168（需网关固件 1.2.0+，不保证所有机型适用）。切换协议或重启网关后，先用原装遥控器关机，再从这里开机；测试期间不要混用遥控器。
+      </view>
       <view v-for="ctrl in controls" :key="ctrl.key" class="ctl-row" :class="{ disabled: disabled(ctrl) }">
         <view class="ctl-head">
           <text class="ctl-label">{{ ctrl.label }}</text>
@@ -267,6 +270,12 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 </template>
 
 <style lang="scss" scoped>
+.ir-tip {
+  margin-bottom: 20rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: $hg-muted;
+}
 .experience { margin: 24rpx; padding: 24rpx; background: $hg-card; border-radius: 20rpx; } .experience text { display: block; font-size: 24rpx; color: $hg-muted; margin-top: 12rpx; }
 .page {
   padding: 24rpx 32rpx 60rpx;

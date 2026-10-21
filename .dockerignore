@@ -1,4 +1,5 @@
 .git/
+output/firmware/
 .github/
 .idea/
 .vscode/
