@@ -88,7 +88,7 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
         }
     } else {
         reply["status"] = "error";
-        reply["message"] = "action failed";
+        reply["message"] = replyObj["message"] | "action failed";
     }
 
     String response;

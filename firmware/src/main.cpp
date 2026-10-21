@@ -72,6 +72,12 @@ bool handleGetInfo(const JsonObject& params, JsonObject& response) {
     response["wifi_rssi"]    = (long)WiFi.RSSI();
     response["sensor_count"] = sensors.count();
     response["module_count"] = modules.count();
+    if (acIr) {
+        JsonObject ir = response["ir"].to<JsonObject>();
+        acIr->fillState(ir);
+        ir["pin"] = acIr->pin();
+        ir["physical_state_confirmed"] = false;
+    }
     return true;
 }
 
@@ -88,8 +94,13 @@ bool handleSetState(const JsonObject& params, JsonObject& response) {
         return false;
     }
     bool ok = acIr->apply(params, response);
+    if (!ok) return false;
+    response["firmware"] = FIRMWARE_VERSION;
+    response["ir_pin"] = acIr->pin();
+    response["ir_transmitted"] = true;
+    response["physical_state_confirmed"] = false;
 
-    // 主动上报完整状态（reported=true），让多端展示与真实一致
+    // 上报的是发射器状态，不是空调真实状态。
     if (mqtt.isConnected()) {
         JsonDocument postDoc;
         postDoc["status"] = "online";
