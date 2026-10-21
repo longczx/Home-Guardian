@@ -18,7 +18,7 @@ def main():
         run("exec", "-T", "postgres", "createdb", "-h", "127.0.0.1", "-U", "guardian_test", "guardian_smoke")
         command = r'''set -eu
 cd /source
-tar --exclude=.env --exclude='.env.*' --exclude=.git --exclude=.aws --exclude=.codex --exclude=.agents --exclude=.claude --exclude=runtime --exclude=uniapp/node_modules --exclude=uniapp/dist --exclude=firmware/.pio -cf - . | tar -xf - -C /app
+tar --exclude=.env --exclude='.env.*' --exclude=.git --exclude=.aws --exclude=.codex --exclude=.agents --exclude=.claude --exclude=runtime --exclude=vendor --exclude=uniapp/node_modules --exclude=uniapp/dist --exclude=firmware/.pio -cf - . | tar -xf - -C /app
 cd /app
 composer install --no-scripts --no-interaction --prefer-dist
 php -r '$p="config/process.php"; file_put_contents($p,str_replace("cpu_count() * 4", "2", file_get_contents($p)));'
