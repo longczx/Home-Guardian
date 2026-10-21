@@ -157,6 +157,12 @@ Route::get('/api/health', function () {
     ]);
 });
 
+// Liveness remains /api/health. Readiness exposes no instance details publicly.
+Route::get('/api/ready', function () {
+    $health = \app\service\HealthService::snapshot();
+    return json(['status'=>$health['ready'] ? 'ready' : 'unavailable'], $health['ready'] ? 200 : 503);
+});
+
 /*
 |--------------------------------------------------------------------------
 | 认证接口（无需 JWT）
@@ -212,6 +218,8 @@ Route::group('/api', function () {
         ->middleware([new PermissionMiddleware('devices.view')]);
     Route::put('/devices/{id:\d+}/override', [app\controller\HomeExperienceController::class, 'override'])
         ->middleware([new PermissionMiddleware('commands.send'), AuditLogMiddleware::class]);
+    Route::post('/automations/preview', [app\controller\HomeExperienceController::class, 'previewDraft'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
     Route::get('/automations/{id:\d+}/preview', [app\controller\HomeExperienceController::class, 'preview'])
         ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
     Route::patch('/alert-logs/{id:\d+}/handling', [app\controller\HomeExperienceController::class, 'handling'])

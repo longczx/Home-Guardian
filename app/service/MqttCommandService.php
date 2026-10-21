@@ -58,30 +58,21 @@ class MqttCommandService
         // 在 payload 中注入 request_id，设备回复时需原样返回
         $mqttPayload = array_merge($payload, ['request_id' => $requestId]);
 
-        // 记录指令日志
-        $commandLog = CommandLog::create([
-            'request_id' => $requestId,
-            'device_id'  => $deviceId,
-            'topic'      => $topic,
-            'payload'    => $mqttPayload,
-            'status'     => CommandLog::STATUS_QUEUED,
-            'sent_at'    => now(),
-        ]);
-
-        // 通过 Redis 推送给 MQTT 进程
         $message = json_encode([
-            'request_id' => $requestId,
-            'topic'   => $topic,
-            'payload' => json_encode($mqttPayload),
-            'qos'     => 1,  // QoS 1: 至少送达一次
+            'request_id'=>$requestId, 'topic'=>$topic,
+            'payload'=>json_encode($mqttPayload), 'qos'=>1,
         ], JSON_UNESCAPED_UNICODE);
-
-        try {
-            Redis::connection('queue')->lPush(self::COMMAND_CHANNEL, $message);
-        } catch (\Throwable $e) {
-            $commandLog->update(['status' => CommandLog::STATUS_REPLIED_ERROR, 'replied_at' => now()]);
-            throw new BusinessException('指令排队失败，请稍后重试', 503, 2106);
-        }
+        $commandLog = (new Device)->getConnection()->transaction(function () use ($requestId, $deviceId, $topic, $mqttPayload, $message) {
+            $log = CommandLog::create([
+                'request_id'=>$requestId, 'device_id'=>$deviceId, 'topic'=>$topic,
+                'payload'=>$mqttPayload, 'status'=>CommandLog::STATUS_QUEUED, 'sent_at'=>now(),
+            ]);
+            (new Device)->getConnection()->table('command_outbox')->insert([
+                'request_id'=>$requestId, 'message'=>$message, 'created_at'=>now(),
+            ]);
+            return $log;
+        });
+        if ((new Device)->getConnection()->transactionLevel() === 0) CommandOutboxService::tryDispatch($requestId);
 
         return $commandLog;
     }

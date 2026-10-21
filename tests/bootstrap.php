@@ -71,6 +71,8 @@ $capsule->schema()->create('provision_codes', function ($table) {
     $table->id();
     $table->unsignedBigInteger('home_id')->default(1);
     $table->string('code')->unique();
+    $table->string('rebind_uid')->nullable();
+    $table->string('registration_token_hash')->nullable();
     $table->unsignedBigInteger('user_id');
     $table->string('location')->nullable();
     $table->string('status')->default('pending');
@@ -164,3 +166,9 @@ $capsule->schema()->create('device_preferences', function ($t) { $t->id(); $t->u
 $capsule->schema()->create('alert_logs', function ($t) { $t->id(); $t->unsignedBigInteger('home_id')->default(1); $t->unsignedBigInteger('rule_id'); $t->unsignedBigInteger('device_id'); $t->string('status'); $t->string('severity')->nullable(); $t->json('triggered_value')->nullable(); $t->timestamp('triggered_at'); $t->timestamp('acknowledged_at')->nullable(); $t->unsignedBigInteger('acknowledged_by')->nullable(); $t->timestamp('resolved_at')->nullable(); $t->text('handling_note')->nullable(); $t->unsignedBigInteger('handled_by')->nullable(); $t->timestamp('handled_at')->nullable(); $t->timestamp('recovered_at')->nullable(); });
 
 $capsule->schema()->create('rooms', function ($t) { $t->id(); $t->unsignedBigInteger('home_id'); $t->string('name'); $t->integer('sort_order')->default(0); $t->unique(['home_id','name']); });
+
+$capsule->schema()->create('command_outbox', function ($t) {
+    $t->string('request_id')->primary(); $t->json('message'); $t->timestamp('created_at'); $t->timestamp('dispatched_at')->nullable();
+});
+
+$capsule->schema()->create('alert_incident_locks', fn ($t) => $t->string('incident_key', 64)->primary());

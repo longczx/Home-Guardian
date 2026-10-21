@@ -69,6 +69,7 @@ class MqttSubscriber
      */
     public function onWorkerStart(): void
     {
+        \app\service\HealthService::watch('mqtt_subscriber', fn () => $this->mqttConnected);
         // 初始化 Redis 连接
         $this->initRedis();
 

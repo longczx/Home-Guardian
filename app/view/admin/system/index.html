@@ -35,6 +35,17 @@
     </div>
 </div>
 
+<div class="layui-card">
+  <div class="layui-card-header">采集、自动化与通知链路：{{$health['status']}}</div>
+  <div class="layui-card-body">
+    {volist name="healthChecks" id="check"}<p>{{$check['name']}}：{{$check['ok'] ? '正常' : '异常或未就绪'}}</p>{/volist}
+    <table class="layui-table"><thead><tr><th>队列</th><th>消息数</th><th>最老事件等待秒数</th></tr></thead><tbody>
+    {volist name="healthQueues" id="item"}<tr><td>{{$item['name']}}</td><td>{{$item['queue']['count']}}</td><td>{{$item['queue']['oldest_age_sec'] ?? '—'}}</td></tr>{/volist}
+    </tbody></table>
+    {volist name="healthMetrics" id="item"}<p>{{$item['name']}}：{{$item['value']}}</p>{/volist}
+    <p>进程心跳超过 30 秒视为异常；页面刷新后重新检查。红外发送成功仍需核对实际空调状态。</p>
+  </div>
+</div>
 <!-- PHP 环境 -->
 <div class="layui-row layui-col-space15" style="margin-bottom:15px;">
     <div class="layui-col-xs6">

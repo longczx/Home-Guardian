@@ -613,7 +613,7 @@ docker compose up -d webman
 
 ### Docker 隔离验证
 
-该仓库的 GitHub Actions 已关闭，保护规则不依赖远程 CI；默认通过下列本地 Docker 命令验证，不使用 GitHub 托管运行器。CI 配置保留为手动触发，未来如需启用，应先确认账户计费设置。
+CI 配置在 PR 和 main 更新时运行后端、客户端、固件及应用启动检查，也支持手动触发。仓库设置必须启用 Actions 才会执行。可使用 `bash scripts/release-check.sh` 在本地运行相同核心检查；测试使用隔离 Compose 项目。
 
 测试使用独立 Compose 项目和命名依赖卷，不绑定生产数据库或主机端口：
 
@@ -643,3 +643,6 @@ docker compose -p hg-review -f docker-compose.test.yml down
 本项目采用 MIT License 开源。
 
 家庭模式、组合自动化、人工优先及状态说明见 [家庭使用体验第一版](docs/guide/home-experience.md)。
+
+
+2026-10-19 配网安全、通知/指令持久化和就绪检查升级见 [家庭体验说明](docs/guide/home-experience.md#2026-10-19-可靠性与配网更新)。升级时先做备份、构建镜像，暂停应用后执行增量迁移，再启动新版本；以 `/api/ready` 和 `/app/` 联合检查发布结果。新增表和字段均为兼容性扩展，回滚代码可保留数据库迁移。

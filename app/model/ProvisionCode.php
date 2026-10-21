@@ -20,7 +20,7 @@ class ProvisionCode extends Model
     protected $table = 'provision_codes';
 
     protected $fillable = [
-        'home_id',
+        'home_id', 'rebind_uid', 'registration_token_hash',
         'code',
         'user_id',
         'location',
@@ -29,6 +29,8 @@ class ProvisionCode extends Model
         'expires_at',
         'used_at',
     ];
+
+    protected $hidden = ['registration_token_hash'];
 
     protected $casts = [
         'expires_at' => 'datetime',

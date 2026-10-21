@@ -248,7 +248,7 @@ class AutomationService
             'extra'       => ['automation_id' => $automation->id, 'home_id' => $automation->home_id],
         ], JSON_UNESCAPED_UNICODE);
 
-        Redis::connection('queue')->lPush('notify:queue', $task);
+        NotificationOutboxService::persist(json_decode($task, true));
         return ['task_id'=>$taskId, 'channel_ids'=>$channelIds];
     }
 

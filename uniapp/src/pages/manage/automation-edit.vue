@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { switchValue } from '@/utils/events';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import ActionParameters from '@/components/ActionParameters.vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
   getAutomation, createAutomation, updateAutomation, type AutomationInput, type AutomationAction,
 } from '@/api/automation';
-import { modes, previewAutomation, type RulePreview } from '@/api/experience';
+import { modes, previewAutomationDraft, type RulePreview } from '@/api/experience';
 import { getDevices } from '@/api/device';
 import { getChannels, type NotificationChannel } from '@/api/channel';
 import { CONDITIONS } from '@/api/alertRule';
@@ -30,7 +31,8 @@ function addCondition() {
   uni.showActionSheet({ itemList: devices.value.map((d) => d.name), success: (r) => { const d = devices.value[r.tapIndex]; conditions.value.push({ device_id: d.id, metric_key: d.metric_fields?.[0]?.key || '', condition: 'EQUALS', value: 0, max_age_sec: 900 }); } });
 }
 function chooseExtraCondition(index: number) { uni.showActionSheet({ itemList: CONDITIONS.map((c) => c.label), success: (r) => { conditions.value[index].condition = CONDITIONS[r.tapIndex].value; } }); }
-async function inspect() { if (!editId.value) return toast('先保存规则后可试运行'); try { preview.value = await previewAutomation(editId.value); } catch (e) { toast((e as Error).message); } }
+async function inspect() { const payload = buildPayload(); if (!payload) return; try { preview.value = await previewAutomationDraft(payload); } catch (e) { toast((e as Error).message); } }
+
 function selectAction(index: number) {
   const payload = buildPayload(); if (!payload) return;
   actionDrafts.value = payload.actions; selectedAction.value = index;
@@ -82,6 +84,42 @@ const actCommands = computed(() => {
     .filter((c) => c.command && !seen.has(c.command) && seen.add(c.command))
     .map((c) => ({ command: c.command, label: c.label || c.command }));
 });
+const actionControls = computed(() => actionDevice.value?.capability?.controls.filter((c) => c.command === f.value.actName) ?? []);
+const actionValues = computed<Record<string, unknown>>({
+  get() { try { return JSON.parse(f.value.actionParams); } catch { return {}; } },
+  set(value) { f.value.actionParams = JSON.stringify(value); preview.value = null; },
+});
+watch(actionControls, (controls) => {
+  const old = actionValues.value;
+  if (!controls.length) return;
+  actionValues.value = Object.fromEntries(controls.map((c) => [c.param, old[c.param] ?? c.default ?? (c.value_type === 'bool' ? false : c.value_type === 'enum' ? c.options?.[0]?.value : c.value_type === 'int' || c.value_type === 'float' ? c.min ?? 0 : '')]));
+});
+function template(kind: 'temperature' | 'night') {
+  if (kind === 'temperature') {
+    const d = devices.value.find((d) => d.metric_fields?.some((m) => /temp/i.test(m.key)));
+    if (!d) return toast('请先接入带温度指标的传感器');
+    f.value.name = '温度过高提醒'; f.value.triggerType = 'telemetry'; f.value.deviceId = d.id;
+    f.value.metricKey = d.metric_fields!.find((m) => /temp/i.test(m.key))!.key;
+    f.value.condition = 'GREATER_THAN'; f.value.value = 30; f.value.durationSec = 60; f.value.cooldownSec = 600;
+    f.value.actionType = 'notify'; f.value.channelIds = channels.value.filter((c) => c.is_enabled).slice(0, 1).map((c) => c.id);
+    if (!f.value.channelIds.length) toast('请创建通知渠道后选择接收渠道');
+  } else {
+    const d = devices.value.find((d) => d.capability?.controls.some((c) => c.value_type === 'bool'));
+    if (!d) return toast('请先接入支持开关控制的设备');
+    const c = d.capability!.controls.find((c) => c.value_type === 'bool')!;
+    f.value.name = '夜间定时关闭'; f.value.triggerType = 'schedule'; f.value.cronMode = 'daily'; f.value.cronTime = '22:00';
+    f.value.actionType = 'device_command'; f.value.actDeviceId = d.id; f.value.actName = c.command; f.value.actionParams = JSON.stringify({ [c.param]: false });
+  }
+  actionDrafts.value = []; selectedAction.value = 0;
+  policyModes.value = []; conditions.value = []; originalConfig.value = {}; windowStart.value = ''; windowEnd.value = ''; maxAge.value = 900;
+  preview.value = null;
+}
+const summary = computed(() => {
+  const when = f.value.triggerType === 'schedule' ? `按计划 ${effectiveCron()}` : `${triggerDevice.value?.name || '所选设备'} 的 ${metricOptions.value.find((m) => m.key === f.value.metricKey)?.label || f.value.metricKey || '指标'} ${conditionLabel.value} ${f.value.value}`;
+  const then = f.value.actionType === 'notify' ? '发送通知' : `控制 ${actionDevice.value?.name || '所选设备'}：${actionControls.value.map((c) => `${c.label}=${c.options?.find((o) => o.value === actionValues.value[c.param])?.label ?? (typeof actionValues.value[c.param] === 'boolean' ? (actionValues.value[c.param] ? '开启' : '关闭') : actionValues.value[c.param])}`).join('，')}`;
+  return `${when}，${then}。${Math.max(1, actionDrafts.value.length)} 个动作独立提交。`;
+});
+watch([f, policyModes, conditionLogic, conditions, maxAge, windowStart, windowEnd, actionDrafts], () => { preview.value = null; }, { deep: true });
 const conditionLabel = computed(() => CONDITIONS.find((c) => c.value === f.value.condition)?.label ?? '请选择');
 const metricOptions = computed(() => triggerDevice.value?.metric_fields ?? []);
 
@@ -102,7 +140,7 @@ function chooseDevice(target: 'trigger' | 'action') {
     success: (r) => {
       const id = devices.value[r.tapIndex]?.id;
       if (target === 'trigger') f.value.deviceId = id;
-      else f.value.actDeviceId = id;
+      else { f.value.actDeviceId = id; f.value.actName = devices.value[r.tapIndex]?.capability?.controls[0]?.command || ''; f.value.actionParams = '{}'; }
     },
   });
 }
@@ -241,6 +279,12 @@ onLoad(async (q) => {
 <template>
   <view class="page">
     <view class="card">
+      <text class="ct">场景模板</text>
+      <button size="mini" @tap="template('temperature')">温度过高提醒</button>
+      <button size="mini" @tap="template('night')">夜间定时关闭</button>
+      <text class="hint">{{ summary }}</text>
+    </view>
+    <view class="card">
       <view class="field">
         <text class="label">名称</text>
         <input v-model="f.name" class="input" placeholder="如 夜间自动关灯" placeholder-class="ph" />
@@ -334,9 +378,8 @@ onLoad(async (q) => {
           </view>
           <input v-else v-model="f.actName" class="input" placeholder="如 turn_on / turn_off" placeholder-class="ph" />
         </view>
-        <view class="field"><text class="label">动作参数（JSON）</text>
-          <input v-model="f.actionParams" class="input" placeholder='例如 {"power":true,"temp":26}' />
-        </view>
+        <ActionParameters v-model="actionValues" :controls="actionControls" />
+        <text v-if="!actionControls.length" class="hint">请选择已声明控制能力的设备和指令。</text>
       </template>
 
       <template v-else>
@@ -357,7 +400,7 @@ onLoad(async (q) => {
     </view>
 
     <view class="card"><text class="ct">动作列表</text><view v-for="(action, index) in actionDrafts" :key="index" class="field"><text @tap="selectAction(index)">{{ selectedAction === index ? '正在编辑 ' : '点击编辑 ' }}动作 {{ index + 1 }}：{{ action.type === 'notify' ? '通知' : action.payload?.action || '待填写' }}</text><text class="hint" @tap="removeAction(index)">删除动作</text></view><button size="mini" @tap="addAction">添加动作（先填写当前动作）</button><text class="hint">按顺序提交；每个动作独立记录回执结果。人工控制后暂停该设备自动化 30 分钟。</text></view>
-    <view v-if="editId" class="card"><button @tap="inspect">试运行已保存版本（不发送指令）</button><text v-if="preview" class="hint">{{ preview.eligible ? '当前快照满足条件' : '当前快照不满足条件' }}。{{ preview.note }}</text><text v-for="(check, i) in [...(preview?.checks || []), ...(preview?.conditions || [])]" :key="i" class="hint">{{ check.passed ? '✓' : '×' }} {{ check.label }}：{{ check.reason }}</text></view>
+    <view class="card"><button @tap="inspect">试运行当前草稿（不发送指令）</button><text v-if="preview" class="hint">{{ preview.eligible ? '当前快照满足条件' : '当前快照不满足条件' }}。{{ preview.note }}</text><text v-for="(check, i) in [...(preview?.checks || []), ...(preview?.conditions || [])]" :key="i" class="hint">{{ check.passed ? '✓' : '×' }} {{ check.label }}：{{ check.reason }}</text></view>
     <button class="btn btn-primary" :loading="saving" @tap="save">保存</button>
     <text class="foot-hint">支持数值和布尔指标（1/0）；只有条件再次恢复并满足时才重新触发。</text>
   </view>

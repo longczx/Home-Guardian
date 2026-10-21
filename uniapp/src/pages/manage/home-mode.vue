@@ -20,7 +20,7 @@ onShow(load);
 <template>
   <view class="page">
     <text class="hint">
-      家庭模式决定规则是否适用。需要管理员及全部房间权限；规则还会检查数据、时间窗口和人工接管。
+      此处只切换规则适用模式，不会立即开关设备。需要管理员及全部房间权限；规则还会检查数据、时间窗口和人工接管。
     </text><text v-if="error">
       {{ error }}
     </text><view class="modes">

@@ -85,15 +85,15 @@ class AutomationPolicyService
         }
         $redis = \support\Redis::connection('default');
         if ($automation->trigger_type === 'telemetry') {
-            $latched = (bool)$redis->exists("automation:latch:{$automation->id}");
+            $latched = $automation->exists && (bool)$redis->exists("automation:latch:{$automation->id}");
             $result['checks'][] = ['label'=>'重新触发', 'passed'=>!$latched, 'reason'=>$latched ? '本次持续满足已执行，需条件恢复后再满足' : '尚未执行本次条件'];
             if ($latched) $result['eligible'] = false;
-            $last = (int)$redis->get("automation:last:{$automation->id}");
+            $last = $automation->exists ? (int)$redis->get("automation:last:{$automation->id}") : 0;
             $remaining = max(0, (int)($config['cooldown_sec'] ?? 0) - (time() - $last));
             $result['checks'][] = ['label'=>'冷却间隔', 'passed'=>$remaining === 0, 'reason'=>$remaining ? "还需等待 {$remaining} 秒" : '已满足'];
             if ($remaining) $result['eligible'] = false;
             $duration = (int)($config['duration_sec'] ?? 0);
-            $first = (int)$redis->get("automation:duration:{$automation->id}");
+            $first = $automation->exists ? (int)$redis->get("automation:duration:{$automation->id}") : 0;
             $durationRemaining = $duration ? max(0, $duration - ($first ? time()-$first : 0)) : 0;
             $result['checks'][] = ['label'=>'持续满足', 'passed'=>$durationRemaining === 0, 'reason'=>$durationRemaining ? "尚需持续 {$durationRemaining} 秒" : '已满足'];
             if ($durationRemaining) $result['eligible'] = false;
@@ -107,7 +107,7 @@ class AutomationPolicyService
             $result['checks'][] = ['label'=>'动作 ' . ($index+1), 'passed'=>(bool)$passed, 'reason'=>$reason];
             if (!$passed) $result['eligible'] = false;
         }
-        $result['note'] = '只读取当前快照，不发送指令。所有条件在实际触发时再次判断；本次不会启动持续计时或改变冷却状态。';
+        $result['note'] = ($automation->exists ? '检查已保存版本。' : '检查当前草稿。') . '只读取设备快照，不发送指令；草稿持续计时从实际触发起计算。所有条件在实际触发时再次判断；本次不会启动持续计时或改变冷却状态。';
         return $result;
     }
 }

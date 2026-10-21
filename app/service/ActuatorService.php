@@ -46,6 +46,17 @@ class ActuatorService
      */
     public static function applyCommand(Device $device, string $action, array $params): \app\model\CommandLog
     {
+        try { $log = (new Device)->getConnection()->transaction(fn () => self::persistCommand($device, $action, $params)); }
+        catch (\Throwable $e) {
+            try { Redis::connection('default')->del(self::STATE_CACHE_KEY . $device->id); } catch (\Throwable) {}
+            throw $e;
+        }
+        CommandOutboxService::tryDispatch($log->request_id);
+        return $log;
+    }
+
+    private static function persistCommand(Device $device, string $action, array $params): \app\model\CommandLog
+    {
         $cap = $device->capability;
         if (empty($cap) || empty($cap['controls']) || !is_array($cap['controls'])) {
             throw new BusinessException('该设备未配置控制能力', 422, 2100);
@@ -136,6 +147,7 @@ class ActuatorService
                     throw new BusinessException("{$label} 必须为数值", 422, 2103);
                 }
                 $num = $value + 0;
+                if (!is_finite((float)$num) || ($type === 'int' && floor((float)$num) !== (float)$num)) throw new BusinessException("{$label} 必须为有效的" . ($type === 'int' ? '整数' : '数值'), 422, 2103);
                 if (isset($cp['min']) && $num < $cp['min']) {
                     throw new BusinessException("{$label} 不能小于 {$cp['min']}", 422, 2104);
                 }
@@ -227,6 +239,13 @@ class ActuatorService
      */
     public static function saveState(int $deviceId, array $state, bool $reported): void
     {
+        $attrs = ['state' => $state, 'updated_at' => now()];
+        if ($reported) {
+            $attrs['reported_at'] = now();
+            $attrs['reported_state'] = $state;
+        }
+
+        DeviceState::updateOrCreate(['device_id' => $deviceId], $attrs);
         try {
             Redis::connection('default')->setex(
                 self::STATE_CACHE_KEY . $deviceId,
@@ -236,14 +255,6 @@ class ActuatorService
         } catch (\Throwable $e) {
             Log::error("写入设备状态缓存失败: {$e->getMessage()}");
         }
-
-        $attrs = ['state' => $state, 'updated_at' => now()];
-        if ($reported) {
-            $attrs['reported_at'] = now();
-            $attrs['reported_state'] = $state;
-        }
-
-        DeviceState::updateOrCreate(['device_id' => $deviceId], $attrs);
     }
 
     /**

@@ -95,8 +95,14 @@ class SystemController
         $checkExts = ['pdo_pgsql', 'redis', 'pcntl', 'posix', 'json', 'mbstring', 'openssl', 'sockets'];
         $loadedExts = array_values(array_filter($checkExts, 'extension_loaded'));
 
+        $health = \app\service\HealthService::snapshot();
+        $healthRows = static fn ($values, $field) => array_map(static fn ($name, $value) => ['name'=>$name, $field=>$value], array_keys($values), array_values($values));
         return view('admin/system/index', [
             'services'   => $services,
+            'health' => $health,
+            'healthChecks' => $healthRows($health['checks'], 'ok'),
+            'healthQueues' => $healthRows($health['queues'], 'queue'),
+            'healthMetrics' => $healthRows($health['metrics'], 'value'),
             'packages'   => $this->readPackageVersions(),
             'phpVersion' => phpversion(),
             'loadedExts' => $loadedExts,

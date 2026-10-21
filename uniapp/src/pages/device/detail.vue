@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+const auth = useAuthStore();
+function rebind() { uni.navigateTo({ url: '/pages/manage/device-add?rebind=' + id.value }); }
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
 import { getDevice, getLatestTelemetry, sendCommand, getCommandResult } from '@/api/device';
 import type { Device, ControlPoint, LatestMetric } from '@/api/types';
@@ -168,6 +171,7 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 <template>
   <view v-if="commandStatus" class="command-status">{{ commandStatus }}</view>
   <view class="page">
+    <button v-if="device?.type === 'gateway' && auth.canManage" @tap="rebind">授权重新配网（原家庭保留设备）</button>
     <view v-if="device" class="experience"><button size="mini" @tap="favorite">{{ device.is_favorite ? '★ 已常用' : '☆ 设为常用' }}</button><button v-if="controls.length" size="mini" @tap="override">自动化接管设置</button><text v-if="overrideActive">人工接管至 {{ device.manual_override_until }}</text><text v-if="controls.length">{{ device.state_note }}</text><text v-if="device.reported_at">最近状态上报：{{ device.reported_at }}</text><text v-if="device.reported_state">设备上报：{{ JSON.stringify(device.reported_state) }}</text></view>
     <view v-if="device" class="nav">
       <text class="dot" :class="{ gray: !device.is_online }" />

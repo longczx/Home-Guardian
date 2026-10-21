@@ -9,6 +9,7 @@ export const getHomeOverview = () => request.get<HomeOverview>('/home/overview')
 export const setHomeMode = (mode: HomeMode) => request.put('/home/mode', { mode });
 export const setFavorite = (id: number, is_favorite: boolean) => request.put(`/devices/${id}/favorite`, { is_favorite });
 export const setOverride = (id: number, minutes: number) => request.put(`/devices/${id}/override`, { minutes });
+export const previewAutomationDraft = (draft: import('./automation').AutomationInput) => request.post<RulePreview>('/automations/preview', draft);
 export const previewAutomation = (id: number) => request.get<RulePreview>(`/automations/${id}/preview`);
 export const handleAlert = (id: number, note: string) => request.patch(`/alert-logs/${id}/handling`, { note });
 export interface Room { id: number; name: string; sort_order: number }

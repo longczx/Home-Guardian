@@ -33,6 +33,7 @@ class NotificationProcess
      */
     public function onWorkerStart(): void
     {
+        \app\service\HealthService::watch('notification');
         $this->initRedis();
 
         // 每 500ms 消费一次通知队列
@@ -77,17 +78,7 @@ class NotificationProcess
                     $queue->move($raw, self::QUEUE_KEY . ':deadletter');
                     continue;
                 }
-                foreach (array_unique($task['channel_ids']) as $channelId) {
-                    $channel = \app\model\NotificationChannel::withoutGlobalScopes()->find((int)$channelId);
-                    if (!$channel || (isset($task['extra']['home_id']) && (int)$task['extra']['home_id'] !== (int)$channel->home_id)) continue;
-                    \app\model\NotificationDelivery::withoutGlobalScopes()->firstOrCreate([
-                        'delivery_key' => hash('sha256', ($task['task_id'] ?? $raw) . ':' . $channelId),
-                    ], [
-                        'home_id' => $channel->home_id, 'channel_id' => $channelId,
-                        'title' => mb_substr($task['title'] ?? '通知', 0, 255), 'content' => $task['content'] ?? '',
-                        'extra' => $task['extra'] ?? [], 'next_attempt_at' => now(),
-                    ]);
-                }
+                \app\service\NotificationOutboxService::persist($task + ['task_id'=>hash('sha256', $raw)]);
                 $queue->acknowledge($raw);
             }
             $this->deliverPending();

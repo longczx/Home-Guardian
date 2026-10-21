@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
+import { provisioningStage } from '@/utils/provisioning-stage';
 import { createProvisionCode, getProvisionStatus } from '@/api/provisioning';
 import { toast } from '@/utils/guard';
 
 const location = ref('');
+const rebindId = ref<number>();
+const progress = ref('等待设备注册');
+const connectionError = ref('');
+const busy = ref(false);
+let failures = 0;
+let generation = 0;
+onLoad((q) => { if (q?.rebind) rebindId.value = Number(q.rebind); });
 const code = ref('');
 const expiresIn = ref(0);
 const status = ref<'idle' | 'pending' | 'registered' | 'expired'>('idle');
@@ -17,25 +26,36 @@ function stop() {
 }
 
 async function generate() {
+  if (busy.value) return;
+  busy.value = true;
   stop();
+  const attempt = ++generation;
+  const targetId = rebindId.value || registeredId.value;
+  registeredId.value = 0;
   try {
-    const res = await createProvisionCode(location.value.trim() || undefined);
+    const res = await createProvisionCode(location.value.trim() || undefined, targetId || undefined);
     code.value = res.provision_code;
     expiresIn.value = res.expires_in;
     status.value = 'pending';
+    connectionError.value = ''; failures = 0; progress.value = '等待设备注册';
 
     // 生成即自动复制，方便粘贴到设备配网页
     copyCode(true);
 
     ticker = setInterval(() => {
       expiresIn.value = Math.max(0, expiresIn.value - 1);
-      if (expiresIn.value === 0) { status.value = 'expired'; stop(); }
+      if (expiresIn.value === 0) { connectionError.value = '等待超时，请检查 WiFi、平台地址和 MQTT 连接。已注册设备可从设备列表查看状态。'; stop(); }
     }, 1000);
 
     poller = setInterval(async () => {
       try {
         const s = await getProvisionStatus(code.value);
-        if (s.status === 'registered') {
+        if (attempt !== generation) return;
+        failures = 0; connectionError.value = '';
+        registeredId.value = s.device?.id || 0;
+        const stage = provisioningStage(s);
+        progress.value = stage.label;
+        if (stage.ready) {
           status.value = 'registered';
           deviceName.value = s.device?.name || '新设备';
           stop();
@@ -43,12 +63,14 @@ async function generate() {
           status.value = 'expired';
           stop();
         }
-      } catch { /* 忽略单次轮询失败 */ }
+      } catch { if (attempt === generation && ++failures >= 3) connectionError.value = '连续无法联系服务器，请恢复手机网络后重试查询'; }
     }, 3000);
   } catch (e) {
     toast((e as Error).message);
-  }
+  } finally { busy.value = false; }
 }
+function openRegisteredDevice() { if (code.value) uni.redirectTo({ url: '/pages/device/detail?id=' + registeredId.value }); }
+const registeredId = ref(0);
 
 function copyCode(silent = false) {
   if (!code.value) return;
@@ -61,47 +83,129 @@ function copyCode(silent = false) {
   if (silent) toast('配对码已复制', 'success');
 }
 
+function configureDevice() { uni.navigateTo({ url: '/pages/manage/device-edit?id=' + registeredId.value }); }
 function done() {
   uni.navigateBack();
 }
 
-onUnmounted(stop);
+onUnmounted(() => { generation++; stop(); });
 </script>
 
 <template>
   <view class="page">
     <view class="steps">
-      <text class="step">1. 生成配对码 → 2. 设备通电连 WiFi 时填入 → 3. 自动上线</text>
+      <text class="step">
+        1. 生成配对码 → 2. 连接 HG-Setup 热点，打开 192.168.4.1 填 WiFi 和配对码 → 3. 回到手机原网络，等待设备连接和首报
+      </text>
     </view>
 
-    <view v-if="status === 'idle'" class="card">
+    <view
+      v-if="status === 'idle'"
+      class="card"
+    >
       <view class="field">
-        <text class="label">预设位置（可选）</text>
-        <input v-model="location" class="input" placeholder="如 客厅" placeholder-class="ph" />
+        <text class="label">
+          预设位置（重新配网沿用原位置）
+        </text>
+        <input
+          v-model="location"
+          class="input"
+          placeholder="如 客厅"
+          placeholder-class="ph"
+        >
       </view>
-      <button class="btn btn-primary" @tap="generate">生成配对码</button>
+      <button
+        class="btn btn-primary"
+        :loading="busy"
+        :disabled="busy"
+        @tap="generate"
+      >
+        {{ rebindId ? '授权原网关重新配网' : '生成配对码' }}
+      </button>
     </view>
 
-    <view v-else class="card center">
+    <text
+      v-if="connectionError"
+      class="expired"
+    >
+      {{ connectionError }}
+    </text>
+    <button
+      v-if="registeredId"
+      @tap="openRegisteredDevice"
+    >
+      查看设备状态
+    </button>
+    <view
+      v-else
+      class="hint"
+    >
+      首次配置后，可在管理 → 设备管理中确认名称和房间。
+    </view>
+    <view
+      v-if="status !== 'idle'"
+      class="card center"
+    >
       <template v-if="status === 'pending'">
-        <text class="code" @tap="copyCode()">{{ code }}</text>
-        <text class="hint">在设备配网页填入此码 · {{ expiresIn }}s 后过期</text>
-        <button class="btn btn-copy" @tap="copyCode()">复制配对码</button>
+        <text
+          class="code"
+          @tap="copyCode()"
+        >
+          {{ code }}
+        </text>
+        <text class="hint">
+          在设备配网页填入此码 · {{ expiresIn }}s 后过期
+        </text>
+        <button
+          class="btn btn-copy"
+          @tap="copyCode()"
+        >
+          复制配对码
+        </button>
         <view class="waiting">
-          <text class="spinner-txt">等待设备上线…</text>
+          <text class="spinner-txt">
+            {{ progress }}…
+          </text>
         </view>
-        <button class="btn btn-ghost" @tap="generate">重新生成</button>
+        <button
+          class="btn btn-ghost"
+          @tap="generate"
+        >
+          重新生成
+        </button>
       </template>
 
       <template v-else-if="status === 'registered'">
-        <view class="ok">✓</view>
-        <text class="ok-title">{{ deviceName }} 已上线</text>
-        <button class="btn btn-primary" @tap="done">完成</button>
+        <view class="ok">
+          ✓
+        </view>
+        <text class="ok-title">
+          {{ deviceName }} 已上线
+        </text>
+        <button
+          class="btn btn-primary"
+          @tap="configureDevice"
+        >
+          设置名称与房间
+        </button>
+        <button
+          class="btn btn-ghost"
+          @tap="done"
+        >
+          完成
+        </button>
       </template>
 
       <template v-else>
-        <text class="expired">配对码已过期</text>
-        <button class="btn btn-primary" @tap="generate">重新生成</button>
+        <text class="expired">
+          配对码已过期
+        </text>
+        <button
+          class="btn btn-primary"
+          @tap="generate"
+        >
+          重新生成
+        </button>
       </template>
     </view>
   </view>
