@@ -72,6 +72,19 @@ class HomeExperienceController
         }
         return api_success(AutomationPolicyService::preview($automation));
     }
+    public function previewDraft(Request $request)
+    {
+        $homeId = (int)$request->user->home_id;
+        $draft = new Automation(['home_id'=>$homeId, 'is_enabled'=>true]);
+        $input = AutomationService::validatedInput($request->post(), $draft);
+        $draft->fill($input);
+        foreach (AutomationPolicyService::deviceIds($draft) as $id) {
+            $device = Device::withoutGlobalScopes()->where('home_id', $homeId)->find($id);
+            if (!$device || !$request->canAccessLocation($device->location)) return api_error('无权读取规则涉及的设备', 403, 1004);
+        }
+        // A draft has no persisted timer/latch identity and never mutates saved rules.
+        return api_success(AutomationPolicyService::preview($draft));
+    }
     public function rooms(Request $request)
     {
         $query = (new Device)->getConnection()->table('rooms')->where('home_id', $request->user->home_id);

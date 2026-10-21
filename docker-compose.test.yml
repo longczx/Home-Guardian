@@ -33,7 +33,7 @@ services:
       POSTGRES_PASSWORD: guardian_test
       POSTGRES_DB: guardian_test
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U guardian_test -d guardian_test]
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U guardian_test -d guardian_test]
       interval: 2s
       timeout: 2s
       retries: 20
@@ -53,6 +53,28 @@ services:
       - .:/app
       - test_platformio:/root/.platformio
     profiles: [tools]
+  mqtt:
+    image: emqx/emqx:5.8
+    profiles: [smoke]
+  runtime:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    working_dir: /app
+    volumes:
+      - .:/source:ro
+      - test_vendor:/source/vendor:ro
+    environment:
+      DB_HOST: postgres
+      POSTGRES_USER: guardian_test
+      POSTGRES_PASSWORD: guardian_test
+      POSTGRES_DB: guardian_smoke
+      REDIS_HOST: redis
+      MQTT_HOST: mqtt
+      MQTT_SUPER_USERNAME: smoke
+      MQTT_SUPER_PASSWORD: smoke-only-password
+      JWT_SECRET: smoke-only-secret-not-used-outside-isolated-tests
+    profiles: [smoke]
 volumes:
   test_vendor:
   test_node_modules:

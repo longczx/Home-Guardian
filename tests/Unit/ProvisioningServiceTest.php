@@ -93,7 +93,7 @@ class ProvisioningServiceTest extends TestCase
         ]);
 
         // 同一设备重新配网（新码）→ upsert，不报错，名称/位置更新
-        $code2 = ProvisioningService::createCode(1, 'B')->code;
+        $code2 = ProvisioningService::createCode(1, 'B', 'esp32-dup')->code;
         ProvisioningService::register([
             'provision_code' => $code2,
             'gateway' => ['device_uid' => 'esp32-dup', 'name' => '新名'],

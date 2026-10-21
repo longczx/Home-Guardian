@@ -28,11 +28,11 @@ command -v docker >/dev/null 2>&1 || die "未找到 docker"
 log "构建 uni-app H5（输出 public/app）…"
 if command -v npm >/dev/null 2>&1; then
   log "使用本机 Node：$(node -v)"
-  ( cd uniapp && npm install --no-audit --no-fund && npm run build:h5 )
+  ( cd uniapp && npm ci --no-audit --no-fund && npm run build:h5 )
 else
   log "本机无 Node，使用 node:20-alpine 容器构建"
   docker run --rm -v "$ROOT":/work -w /work/uniapp node:20-alpine \
-    sh -c "npm install --no-audit --no-fund && npm run build:h5"
+    sh -c "npm ci --no-audit --no-fund && npm run build:h5"
 fi
 
 [ -f public/app/index.html ] || die "H5 构建产物缺失（public/app/index.html）"
@@ -42,17 +42,11 @@ log "H5 构建完成"
 log "重建 webman 镜像（烤入 public/app）…"
 docker compose -f "$COMPOSE_FILE" build webman
 
-log "重建容器…"
+log "暂停应用并执行迁移…"
+docker compose -f "$COMPOSE_FILE" stop webman
+docker compose -f "$COMPOSE_FILE" run --rm --no-deps webman php webman migrate:run || die "迁移失败，应用保持停止；请检查日志后恢复上一镜像"
+log "启动新版本…"
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate webman nginx
-
-# ── 3. 数据库迁移（后端有新迁移时自动补跑）────────────────────
-log "执行数据库迁移…"
-# 等 webman 起来再迁移
-for i in $(seq 1 15); do
-  docker compose -f "$COMPOSE_FILE" exec -T webman php -r 'exit(0);' >/dev/null 2>&1 && break
-  sleep 2
-done
-docker compose -f "$COMPOSE_FILE" exec -T webman php webman migrate:run || die "数据库迁移失败"
 
 # ── 4. 健康检查 ───────────────────────────────────────────────
 log "等待服务就绪…"
@@ -65,6 +59,12 @@ done
 
 [ "$ok" = "1" ] || die "健康检查未通过：$BASE_URL/app/ 未返回 200"
 
+for i in $(seq 1 30); do
+  ready="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/ready" || true)"
+  [ "$ready" = "200" ] && break
+  sleep 2
+done
+[ "$ready" = "200" ] || die "业务链路未就绪，请检查后台系统管理中的进程和队列状态"
 api="$(curl -s "$BASE_URL/api/health" || true)"
 log "✅ 部署完成"
 log "   H5 客户端: $BASE_URL/app/"

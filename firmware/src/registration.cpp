@@ -16,6 +16,9 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
     // ── 构建请求体：网关 + 子传感器自述
     JsonDocument doc;
     doc["provision_code"] = store.provisionCode();
+    String token = store.registrationToken();
+    if (token.length() != 64) return false;
+    doc["registration_token"] = token;
     JsonObject gw = doc["gateway"].to<JsonObject>();
     gw["device_uid"]       = store.gatewayUid();
     gw["name"]             = "Home Guardian 网关";
@@ -72,7 +75,7 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
     http.end();
 
     Serial.printf("[注册] POST %s -> %d\n", endpoint.c_str(), status);
-    Serial.println(resp);
+    // The response contains MQTT credentials; never log it.
 
     if (status != 200 && status != 201) {
         return false;

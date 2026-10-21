@@ -31,6 +31,8 @@ public:
     void saveProvisioning(const String& ssid, const String& pass,
                           const String& serverUrl, const String& code);
 
+    String registrationToken();
+
     // 注册成功后保存 MQTT 凭证
     void saveMqtt(const String& host, uint16_t port,
                   const String& user, const String& pass);

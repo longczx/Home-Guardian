@@ -1,8 +1,13 @@
 name: CI
 
-# 托管 Actions 在仓库设置中关闭；重新启用后也只支持手动触发。
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 # 同一分支的并发运行只保留最新一次
 concurrency:
@@ -68,7 +73,7 @@ jobs:
         run: composer audit
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --testdox
+        run: vendor/bin/phpunit --testdox --fail-on-warning
 
   uniapp:
     name: uni-app (Vue3 / TS)
@@ -102,6 +107,16 @@ jobs:
 
       - name: Build (微信小程序 compile-only)
         run: npm run build:mp-weixin
+
+  runtime-smoke:
+    name: Application workers and readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 tests/Operations/runtime_smoke.py
 
   firmware:
     name: ESP32 firmware compile

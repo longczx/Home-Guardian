@@ -52,6 +52,7 @@ void ConfigStore::saveProvisioning(const String& ssid, const String& pass,
     _prefs.putString("ssid", ssid);
     _prefs.putString("pass", pass);
     _prefs.putString("surl", serverUrl);
+    if (_prefs.getString("pcode", "") != code) _prefs.remove("regtoken");
     _prefs.putString("pcode", code);
     _prefs.putString("guid", _gatewayUid);
     _prefs.end();
@@ -89,4 +90,16 @@ String ConfigStore::deviceUid() {
              (uint8_t)((mac >> 8) & 0xFF),
              (uint8_t)((mac >> 16) & 0xFF));
     return String(buf);
+}
+
+String ConfigStore::registrationToken() {
+    _prefs.begin(NS, false);
+    String token = _prefs.getString("regtoken", "");
+    if (token.length() != 64) {
+        token = "";
+        for (int i = 0; i < 8; i++) { char part[9]; snprintf(part, sizeof(part), "%08x", (unsigned)esp_random()); token += part; }
+        if (!_prefs.putString("regtoken", token)) token = "";
+    }
+    _prefs.end();
+    return token;
 }

@@ -31,6 +31,7 @@ class CrontabProcess
      */
     public function onWorkerStart(): void
     {
+        \app\service\HealthService::watch('crontab');
         $this->initRedis();
 
         // 每 60 秒扫描一次定时自动化规则
@@ -39,6 +40,11 @@ class CrontabProcess
         // 每 60 秒做一次设备心跳超时扫描（兜底 LWT 未触发的静默离线）
         Timer::add(60, [$this, 'sweepOfflineDevices']);
         Timer::add(5, [$this, 'expireCommands']);
+        Timer::add(1, fn () => \app\service\CommandOutboxService::tryDispatch());
+        Timer::add(3600, function () {
+            try { (new \app\model\Device)->getConnection()->table('command_outbox')->where('dispatched_at', '<', now()->subDays(7))->delete(); }
+            catch (\Throwable $e) { Log::error('指令发件箱清理失败: ' . $e->getMessage()); }
+        });
         Timer::add(10, function () {
             try {
                 foreach (\app\model\AutomationRun::withoutGlobalScopes()->where('status', 'running')->orderBy('id')->limit(100)->get() as $run) {

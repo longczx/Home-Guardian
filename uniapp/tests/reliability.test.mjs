@@ -15,6 +15,7 @@ await build({
     export { useAuthStore } from './src/stores/auth';
     export { apiRequest } from './src/api/request';
     export { connectWs, closeWs, onWs } from './src/utils/ws';
+    export { provisioningStage } from './src/utils/provisioning-stage';
     export { withCommandResult } from './src/utils/command-result';
   `, resolveDir: process.cwd() },
   alias: { '@': resolve('src') }, outfile: output, bundle: true, platform: 'node', format: 'esm',
@@ -109,4 +110,15 @@ test('missing device ACK and negative ACK are surfaced to the caller', async () 
 test('persisted command status resolves the result when a websocket ACK was missed', async () => {
   await runtime.withCommandResult(async () => ({ request_id: 'poll', status: 'queued' }), 50,
     async id => ({ request_id: id, status: 'replied_ok' }));
+});
+
+test('pairing registration never claims online before connection and initial data', () => {
+  const device = { id: 1, name: 'gateway', device_uid: 'gw', is_online: false };
+  assert.equal(runtime.provisioningStage({ status: 'registered', device }).ready, false);
+  assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'connecting', device }).ready, false);
+  device.is_online = true;
+  assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'awaiting_data', device }).ready, false);
+  assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'ready', device }).ready, true);
+  device.is_online = false;
+  assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'ready', device }).ready, false);
 });

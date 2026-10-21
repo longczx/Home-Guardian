@@ -43,8 +43,17 @@ class ProvisioningController
         $location = $request->post('location');
         $location = (is_string($location) && $location !== '') ? $location : null;
 
-        $record = ProvisioningService::createCode($request->userId(), $location);
+        $rebindUid = null;
+        if ($id = $request->post('rebind_device_id')) {
+            $device = \app\model\Device::where('home_id', $request->user->home_id)->find((int)$id);
+            if (!$device || $device->type !== 'gateway' || !$request->canAccessLocation($device->location)) return api_error('网关不存在或无权重新配网', 403, 1004);
+            $rebindUid = $device->device_uid;
+            $location = $device->location;
+        }
+        if (!$request->canAccessLocation($location)) return api_error('无权在此位置添加设备', 403, 1004);
+        $record = ProvisioningService::createCode($request->userId(), $location, $rebindUid);
 
+        \app\service\AuditService::log($request, 'create', 'provision_code', $record->id, ['rebind_device_uid'=>$rebindUid, 'location'=>$location]);
         return api_success([
             'provision_code' => $record->code,
             'expires_at'     => (string)$record->expires_at,

@@ -35,8 +35,7 @@ class OperationsTest extends TestCase
         MqttCommandService::handleCommandReply($action['request_id'], 'replied_ok', ['firmware'=>'1.2'], $device->device_uid);
         self::assertSame(['firmware'=>'1.2'], CommandLog::find($action['command_id'])->reply);
         $notification = $run->fresh()->action_results[1];
-        NotificationDelivery::create(['home_id'=>1,'delivery_key'=>hash('sha256',$notification['task_id'].':'.$channel->id),
-            'channel_id'=>$channel->id,'title'=>'test','content'=>'test','status'=>'failed','attempts'=>5]);
+        NotificationDelivery::where('delivery_key', hash('sha256',$notification['task_id'].':'.$channel->id))->update(['status'=>'failed','attempts'=>5]);
         self::assertSame('partial_failed', AutomationRunService::refresh($run->fresh())->status);
         self::assertNotNull($run->fresh()->finished_at);
         $automation->delete(); $device->delete(); $channel->delete();

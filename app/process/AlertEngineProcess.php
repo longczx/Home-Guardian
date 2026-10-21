@@ -45,6 +45,8 @@ class AlertEngineProcess
      * @var AlertRule[]
      */
     private array $rules = [];
+    private bool $rulesLoaded = false;
+    private bool $automationsLoaded = false;
 
     /**
      * 内存中的遥测型自动化规则列表（避免每条遥测都查库）
@@ -58,6 +60,7 @@ class AlertEngineProcess
      */
     public function onWorkerStart(): void
     {
+        \app\service\HealthService::watch('alert_engine', fn () => $this->rulesLoaded && $this->automationsLoaded);
         $this->initRedis();
 
         // 加载告警规则和自动化规则到内存
@@ -102,26 +105,32 @@ class AlertEngineProcess
     /**
      * 从数据库加载所有启用的告警规则到内存
      */
-    private function loadRules(): void
+    private function loadRules(): bool
     {
         try {
             $this->rules = AlertService::getEnabledRules()->all();
+            $this->rulesLoaded = true;
             Log::info('告警规则已刷新，当前规则数: ' . count($this->rules));
+            return true;
         } catch (\Throwable $e) {
             Log::error("加载告警规则失败: {$e->getMessage()}");
+            return false;
         }
     }
 
     /**
      * 从数据库加载所有启用的遥测型自动化规则到内存
      */
-    private function loadAutomations(): void
+    private function loadAutomations(): bool
     {
         try {
             $this->automations = AutomationService::getEnabledTelemetryAutomations()->all();
+            $this->automationsLoaded = true;
             Log::info('自动化规则已刷新，当前规则数: ' . count($this->automations));
+            return true;
         } catch (\Throwable $e) {
             Log::error("加载自动化规则失败: {$e->getMessage()}");
+            return false;
         }
     }
 
@@ -136,13 +145,11 @@ class AlertEngineProcess
         // 使用轮询方式检查变更标记（比 Pub/Sub 更简单可靠）
         Timer::add(5, function () {
             try {
-                if ($this->redisCache->get('hg:alert:rules:changed')) {
-                    $this->redisCache->del('hg:alert:rules:changed');
-                    $this->loadRules();
-                }
-                if ($this->redisCache->get('hg:automation:rules:changed')) {
-                    $this->redisCache->del('hg:automation:rules:changed');
-                    $this->loadAutomations();
+                if (!$this->rulesLoaded) $this->loadRules();
+                if (!$this->automationsLoaded) $this->loadAutomations();
+                foreach (['hg:alert:rules:changed'=>'loadRules', 'hg:automation:rules:changed'=>'loadAutomations'] as $key=>$method) {
+                    $version = $this->redisCache->get($key);
+                    if ($version && $this->$method()) $this->redisCache->eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", [$key, $version], 1);
                 }
             } catch (\Throwable $e) {
                 // 忽略，下次重试
@@ -158,14 +165,12 @@ class AlertEngineProcess
     public function processAlertStream(): void
     {
         try {
-            for ($i = 0; $i < 100; $i++) {
-                $raw = $this->redis->rPop('hg:q:alert_stream');
-                if (!$raw) {
-                    break;
-                }
+            $queue = new \app\service\ReliableQueue($this->redis, 'hg:q:alert_stream', 'hg:q:alert_processing');
+            foreach ($queue->reserve(100) as $raw) {
 
                 $data = json_decode($raw, true);
-                if (!$data) {
+                if (!is_array($data)) {
+                    $queue->move($raw, 'hg:q:alert_deadletter');
                     continue;
                 }
 
@@ -174,6 +179,7 @@ class AlertEngineProcess
                 $value = $data['value'] ?? null;
 
                 if (!$deviceId || !$metricKey || $value === null) {
+                    $queue->move($raw, 'hg:q:alert_deadletter');
                     continue;
                 }
 
@@ -207,6 +213,7 @@ class AlertEngineProcess
 
                 // 同时检查遥测条件型自动化规则（使用内存缓存，不查库）
                 AutomationService::evaluateTelemetry($this->automations, $deviceId, $metricKey, $value, $data['ts'] ?? '1970-01-01');
+                $queue->acknowledge($raw);
             }
         } catch (\Throwable $e) {
             Log::error("告警引擎处理异常: {$e->getMessage()}");

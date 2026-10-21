@@ -95,61 +95,35 @@ class AlertService
      */
     public static function triggerAlert(AlertRule $rule, int $deviceId, mixed $triggeredValue, string $kind = 'telemetry'): ?AlertLog
     {
-        $cache = self::cache();
-        $activeKey = "alert:active:{$rule->id}:{$deviceId}";
-
-        // 降噪去重：已处于"激活(firing)"状态则不重复建日志/发通知，直到恢复
-        if ($cache) {
-            try { if ($cache->get($activeKey)) return null; } catch (\Throwable $e) {}
-        }
-
-        $severity = $rule->severity ?: AlertRule::SEVERITY_WARNING;
-
-        $alertLog = AlertLog::create([
-            'home_id'         => $rule->home_id ?? \app\model\Home::DEFAULT_HOME_ID, // 常驻进程无请求上下文，随规则归属
-            'rule_id'         => $rule->id,
-            'device_id'       => $deviceId,
-            'triggered_at'    => now(),
-            'triggered_value' => is_array($triggeredValue) ? $triggeredValue : [$triggeredValue],
-            'status'          => AlertLog::STATUS_TRIGGERED,
-            'severity'        => $severity,
-        ]);
-
-        // 置激活标记（安全 TTL 30 天，防止异常残留）
-        if ($cache) {
-            try { $cache->setex($activeKey, 2592000, (string)$alertLog->id); } catch (\Throwable $e) {}
-        }
-
-        self::pushWs('alert', $rule, $deviceId, [
-            'alert_log_id' => $alertLog->id,
-            'severity'     => $severity,
-            'value'        => $triggeredValue,
-            'triggered_at' => $alertLog->triggered_at->toIso8601String(),
-        ]);
-
-        // 通知：受冷却窗口约束，防止同规则反复轰炸（闪断场景）
-        if (!empty($rule->notification_channel_ids)) {
-            $cooldownKey = "alert:cooldown:{$rule->id}:{$deviceId}";
-            $inCooldown = false;
-            if ($cache) {
-                try { $inCooldown = (bool)$cache->get($cooldownKey); } catch (\Throwable $e) {}
-            }
-            if (!$inCooldown) {
-                $label = AlertRule::severityLabel($severity);
+        $db = (new AlertLog)->getConnection();
+        $alertLog = $db->transaction(function () use ($db, $rule, $deviceId, $triggeredValue, $kind) {
+            self::lockIncident($rule, $deviceId);
+            // DB is authoritative: Redis loss must not reopen an active incident.
+            if (AlertLog::withoutGlobalScopes()->where('rule_id', $rule->id)->where('device_id', $deviceId)->whereNull('recovered_at')->exists()) return null;
+            $severity = $rule->severity ?: AlertRule::SEVERITY_WARNING;
+            $log = AlertLog::create([
+                'home_id'=>$rule->home_id ?? \app\model\Home::DEFAULT_HOME_ID,
+                'rule_id'=>$rule->id, 'device_id'=>$deviceId, 'triggered_at'=>now(),
+                'triggered_value'=>is_array($triggeredValue) ? $triggeredValue : [$triggeredValue],
+                'status'=>AlertLog::STATUS_TRIGGERED, 'severity'=>$severity,
+            ]);
+            $cooldown = (int)($rule->notify_cooldown_sec ?? 600);
+            $recent = \app\model\NotificationDelivery::withoutGlobalScopes()->where('home_id', $log->home_id)
+                ->where('extra->rule_id', $rule->id)->where('extra->device_id', $deviceId)
+                ->where('extra->event', 'triggered')->where('created_at', '>', now()->subSeconds($cooldown))->exists();
+            if (!$recent && !empty($rule->notification_channel_ids)) {
                 $content = $kind === AlertRule::TRIGGER_OFFLINE
                     ? "设备(ID {$deviceId}) 已离线，触发规则 [{$rule->name}]"
                     : "设备(ID {$deviceId}) 的 {$rule->telemetry_key} 值 (" . self::scalar($triggeredValue) . ") 触发规则 [{$rule->name}]";
-                self::queueNotify($rule->notification_channel_ids, "【{$label}】{$rule->name}", $content, [
-                    'rule_id' => $rule->id, 'device_id' => $deviceId, 'severity' => $severity,
-                    'value' => $triggeredValue, 'alert_id' => $alertLog->id,
-                ]);
-                $cd = (int)($rule->notify_cooldown_sec ?? 600);
-                if ($cache && $cd > 0) {
-                    try { $cache->setex($cooldownKey, $cd, (string)time()); } catch (\Throwable $e) {}
-                }
+                self::queueNotify($rule->notification_channel_ids, '【' . AlertRule::severityLabel($severity) . '】' . $rule->name, $content,
+                    ['rule_id'=>$rule->id, 'device_id'=>$deviceId, 'severity'=>$severity, 'value'=>$triggeredValue, 'alert_id'=>$log->id, 'event'=>'triggered']);
             }
-        }
-
+            return $log;
+        });
+        if (!$alertLog) return null;
+        try { self::cache()?->setex("alert:active:{$rule->id}:{$deviceId}", 2592000, (string)$alertLog->id); } catch (\Throwable) {}
+        self::pushWs('alert', $rule, $deviceId, ['alert_log_id'=>$alertLog->id, 'severity'=>$alertLog->severity,
+            'value'=>$triggeredValue, 'triggered_at'=>$alertLog->triggered_at->toIso8601String()]);
         return $alertLog;
     }
 
@@ -162,29 +136,28 @@ class AlertService
         $cache = self::cache();
         $activeKey = "alert:active:{$rule->id}:{$deviceId}";
 
-        // 无激活标记 → 不查库直接返回（热路径高频调用）
-        if ($cache) {
-            try { if (!$cache->get($activeKey)) return; } catch (\Throwable $e) {}
-        }
+        $affected = (new AlertLog)->getConnection()->transaction(function () use ($rule, $deviceId, $value) {
+            self::lockIncident($rule, $deviceId);
+            $affected = AlertLog::where('rule_id', $rule->id)->where('device_id', $deviceId)->whereNull('recovered_at')
+                ->update(['status'=>AlertLog::STATUS_RESOLVED, 'resolved_at'=>now(), 'recovered_at'=>now()]);
+            if ($affected && $rule->notify_on_recovery && !empty($rule->notification_channel_ids)) {
+                self::queueNotify($rule->notification_channel_ids, "【恢复】{$rule->name}",
+                    "设备(ID {$deviceId}) 的规则 [{$rule->name}] 已恢复正常", [
+                    'rule_id'=>$rule->id, 'device_id'=>$deviceId, 'event'=>'recovered',
+                    'severity'=>$rule->severity ?: AlertRule::SEVERITY_WARNING,
+                ]);
+            }
+            return $affected;
+        });
+        if ($cache) { try { $cache->del($activeKey); } catch (\Throwable) {} }
+        if ($affected) self::pushWs('alert_resolved', $rule, $deviceId, ['value'=>$value]);
+    }
 
-        $affected = AlertLog::where('rule_id', $rule->id)
-            ->where('device_id', $deviceId)
-            ->whereNull('recovered_at')
-            ->update(['status' => AlertLog::STATUS_RESOLVED, 'resolved_at' => now(), 'recovered_at'=>now()]);
-
-        if ($cache) { try { $cache->del($activeKey); } catch (\Throwable $e) {} }
-
-        if ($affected <= 0) return;
-
-        self::pushWs('alert_resolved', $rule, $deviceId, ['value' => $value]);
-
-        if ($rule->notify_on_recovery && !empty($rule->notification_channel_ids)) {
-            self::queueNotify($rule->notification_channel_ids, "【恢复】{$rule->name}",
-                "设备(ID {$deviceId}) 的规则 [{$rule->name}] 已恢复正常", [
-                'rule_id' => $rule->id, 'device_id' => $deviceId, 'event' => 'recovered',
-                'severity' => $rule->severity ?: AlertRule::SEVERITY_WARNING,
-            ]);
-        }
+    private static function lockIncident(AlertRule $rule, int $deviceId): void
+    {
+        $db = (new AlertLog)->getConnection(); $key = $rule->id . ':' . $deviceId;
+        $db->table('alert_incident_locks')->insertOrIgnore(['incident_key'=>$key]);
+        $db->table('alert_incident_locks')->where('incident_key', $key)->lockForUpdate()->first();
     }
 
     /**
@@ -314,11 +287,7 @@ class AlertService
             'extra'       => $extra,
         ], JSON_UNESCAPED_UNICODE);
 
-        try {
-            Redis::connection('queue')->lPush('notify:queue', $task);
-        } catch (\Throwable $e) {
-            Log::error("通知入队失败: {$e->getMessage()}");
-        }
+        NotificationOutboxService::persist(json_decode($task, true));
     }
 
     /** 把遥测值转成可读标量字符串 */

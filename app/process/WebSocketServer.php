@@ -39,6 +39,7 @@ class WebSocketServer
      */
     public function onWorkerStart(Worker $worker): void
     {
+        \app\service\HealthService::watch('websocket');
         // 在子进程中创建 Redis 订阅连接
         // 不能在主进程创建，因为 fork 后连接会共享导致冲突
         $this->subscribeRedis();

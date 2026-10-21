@@ -60,6 +60,7 @@ class DataIngestProcess
      */
     public function onWorkerStart(): void
     {
+        \app\service\HealthService::watch('data_ingest');
         // 初始化 Redis 连接（使用 DB1: 队列专用）
         $this->initRedis();
 

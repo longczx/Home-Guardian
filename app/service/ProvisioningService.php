@@ -34,10 +34,11 @@ class ProvisioningService
      * @param  string|null $location 预设位置（可空）
      * @return ProvisionCode
      */
-    public static function createCode(int $userId, ?string $location = null): ProvisionCode
+    public static function createCode(int $userId, ?string $location = null, ?string $rebindUid = null): ProvisionCode
     {
         return ProvisionCode::create([
             'code'       => self::generateUniqueCode(),
+            'rebind_uid' => $rebindUid,
             'user_id'    => $userId,
             'location'   => $location ?: null,
             'status'     => ProvisionCode::STATUS_PENDING,
@@ -80,30 +81,42 @@ class ProvisioningService
             throw new BusinessException('缺少配对码', 422, 9002);
         }
 
-        $record = ProvisionCode::where('code', $code)->first();
-        if (!$record) {
-            throw new BusinessException('配对码无效', 422, 9003);
-        }
-        if ($record->status !== ProvisionCode::STATUS_PENDING) {
-            throw new BusinessException('配对码已被使用', 410, 9004);
-        }
-        if (strtotime((string)$record->expires_at) < time()) {
-            $record->update(['status' => ProvisionCode::STATUS_EXPIRED]);
-            throw new BusinessException('配对码已过期', 410, 9005);
-        }
-
+        ProvisionCode::withoutGlobalScopes()->where('code', $code)->where('status', ProvisionCode::STATUS_PENDING)->where('expires_at', '<', now())->update(['status'=>ProvisionCode::STATUS_EXPIRED]);
+        if (!is_array($payload['gateway'] ?? null) || !is_array($payload['sensors'] ?? []) || count($payload['sensors'] ?? []) > 16) throw new BusinessException('网关和子设备格式无效（最多16个）', 422, 9006);
         $gw = $payload['gateway'] ?? [];
         $gwUid = trim((string)($gw['device_uid'] ?? ''));
         if ($gwUid === '') {
             throw new BusinessException('缺少网关 device_uid', 422, 9006);
         }
 
-        // 网关 MQTT 明文密码（仅在响应里返回一次，库里只存 bcrypt）
-        $mqttPassword = bin2hex(random_bytes(16));
+        if (!preg_match('/^[a-zA-Z0-9_-]{1,48}$/', $gwUid)) throw new BusinessException('网关 UID 格式无效', 422, 9006);
+        $token = $payload['registration_token'] ?? null;
+        if ($token !== null && (!is_string($token) || !preg_match('/^[a-f0-9]{64}$/', $token))) throw new BusinessException('注册恢复凭证格式无效', 422, 9008);
+        // The device persists the random token before its first request. A lost response can be
+        // recovered by that device only; possession of a consumed pairing code is insufficient.
+        $mqttPassword = $token ? hash_hmac('sha256', $code . ':' . $gwUid . ':' . $token, getenv('JWT_SECRET')) : bin2hex(random_bytes(16));
 
         // 多表写入用事务（用模型实例的连接，兼容生产 PgSQL 与测试 SQLite；
         // getConnection() 是实例方法，不能静态调用）
-        $devices = (new Device)->getConnection()->transaction(function () use ($record, $gw, $gwUid, $payload, $mqttPassword) {
+        $devices = (new Device)->getConnection()->transaction(function () use ($code, $token, $gw, $gwUid, $payload, $mqttPassword) {
+            $record = ProvisionCode::withoutGlobalScopes()->where('code', $code)->lockForUpdate()->first();
+            if (!$record) throw new BusinessException('配对码无效', 422, 9003);
+            if ($record->expires_at->isPast()) throw new BusinessException('配对码已过期', 410, 9005);
+            if ($record->status !== ProvisionCode::STATUS_PENDING) {
+                $gateway = Device::withoutGlobalScopes()->where('device_uid', $gwUid)->first();
+                if ($token && $record->device_uid === $gwUid && $record->registration_token_hash
+                    && hash_equals($record->registration_token_hash, hash('sha256', $token))
+                    && $gateway && (int)$gateway->home_id === (int)$record->home_id
+                    && password_verify($mqttPassword, $gateway->mqtt_password_hash)) {
+                    return [['device_uid'=>$gwUid, 'id'=>$gateway->id, 'role'=>'gateway']];
+                }
+                throw new BusinessException('配对码已被使用', 410, 9004);
+            }
+            if ($record->rebind_uid && $record->rebind_uid !== $gwUid) throw new BusinessException('配对码仅用于指定网关重新配网', 409, 9009);
+            $existing = Device::withoutGlobalScopes()->where('device_uid', $gwUid)->lockForUpdate()->first();
+            if ($existing && ((int)$existing->home_id !== (int)$record->home_id || $record->rebind_uid !== $gwUid || $existing->type !== 'gateway')) {
+                throw new BusinessException('设备已绑定，请由原家庭管理员在设备详情授权重新配网', 409, 9009);
+            }
             $created = [];
 
             // 1. 网关（幂等 upsert：支持恢复出厂后重新配网）
@@ -121,13 +134,15 @@ class ProvisioningService
             if (array_key_exists('capability', $gw)) {
                 $gwData['capability'] = $gw['capability'];
             }
-            $gateway = self::upsertDevice($gwUid, $gwData);
+            $gateway = self::upsertDevice($gwUid, $gwData, true);
             $created[] = ['device_uid' => $gwUid, 'id' => $gateway->id, 'role' => 'gateway'];
 
             // 2. 子传感器/子设备
             foreach (($payload['sensors'] ?? []) as $i => $s) {
+                if (!is_array($s)) throw new BusinessException('子设备格式无效', 422, 9006);
                 $sUid = trim((string)($s['device_uid'] ?? '')) ?: ($gwUid . '-s' . ($i + 1));
-                $existingSensor = Device::where('device_uid', $sUid)->first();
+                if (!preg_match('/^[a-zA-Z0-9_-]{1,48}$/', $sUid)) throw new BusinessException('子设备 UID 格式无效', 422, 9006);
+                $existingSensor = Device::withoutGlobalScopes()->where('device_uid', $sUid)->first();
                 $sData = [
                     'home_id'       => $record->home_id,
                     'device_uid'    => $sUid,
@@ -152,6 +167,7 @@ class ProvisioningService
             // 3. 标记配对码已用
             $record->update([
                 'status'     => ProvisionCode::STATUS_REGISTERED,
+                'registration_token_hash' => $token ? hash('sha256', $token) : null,
                 'device_uid' => $gwUid,
                 'used_at'    => now(),
             ]);
@@ -175,10 +191,13 @@ class ProvisioningService
     /**
      * 按 device_uid upsert 一台设备
      */
-    private static function upsertDevice(string $uid, array $data): Device
+    private static function upsertDevice(string $uid, array $data, bool $gateway = false): Device
     {
-        $device = Device::where('device_uid', $uid)->first();
+        $device = Device::withoutGlobalScopes()->where('device_uid', $uid)->lockForUpdate()->first();
         if ($device) {
+            if ((int)$device->home_id !== (int)$data['home_id'] || (!$gateway && ($device->gateway_uid !== $data['gateway_uid'] || $device->type === 'gateway'))) {
+                throw new BusinessException('设备 UID 已被其他网关或家庭使用', 409, 9009);
+            }
             $device->update($data);
             return $device;
         }
@@ -209,10 +228,19 @@ class ProvisioningService
         $device = null;
         if ($record->device_uid) {
             $d = Device::where('device_uid', $record->device_uid)
-                ->first(['id', 'device_uid', 'name', 'is_online']);
+                ->first(['id', 'device_uid', 'name', 'is_online', 'last_seen']);
             $device = $d ? $d->toArray() : null;
         }
 
-        return ['status' => $status, 'device' => $device];
+        $stage = $status;
+        if ($status === ProvisionCode::STATUS_REGISTERED) {
+            $stage = 'connecting';
+            if ($device && $device['is_online'] && $d->last_seen?->gte($record->used_at)) {
+                $sensorIds = Device::where('gateway_uid', $record->device_uid)->where('home_id', $record->home_id)->where('type', 'sensor')->pluck('id');
+                $hasData = $sensorIds->isEmpty() || \app\model\TelemetryLog::whereIn('device_id', $sensorIds)->where('ts', '>=', $record->used_at)->exists();
+                $stage = $hasData ? 'ready' : 'awaiting_data';
+            }
+        }
+        return ['status' => $status, 'stage'=>$stage, 'device' => $device];
     }
 }
