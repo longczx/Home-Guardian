@@ -59,6 +59,7 @@ class MqttCommandService
         $mqttPayload = array_merge($payload, ['request_id' => $requestId]);
 
         $message = json_encode([
+            'ts'=>now()->toIso8601String(),
             'request_id'=>$requestId, 'topic'=>$topic,
             'payload'=>json_encode($mqttPayload), 'qos'=>1,
         ], JSON_UNESCAPED_UNICODE);

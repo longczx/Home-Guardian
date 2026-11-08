@@ -99,13 +99,13 @@ class AlertService
         $alertLog = $db->transaction(function () use ($db, $rule, $deviceId, $triggeredValue, $kind) {
             self::lockIncident($rule, $deviceId);
             // DB is authoritative: Redis loss must not reopen an active incident.
-            if (AlertLog::withoutGlobalScopes()->where('rule_id', $rule->id)->where('device_id', $deviceId)->whereNull('recovered_at')->exists()) return null;
+            if (AlertLog::withoutGlobalScopes()->where('rule_id', $rule->id)->where('device_id', $deviceId)->where('incident_active', true)->exists()) return null;
             $severity = $rule->severity ?: AlertRule::SEVERITY_WARNING;
             $log = AlertLog::create([
                 'home_id'=>$rule->home_id ?? \app\model\Home::DEFAULT_HOME_ID,
                 'rule_id'=>$rule->id, 'device_id'=>$deviceId, 'triggered_at'=>now(),
                 'triggered_value'=>is_array($triggeredValue) ? $triggeredValue : [$triggeredValue],
-                'status'=>AlertLog::STATUS_TRIGGERED, 'severity'=>$severity,
+                'status'=>AlertLog::STATUS_TRIGGERED, 'severity'=>$severity, 'incident_active'=>true,
             ]);
             $cooldown = (int)($rule->notify_cooldown_sec ?? 600);
             $recent = \app\model\NotificationDelivery::withoutGlobalScopes()->where('home_id', $log->home_id)
@@ -138,8 +138,8 @@ class AlertService
 
         $affected = (new AlertLog)->getConnection()->transaction(function () use ($rule, $deviceId, $value) {
             self::lockIncident($rule, $deviceId);
-            $affected = AlertLog::where('rule_id', $rule->id)->where('device_id', $deviceId)->whereNull('recovered_at')
-                ->update(['status'=>AlertLog::STATUS_RESOLVED, 'resolved_at'=>now(), 'recovered_at'=>now()]);
+            $affected = AlertLog::where('rule_id', $rule->id)->where('device_id', $deviceId)->where('incident_active', true)
+                ->update(['status'=>AlertLog::STATUS_RESOLVED, 'resolved_at'=>now(), 'recovered_at'=>now(), 'incident_active'=>false]);
             if ($affected && $rule->notify_on_recovery && !empty($rule->notification_channel_ids)) {
                 self::queueNotify($rule->notification_channel_ids, "【恢复】{$rule->name}",
                     "设备(ID {$deviceId}) 的规则 [{$rule->name}] 已恢复正常", [
