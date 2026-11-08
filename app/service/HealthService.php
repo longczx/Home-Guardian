@@ -34,12 +34,12 @@ class HealthService
             }
             $queue = Redis::connection('queue');
             foreach (['data_ingest_queue', 'data_ingest_processing', 'data_ingest_deadletter', 'alert_stream', 'alert_processing', 'alert_deadletter', 'notify:queue', 'notify:queue:processing', 'notify:queue:deadletter', 'mqtt:command:send', 'mqtt:command:processing', 'mqtt:command:deadletter'] as $key) {
+                $count = $queue->lLen($key);
                 $oldest = json_decode($queue->lIndex($key, -1) ?: '{}', true);
-                $ts = $oldest['ts'] ?? null;
-                $age = $ts && strtotime($ts) !== false ? max(0, time()-strtotime($ts)) : null;
-                $queues[$key] = ['count'=>$queue->lLen($key), 'oldest_age_sec'=>$age];
-                if (str_contains($key, 'deadletter')) $checks['deadletter:' . $key] = $queues[$key]['count'] === 0;
-                elseif ($age !== null) $checks['queue:' . $key] = $age <= 120;
+                $age = $count ? self::queueAge($key, is_array($oldest) ? $oldest : []) : null;
+                $queues[$key] = ['count'=>$count, 'oldest_age_sec'=>$age];
+                if (str_contains($key, 'deadletter')) $checks['deadletter:' . $key] = $count === 0;
+                else $checks['queue:' . $key] = $count === 0 || ($age !== null && $age <= 120);
             }
         } catch (\Throwable) { $checks['redis'] = false; }
         if ($checks['database']) {
@@ -64,5 +64,20 @@ class HealthService
         $required = array_diff_key($checks, array_flip(['notification_delivery', 'command_timeouts']));
         foreach (array_keys($required) as $key) if (str_starts_with($key, 'deadletter:')) unset($required[$key]);
         return ['ready'=>!in_array(false, $required, true), 'status'=>in_array(false, $checks, true) ? 'degraded' : 'ok', 'checks'=>$checks, 'queues'=>$queues, 'metrics'=>$metrics, 'checked_at'=>now()->toIso8601String()];
+    }
+
+    private static function queueAge(string $key, array $message): ?int
+    {
+        $ts = $message['ts'] ?? null;
+        if ($ts === null && str_starts_with($key, 'mqtt:command:')) {
+            // Messages already queued before this release have no envelope timestamp.
+            $requestId = $message['request_id'] ?? null;
+            if (is_string($requestId)) {
+                $sentAt = CommandLog::withoutGlobalScopes()->where('request_id', $requestId)->value('sent_at');
+                $ts = $sentAt ? (string)$sentAt : null;
+            }
+        }
+        $timestamp = is_string($ts) ? strtotime($ts) : false;
+        return $timestamp === false ? null : max(0, time()-$timestamp);
     }
 }

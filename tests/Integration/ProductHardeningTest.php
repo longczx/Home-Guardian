@@ -138,6 +138,8 @@ class ProductHardeningTest extends TestCase
         $cache=new \Redis();$cache->connect(getenv('TEST_REDIS_HOST'));
         (new \ReflectionProperty($engine,'redisCache'))->setValue($engine,$cache);
         (new \ReflectionProperty($engine,'rules'))->setValue($engine,[$rule]);
+        (new \ReflectionProperty($engine,'rulesLoaded'))->setValue($engine,true);
+        (new \ReflectionProperty($engine,'automationsLoaded'))->setValue($engine,true);
         try {
             $engine->processAlertStream();
             self::assertSame(0,AlertLog::where('device_id',$d->id)->count());
@@ -149,6 +151,8 @@ class ProductHardeningTest extends TestCase
             (new \ReflectionProperty($next,'redis'))->setValue($next,$r);
             (new \ReflectionProperty($next,'redisCache'))->setValue($next,$cache);
             (new \ReflectionProperty($next,'rules'))->setValue($next,[$rule]);
+            (new \ReflectionProperty($next,'rulesLoaded'))->setValue($next,true);
+            (new \ReflectionProperty($next,'automationsLoaded'))->setValue($next,true);
             $next->processAlertStream();
             self::assertSame(1,AlertLog::where('device_id',$d->id)->count());
             self::assertSame(1,NotificationDelivery::where('channel_id',$channel->id)->count());

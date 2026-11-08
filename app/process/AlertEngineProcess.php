@@ -164,6 +164,8 @@ class AlertEngineProcess
      */
     public function processAlertStream(): void
     {
+        // Keep both ready and reserved events until the complete policy snapshot is available.
+        if (!$this->rulesLoaded || !$this->automationsLoaded) return;
         try {
             $queue = new \app\service\ReliableQueue($this->redis, 'hg:q:alert_stream', 'hg:q:alert_processing');
             foreach ($queue->reserve(100) as $raw) {
