@@ -35,31 +35,24 @@ class MqttAuthController
             ]
         )
     )]
-    #[OA\Response(response: 200, description: '认证通过', content: new OA\JsonContent(
+    #[OA\Response(response: 200, description: 'EMQX 5 认证决策，顶层 result 为 allow 或 deny', content: new OA\JsonContent(
         properties: [
-            new OA\Property(property: 'code', type: 'integer', example: 0),
-            new OA\Property(property: 'data', properties: [
-                new OA\Property(property: 'result', type: 'string', example: 'allow'),
-            ], type: 'object'),
+            new OA\Property(property: 'result', type: 'string', enum: ['allow', 'deny']),
+            new OA\Property(property: 'is_superuser', type: 'boolean', example: false),
         ]
     ))]
-    #[OA\Response(response: 401, description: '认证失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function auth(Request $request)
     {
         $username = $request->post('username', '');
         $password = $request->post('password', '');
 
         if (empty($username) || empty($password)) {
-            return api_error('缺少认证参数', 401, 0);
+            return $this->decision(false, true);
         }
 
         $verified = DeviceService::verifyMqttCredentials($username, $password);
 
-        if ($verified) {
-            return api_success(['result' => 'allow'], '认证通过');
-        }
-
-        return api_error('认证失败', 401, 0);
+        return $this->decision($verified, true);
     }
 
     #[OA\Post(
@@ -79,15 +72,11 @@ class MqttAuthController
             ]
         )
     )]
-    #[OA\Response(response: 200, description: '鉴权通过', content: new OA\JsonContent(
+    #[OA\Response(response: 200, description: 'EMQX 5 授权决策，顶层 result 为 allow 或 deny', content: new OA\JsonContent(
         properties: [
-            new OA\Property(property: 'code', type: 'integer', example: 0),
-            new OA\Property(property: 'data', properties: [
-                new OA\Property(property: 'result', type: 'string', example: 'allow'),
-            ], type: 'object'),
+            new OA\Property(property: 'result', type: 'string', enum: ['allow', 'deny']),
         ]
     ))]
-    #[OA\Response(response: 403, description: '鉴权失败', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse'))]
     public function acl(Request $request)
     {
         $username = $request->post('username', '');
@@ -95,15 +84,20 @@ class MqttAuthController
         $action = $request->post('action', '');
 
         if (empty($username) || empty($topic) || empty($action)) {
-            return api_error('缺少鉴权参数', 403, 0);
+            return $this->decision(false);
         }
 
         $allowed = DeviceService::checkMqttAcl($username, $topic, $action);
 
-        if ($allowed) {
-            return api_success(['result' => 'allow'], '鉴权通过');
-        }
+        return $this->decision($allowed);
+    }
 
-        return api_error('无权操作该主题', 403, 0);
+    private function decision(bool $allowed, bool $authentication = false): \support\Response
+    {
+        // EMQX 5 reads result at the top level. Explicit deny stops the chain;
+        // 4xx/5xx responses mean ignore, not deny, to the HTTP plugin.
+        $body = ['result'=>$allowed ? 'allow' : 'deny'];
+        if ($authentication) $body['is_superuser'] = false;
+        return new \support\Response(200, ['Content-Type'=>'application/json'], json_encode($body));
     }
 }
