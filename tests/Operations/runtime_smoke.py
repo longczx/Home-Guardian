@@ -26,7 +26,7 @@ php -r '$pdo=new PDO("pgsql:host=postgres;dbname=guardian_smoke","guardian_test"
 php webman migrate:run
 php start.php start
 '''
-        run("run", "-d", "--name", container, "--no-deps", "runtime", "sh", "-c", command)
+        run("run", "-d", "--name", container, "--no-deps", "--use-aliases", "runtime", "sh", "-c", command)
         for _ in range(30):
             result = subprocess.run(
                 ["docker", "exec", container, "php", "-r",
@@ -35,6 +35,16 @@ php start.php start
             )
             if result.returncode == 0:
                 print("Application workers ready:", result.stdout)
+                # Production HTTP auth must reject anonymous MQTT clients; the
+                # application's authenticated connection is covered by readiness.
+                probe = r'''$s=stream_socket_client("tcp://mqtt:1883",$errno,$error,5);
+if (!$s) exit(1);
+stream_set_timeout($s,5); $id="anonymous-check";
+$body=pack("n",4)."MQTT".chr(4).chr(2).pack("n",60).pack("n",strlen($id)).$id;
+fwrite($s,chr(16).chr(strlen($body)).$body); $reply=fread($s,4); fclose($s);
+exit(strlen($reply)===4 && ord($reply[0])===32 && ord($reply[3])===5 ? 0 : 1);'''
+                subprocess.run(["docker", "exec", container, "php", "-r", probe], check=True)
+                print("Production HTTP auth correctly rejected anonymous MQTT")
                 # Verify the fail-closed signal when a worker loses its MQTT connection.
                 run("stop", "mqtt", stdout=subprocess.DEVNULL)
                 time.sleep(5)

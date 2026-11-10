@@ -55,6 +55,8 @@ services:
     profiles: [tools]
   mqtt:
     image: emqx/emqx:5.8
+    volumes:
+      - ./docker/emqx/auth.conf:/opt/emqx/etc/base.hocon:ro
     profiles: [smoke]
   runtime:
     build:
@@ -74,6 +76,9 @@ services:
       MQTT_SUPER_PASSWORD: smoke-only-password
       JWT_SECRET: smoke-only-secret-not-used-outside-isolated-tests
     profiles: [smoke]
+    networks:
+      default:
+        aliases: [webman]
 volumes:
   test_vendor:
   test_node_modules:

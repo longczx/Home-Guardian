@@ -94,8 +94,8 @@ services:
       - "EMQX_NAME=home_guardian_node"
       - "EMQX_HOST=emqx"
     volumes:
-      # HTTP Auth & ACL 配置，合并入默认 emqx.conf
-      - ./docker/emqx/auth.conf:/opt/emqx/etc/emqx.d/auth.conf:ro
+      # EMQX 5.8 loads base.hocon before runtime configuration.
+      - ./docker/emqx/auth.conf:/opt/emqx/etc/base.hocon:ro
       # 持久化 EMQX 运行时数据（Dashboard 配置、内置数据库等）
       - emqx_data:/opt/emqx/data
     networks:

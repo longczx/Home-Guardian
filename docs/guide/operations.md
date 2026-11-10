@@ -75,6 +75,10 @@ python3 tests/Operations/restore_smoke.py
 
 ## 发布门禁与硬件验收
 
+EMQX 5.8 的 HTTP 认证/授权配置挂载到 `/opt/emqx/etc/base.hocon`。
+内部回调返回 HTTP 200 和 JSON 顶层 `result=allow/deny`；普通 API 的 code/data 包装不适用，4xx/5xx 会被插件视为 ignore。
+发布验收除合法内部 MQTT 连接成功外，还必须检查匿名连接被拒绝；公开 Nginx 的 `/api/mqtt/` 仍返回 403。
+
 告警引擎首次成功加载告警及自动化两类规则前不消费遥测事件，包括上次进程留下的处理中事件。
 `alert_logs.incident_active` 独立记录异常是否仍在持续；人工处理不关闭异常，实际恢复后才关闭。
 升级迁移将没有处理记录且缺少恢复时间的历史已解决告警标为不活跃，不补造 `recovered_at`；已有人工解决但尚未恢复的告警仍保持活跃。
