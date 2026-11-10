@@ -89,8 +89,8 @@ bool handleSetState(const JsonObject& params, JsonObject& response) {
     }
     bool ok = acIr->apply(params, response);
 
-    // 主动上报完整状态（reported=true），让多端展示与真实一致
-    if (mqtt.isConnected()) {
+    // 只在发送成功后上报网关最近发送的状态，不代表空调实测状态。
+    if (ok && mqtt.isConnected()) {
         JsonDocument postDoc;
         postDoc["status"] = "online";
         JsonObject st = postDoc["state"].to<JsonObject>();

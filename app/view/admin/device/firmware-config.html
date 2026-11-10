@@ -52,7 +52,8 @@
                             if (is_string($sMf)) $sMf = json_decode($sMf, true);
                             $sKeys = is_array($sMf) ? array_column($sMf, 'key') : [];
                             $module = '未知';
-                            if (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $module = 'DHT11';
+                            if (($s['type'] ?? '') === 'ac') $module = '红外空调';
+                            elseif (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $module = 'DHT11';
                             elseif (in_array('noise_db', $sKeys) || in_array('noise', $sKeys)) $module = 'Sound';
                         {/php}
                         <tr>
@@ -106,7 +107,8 @@ var sensors = [];
     if (is_string($sMf)) $sMf = json_decode($sMf, true);
     $sKeys = is_array($sMf) ? array_column($sMf, 'key') : [];
     $sModule = 'unknown';
-    if (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $sModule = 'dht11';
+    if (($s['type'] ?? '') === 'ac') $sModule = 'ac_ir';
+    elseif (in_array('temperature', $sKeys) || in_array('humidity', $sKeys)) $sModule = 'dht11';
     elseif (in_array('noise_db', $sKeys) || in_array('noise', $sKeys)) $sModule = 'sound';
 {/php}
 sensors.push({uid: '{{$s["device_uid"]}}', module: '{{$sModule}}'});
@@ -119,11 +121,12 @@ function generateConfig() {
     var interval = document.getElementById('cfg_interval').value || '5000';
 
     // 推断传感器开关和 UID
-    var dht11Enabled = 0, soundEnabled = 0;
+    var dht11Enabled = 0, soundEnabled = 0, acEnabled = 0, acUid = 'ac-living-01';
     var dht11Uid = 'sensor-temp-01', soundUid = 'sensor-sound-01';
     sensors.forEach(function(s) {
         if (s.module === 'dht11') { dht11Enabled = 1; dht11Uid = s.uid; }
         if (s.module === 'sound') { soundEnabled = 1; soundUid = s.uid; }
+        if (s.module === 'ac_ir') { acEnabled = 1; acUid = s.uid; }
     });
 
     var config = '#ifndef CONFIG_H\n'
@@ -153,7 +156,13 @@ function generateConfig() {
         + '#define SENSOR_SOUND_UID       "' + soundUid + '"\n'
         + '#define SOUND_SENSOR_PIN       34\n'
         + '\n'
-        + '#define FIRMWARE_VERSION       "1.0.0"\n'
+        + '// 红外模块可在 App 模块管理中添加；仅首次空清单使用此配置\n'
+        + '#define AC_IR_ENABLED          ' + acEnabled + '\n'
+        + '#define IR_LED_PIN             25\n'
+        + '#define AC_IR_UID              "' + acUid + '"\n'
+        + '#define AC_PROTOCOL            decode_type_t::COOLIX\n'
+        + '\n'
+        + '#define FIRMWARE_VERSION       "1.2.0"\n'
         + '\n'
         + '#endif // CONFIG_H\n';
 

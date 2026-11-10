@@ -17,6 +17,7 @@ await build({
     export { connectWs, closeWs, onWs } from './src/utils/ws';
     export { provisioningStage } from './src/utils/provisioning-stage';
     export { withCommandResult } from './src/utils/command-result';
+    export { controlOptions, updateControlValues } from './src/utils/control-options';
   `, resolveDir: process.cwd() },
   alias: { '@': resolve('src') }, outfile: output, bundle: true, platform: 'node', format: 'esm',
 });
@@ -121,4 +122,17 @@ test('pairing registration never claims online before connection and initial dat
   assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'ready', device }).ready, true);
   device.is_online = false;
   assert.equal(runtime.provisioningStage({ status: 'registered', stage: 'ready', device }).ready, false);
+});
+
+test('switching IR protocol selects its own model and keeps unrelated automation parameters', () => {
+  const model = { param: 'model', default: 1, options_by: { field: 'protocol', values: {
+    PANASONIC_AC: [{ value: 1, label: 'LKE' }, { value: 6, label: 'RKR' }],
+    KELON168: [{ value: 1, label: 'RCH-R0Y3' }],
+  } } };
+  const current = { protocol: 'PANASONIC_AC', model: 6, power: true, temp: 25 };
+  const next = runtime.updateControlValues([model], current, 'protocol', 'KELON168');
+  assert.deepEqual(next, { protocol: 'KELON168', model: 1, power: true, temp: 25 });
+  assert.equal(current.model, 6, 'The original editor snapshot must remain unchanged');
+  assert.deepEqual(runtime.controlOptions(model, next), [{ value: 1, label: 'RCH-R0Y3' }]);
+  assert.deepEqual(runtime.controlOptions(model, { protocol: 'unknown' }), []);
 });

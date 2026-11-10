@@ -1,0 +1,916 @@
+{
+  "library": "IRremoteESP8266",
+  "version": "2.9.0",
+  "protocols": [
+    {
+      "value": "KELON168",
+      "label": "海信/科龙 168位（RCH-R0Y3 系列，待实机验证） · KELON168",
+      "driver": "kelon168",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "DG11R201 / RCH-R0Y3 系列"
+        }
+      ]
+    },
+    {
+      "value": "KELON",
+      "label": "科龙 48位 · KELON",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "COOLIX",
+      "label": "COOLIX",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC",
+      "label": "日立 · HITACHI_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "GREE",
+      "label": "格力 · GREE",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "YAW1F"
+        },
+        {
+          "value": 2,
+          "label": "YBOFB"
+        },
+        {
+          "value": 3,
+          "label": "YX1FSF"
+        }
+      ]
+    },
+    {
+      "value": "MIDEA",
+      "label": "美的 · MIDEA",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HAIER_AC",
+      "label": "海尔 · HAIER_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TCL112AC",
+      "label": "TCL · TCL112AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "TAC09CHSD"
+        },
+        {
+          "value": 2,
+          "label": "GZ055BE1"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN",
+      "label": "大金 · DAIKIN",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "KELVINATOR",
+      "label": "Kelvinator · KELVINATOR",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "MITSUBISHI_AC",
+      "label": "三菱电机 · MITSUBISHI_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "PANASONIC_AC",
+      "label": "松下 · PANASONIC_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "LKE"
+        },
+        {
+          "value": 2,
+          "label": "NKE"
+        },
+        {
+          "value": 3,
+          "label": "DKE/PKR"
+        },
+        {
+          "value": 4,
+          "label": "JKE"
+        },
+        {
+          "value": 5,
+          "label": "CKP"
+        },
+        {
+          "value": 6,
+          "label": "RKR"
+        }
+      ]
+    },
+    {
+      "value": "SAMSUNG_AC",
+      "label": "三星 · SAMSUNG_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "FUJITSU_AC",
+      "label": "富士通 · FUJITSU_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "ARRAH2E"
+        },
+        {
+          "value": 2,
+          "label": "ARDB1"
+        },
+        {
+          "value": 3,
+          "label": "ARREB1E"
+        },
+        {
+          "value": 4,
+          "label": "ARJW2"
+        },
+        {
+          "value": 5,
+          "label": "ARRY4"
+        },
+        {
+          "value": 6,
+          "label": "ARREW4E"
+        }
+      ]
+    },
+    {
+      "value": "LG",
+      "label": "LG",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "GE6711AR2853M"
+        },
+        {
+          "value": 2,
+          "label": "AKB75215403"
+        },
+        {
+          "value": 3,
+          "label": "AKB74955603"
+        },
+        {
+          "value": 4,
+          "label": "AKB73757604"
+        },
+        {
+          "value": 5,
+          "label": "LG6711A20083V"
+        }
+      ]
+    },
+    {
+      "value": "LG2",
+      "label": "LG2",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "GE6711AR2853M"
+        },
+        {
+          "value": 2,
+          "label": "AKB75215403"
+        },
+        {
+          "value": 3,
+          "label": "AKB74955603"
+        },
+        {
+          "value": 4,
+          "label": "AKB73757604"
+        },
+        {
+          "value": 5,
+          "label": "LG6711A20083V"
+        }
+      ]
+    },
+    {
+      "value": "SHARP_AC",
+      "label": "夏普 · SHARP_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "A907"
+        },
+        {
+          "value": 2,
+          "label": "A705"
+        },
+        {
+          "value": 3,
+          "label": "A903"
+        }
+      ]
+    },
+    {
+      "value": "TOSHIBA_AC",
+      "label": "东芝 · TOSHIBA_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 0,
+          "label": "Generic A"
+        },
+        {
+          "value": 1,
+          "label": "Generic B"
+        }
+      ]
+    },
+    {
+      "value": "AIRTON",
+      "label": "AIRTON",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "AIRWELL",
+      "label": "AIRWELL",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "AMCOR",
+      "label": "AMCOR",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "ARGO",
+      "label": "ARGO",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "SAC_WREM2"
+        },
+        {
+          "value": 2,
+          "label": "SAC_WREM3"
+        }
+      ]
+    },
+    {
+      "value": "BOSCH144",
+      "label": "博世 · BOSCH144",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "CARRIER_AC64",
+      "label": "开利 · CARRIER_AC64",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "CORONA_AC",
+      "label": "CORONA_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN128",
+      "label": "大金 · DAIKIN128",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN152",
+      "label": "大金 · DAIKIN152",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN160",
+      "label": "大金 · DAIKIN160",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN176",
+      "label": "大金 · DAIKIN176",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN2",
+      "label": "大金 · DAIKIN2",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN216",
+      "label": "大金 · DAIKIN216",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DAIKIN64",
+      "label": "大金 · DAIKIN64",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "DELONGHI_AC",
+      "label": "DELONGHI_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "ECOCLIM",
+      "label": "ECOCLIM",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "ELECTRA_AC",
+      "label": "ELECTRA_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "EUROM",
+      "label": "EUROM",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "GOODWEATHER",
+      "label": "GOODWEATHER",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HAIER_AC160",
+      "label": "海尔 · HAIER_AC160",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HAIER_AC176",
+      "label": "海尔 · HAIER_AC176",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "V9014557 A"
+        },
+        {
+          "value": 2,
+          "label": "V9014557 B"
+        }
+      ]
+    },
+    {
+      "value": "HAIER_AC_YRW02",
+      "label": "海尔 · HAIER_AC_YRW02",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC1",
+      "label": "日立 · HITACHI_AC1",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "R-LT0541 A"
+        },
+        {
+          "value": 2,
+          "label": "R-LT0541 B"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC264",
+      "label": "日立 · HITACHI_AC264",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC296",
+      "label": "日立 · HITACHI_AC296",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC344",
+      "label": "日立 · HITACHI_AC344",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "HITACHI_AC424",
+      "label": "日立 · HITACHI_AC424",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "MIRAGE",
+      "label": "MIRAGE",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "KKG9AC1"
+        },
+        {
+          "value": 2,
+          "label": "KKG29AC1"
+        }
+      ]
+    },
+    {
+      "value": "MITSUBISHI112",
+      "label": "三菱电机 · MITSUBISHI112",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "MITSUBISHI136",
+      "label": "三菱电机 · MITSUBISHI136",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "MITSUBISHI_HEAVY_88",
+      "label": "三菱重工 · MITSUBISHI_HEAVY_88",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "MITSUBISHI_HEAVY_152",
+      "label": "三菱重工 · MITSUBISHI_HEAVY_152",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "NEOCLIMA",
+      "label": "NEOCLIMA",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "PANASONIC_AC32",
+      "label": "松下 · PANASONIC_AC32",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "RHOSS",
+      "label": "RHOSS",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "SANYO_AC",
+      "label": "三洋 · SANYO_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "SANYO_AC88",
+      "label": "三洋 · SANYO_AC88",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TECHNIBEL_AC",
+      "label": "TECHNIBEL_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TECO",
+      "label": "TECO",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TEKNOPOINT",
+      "label": "TEKNOPOINT",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "TAC09CHSD"
+        },
+        {
+          "value": 2,
+          "label": "GZ055BE1"
+        }
+      ]
+    },
+    {
+      "value": "TRANSCOLD",
+      "label": "TRANSCOLD",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TROTEC",
+      "label": "TROTEC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TROTEC_3550",
+      "label": "TROTEC_3550",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "TRUMA",
+      "label": "TRUMA",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "VESTEL_AC",
+      "label": "VESTEL_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "默认"
+        }
+      ]
+    },
+    {
+      "value": "VOLTAS",
+      "label": "VOLTAS",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 0,
+          "label": "Unknown/full function"
+        },
+        {
+          "value": 1,
+          "label": "122LZF"
+        }
+      ]
+    },
+    {
+      "value": "WHIRLPOOL_AC",
+      "label": "惠而浦 · WHIRLPOOL_AC",
+      "driver": "irac",
+      "default_model": 1,
+      "models": [
+        {
+          "value": 1,
+          "label": "DG11J13A"
+        },
+        {
+          "value": 2,
+          "label": "DG11J191"
+        }
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "value": "YORK",
+      "reason": "IRac 2.9.0 advertises support, but sendAc has no YORK branch. Not exposed until a sender adapter is implemented."
+    }
+  ]
+}

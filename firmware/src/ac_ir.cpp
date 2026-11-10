@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <string.h>
 #include <IRutils.h>   // typeToString()
+#include "ac_protocol_catalog.h"
+#include "kelon168_state.h"
 
 // ─── 模式字符串 ⇄ IRac 枚举 ─────────────────────────────
 static stdAc::opmode_t parseMode(const char* m) {
@@ -38,7 +40,15 @@ static const char* fanStr(stdAc::fanspeed_t f) {
 }
 
 AcIr::AcIr(uint16_t irLedPin, decode_type_t defaultProtocol)
-    : _ac(irLedPin), _protocol(defaultProtocol) {}
+    : _ac(irLedPin), _irLedPin(irLedPin), _protocol(defaultProtocol) {}
+
+bool AcIr::supports(decode_type_t protocol) {
+    if (!acProtocolSpec(protocol)) return false;
+#if SEND_KELON168
+    if (protocol == decode_type_t::KELON168) return true;
+#endif
+    return IRac::isProtocolSupported(protocol);
+}
 
 void AcIr::begin() {
     // 恢复上次在 App 里选定的协议（NVS）；没有则用 config.h 的默认值
@@ -46,7 +56,7 @@ void AcIr::begin() {
     String saved = _prefs.getString("proto", "");
     if (saved.length()) {
         decode_type_t p = strToDecodeType(saved.c_str());
-        if (p != decode_type_t::UNKNOWN) {
+        if (supports(p)) {
             _protocol = p;
             Serial.printf("[AC-IR] 恢复已保存协议: %s\n", saved.c_str());
         }
@@ -54,7 +64,10 @@ void AcIr::begin() {
 
     // 初始默认状态：与后端"空调"能力模板的 default 对齐（关机 / 制冷 / 26℃ / 自动风）
     _state.protocol = _protocol;
-    _state.model    = 1;
+    const AcProtocolSpec* spec = acProtocolSpec(_protocol);
+    _state.model    = _prefs.getShort("model", spec ? spec->defaultModel : 1);
+    if (!spec || _state.model < 0 || _state.model > 6 || !(spec->models & (1 << _state.model)))
+        _state.model = spec ? spec->defaultModel : 1;
     _state.power    = false;
     _state.mode     = stdAc::opmode_t::kCool;
     _state.degrees  = 26;
@@ -62,7 +75,7 @@ void AcIr::begin() {
     _state.fanspeed = stdAc::fanspeed_t::kAuto;
     _state.swingv   = stdAc::swingv_t::kOff;
     _state.swingh   = stdAc::swingh_t::kOff;
-    _state.light    = true;
+    _state.light    = false;
     _state.beep     = false;
     _state.econo    = false;
     _state.filter   = false;
@@ -71,39 +84,58 @@ void AcIr::begin() {
     _state.clean    = false;
     _state.sleep    = -1;   // -1 = 不设置
     _state.clock    = -1;
-}
-
-void AcIr::setProtocol(decode_type_t p, bool persist) {
-    _protocol = p;
-    _state.protocol = p;
-    if (persist) {
-        _prefs.putString("proto", typeToString(p));
-    }
-    Serial.printf("[AC-IR] 切换协议 → %s\n", typeToString(p).c_str());
+    _hasLastSent = false;
+    Serial.printf("[AC-IR] ready protocol=%s model=%d pin=%u\n", typeToString(_protocol).c_str(), _state.model, _irLedPin);
 }
 
 bool AcIr::apply(const JsonObject& params, JsonObject& outState) {
-    // 运行时切协议：先切再发，本次即用新协议（App 里逐个试的关键）
+    stdAc::state_t next = _state;
     if (params["protocol"].is<const char*>()) {
         decode_type_t p = strToDecodeType(params["protocol"].as<const char*>());
-        if (p != decode_type_t::UNKNOWN && p != _protocol) {
-            setProtocol(p, true);
+        if (!supports(p)) {
+            outState["message"] = "unsupported IR protocol; update firmware or choose a supported protocol";
+            return false;
         }
+        if (p != next.protocol) next.model = acProtocolSpec(p)->defaultModel;
+        next.protocol = p;
     }
-
-    // merge：只覆盖本次带来的字段，其余沿用当前状态
-    if (params["power"].is<bool>())        _state.power    = params["power"].as<bool>();
-    if (params["mode"].is<const char*>())  _state.mode     = parseMode(params["mode"].as<const char*>());
-    if (params["temp"].is<int>())          _state.degrees  = params["temp"].as<int>();
-    if (params["fan"].is<const char*>())   _state.fanspeed = parseFan(params["fan"].as<const char*>());
+    if (params["model"].is<int>()) next.model = params["model"].as<int>();
+    const AcProtocolSpec* spec = acProtocolSpec(next.protocol);
+    if (!supports(next.protocol) || !spec || next.model < 0 || next.model > 6 || !(spec->models & (1 << next.model))) {
+        outState["message"] = "remote model is not supported by this IR protocol";
+        return false;
+    }
+    if (params["power"].is<bool>())        next.power    = params["power"].as<bool>();
+    if (params["mode"].is<const char*>())  next.mode     = parseMode(params["mode"].as<const char*>());
+    if (params["temp"].is<float>())        next.degrees  = params["temp"].as<float>();
+    if (params["fan"].is<const char*>())   next.fanspeed = parseFan(params["fan"].as<const char*>());
     if (params["swing"].is<bool>())
-        _state.swingv = params["swing"].as<bool>() ? stdAc::swingv_t::kAuto : stdAc::swingv_t::kOff;
-
-    bool ok = _ac.sendAc(_state, nullptr);
+        next.swingv = params["swing"].as<bool>() ? stdAc::swingv_t::kAuto : stdAc::swingv_t::kOff;
+    const stdAc::state_t* previous = _hasLastSent && _lastSent.protocol == next.protocol && _lastSent.model == next.model ? &_lastSent : nullptr;
+    bool ok = false;
+#if SEND_KELON168
+    if (next.protocol == decode_type_t::KELON168) {
+        IRKelon168Ac ac(_irLedPin);
+        ac.begin();
+        configureKelon168(ac, next, previous);
+        ac.send();
+        ok = true;
+    } else
+#endif
+    { ok = _ac.sendAc(next, previous); }
     if (!ok) {
-        Serial.printf("[AC-IR] 协议 %s 不受 IRac 支持，请改用原始码学习方案\n",
-                      typeToString(_protocol).c_str());
+        outState["message"] = "IR sender rejected protocol";
+        return false;
     }
+    if (next.protocol != _protocol || next.model != _state.model) {
+        _prefs.putString("proto", typeToString(next.protocol));
+        _prefs.putShort("model", next.model);
+    }
+    _protocol = next.protocol;
+    _state = next;
+    _lastSent = next;
+    _hasLastSent = true;
+    Serial.printf("[AC-IR] tx protocol=%s model=%d pin=%u\n", typeToString(_protocol).c_str(), _state.model, _irLedPin);
     fillState(outState);
     return ok;
 }
@@ -115,4 +147,5 @@ void AcIr::fillState(JsonObject& outState) const {
     outState["fan"]      = fanStr(_state.fanspeed);
     outState["swing"]    = (_state.swingv != stdAc::swingv_t::kOff);
     outState["protocol"] = typeToString(_protocol);
+    outState["model"]    = _state.model;
 }

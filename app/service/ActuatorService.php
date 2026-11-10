@@ -70,7 +70,8 @@ class ActuatorService
         if ($mode === CapabilityTemplate::MODE_MERGE) {
             // 2a. merge：读期望状态 → 合并改动 → 下发完整状态
             $current = self::getState($device->id) ?: self::defaultState($cap);
-            $next = array_merge($current, $params);
+            $next = AcProtocolCatalog::isInfrared($cap)
+                ? AcProtocolCatalog::mergeState($current, $params) : array_merge($current, $params);
 
             $log = MqttCommandService::sendCommand($device->id, ['action' => $action, 'params' => $next]);
             self::saveState($device->id, $next, false);
