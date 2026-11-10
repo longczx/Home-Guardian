@@ -5,6 +5,7 @@ const auth = useAuthStore();
 function rebind() { uni.navigateTo({ url: '/pages/manage/device-add?rebind=' + id.value }); }
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
 import { getDevice, getLatestTelemetry, sendCommand, getCommandResult } from '@/api/device';
+import { controlOptions } from '@/utils/control-options';
 import type { Device, ControlPoint, LatestMetric } from '@/api/types';
 import { toast } from '@/utils/guard';
 import { setFavorite, setOverride } from '@/api/experience';
@@ -32,7 +33,9 @@ function override() {
   } });
 }
 const overrideActive = computed(() => !!device.value?.manual_override_until && Date.parse(device.value.manual_override_until) > Date.now());
-const controls = computed<ControlPoint[]>(() => device.value?.capability?.controls ?? []);
+const controls = computed<ControlPoint[]>(() => (device.value?.capability?.controls ?? []).map((control) => ({
+  ...control, options: controlOptions(control, device.value?.state ?? {}),
+})));
 
 // 主显示：首个遥测指标的最新值（无遥测则不显示 hero 数字）
 const hero = computed(() => {
@@ -107,14 +110,11 @@ function enumLabel(ctrl: ControlPoint): string {
   const op = (ctrl.options || []).find((o) => o.value === v);
   return op ? op.label : '请选择';
 }
-// 选项多（如红外协议）时用 actionSheet 选择，避免分段按钮挤爆
-function chooseEnum(ctrl: ControlPoint) {
+// Native picker supports the full protocol catalogue on H5 and mini-programs.
+function chooseEnum(ctrl: ControlPoint, event: { detail: { value: string | number } }) {
   const opts = ctrl.options || [];
-  if (!opts.length) return;
-  uni.showActionSheet({
-    itemList: opts.map((o) => o.label),
-    success: (r) => { const op = opts[r.tapIndex]; if (op) onEnum(ctrl, op.value); },
-  });
+  const option = opts[Number(event.detail.value)];
+  if (option) onEnum(ctrl, option.value);
 }
 // 步进器：在 [min,max] 内按 step 加减
 function onStep(ctrl: ControlPoint, dir: 1 | -1) {
@@ -221,10 +221,9 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
               @tap="onEnum(ctrl, op.value)"
             >{{ op.label }}</view>
           </view>
-          <view v-else class="enum-picker" @tap="chooseEnum(ctrl)">
-            <text class="enum-cur">{{ enumLabel(ctrl) }}</text>
-            <text class="enum-arrow">›</text>
-          </view>
+          <picker v-else :range="ctrl.options || []" range-key="label" :value="Math.max(0, (ctrl.options || []).findIndex((o) => o.value === stateVal(ctrl)))" :disabled="disabled(ctrl)" @change="chooseEnum(ctrl, $event)">
+            <view class="enum-picker"><text class="enum-cur">{{ enumLabel(ctrl) }}</text><text class="enum-arrow">›</text></view>
+          </picker>
         </template>
 
         <!-- stepper → − 值 ＋ -->

@@ -28,6 +28,7 @@ export interface ControlPoint {
   step?: number;
   unit?: string;
   options?: { label: string; value: string | number }[];
+  options_by?: { field: string; values: Record<string, { label: string; value: string | number }[]> };
   default?: unknown;
   group?: string;
   order?: number;
