@@ -11,6 +11,7 @@ class Preferences {
 public:
     static inline std::set<std::string> failWrites;
     bool begin(const char* name, bool) { ns = std::string(name) + "/"; return true; }
+    bool isKey(const char* key) { return values().count(ns + key) != 0; }
     std::string getString(const char* key, const char* fallback = "") {
         auto it = values().find(ns + key);
         return it == values().end() ? fallback : it->second;
@@ -26,6 +27,11 @@ public:
     size_t putShort(const char* key, int16_t value) { values()[ns + key] = std::to_string(value); return sizeof(value); }
     uint16_t getUShort(const char* key, uint16_t fallback) { return getShort(key, fallback); }
     size_t putUShort(const char* key, uint16_t value) { return putShort(key, value); }
+    uint8_t getUChar(const char* key, uint8_t fallback) { return getShort(key, fallback); }
+    size_t putUChar(const char* key, uint8_t value) {
+        if (failWrites.count(ns + key)) return 0;
+        return putShort(key, value);
+    }
     bool getBool(const char* key, bool fallback) { return getShort(key, fallback) != 0; }
     size_t putBool(const char* key, bool value) {
         if (failWrites.count(ns + key)) return 0;

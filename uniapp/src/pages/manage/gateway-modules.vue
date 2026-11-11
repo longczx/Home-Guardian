@@ -1,187 +1,254 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { onLoad, onShow } from '@dcloudio/uni-app';
-import { getDevice, getDevices, sendCommand } from '@/api/device';
+import { getDevice } from '@/api/device';
 import type { Device } from '@/api/types';
+import { useServerStore } from '@/stores/server';
+import { readGatewayModules, changeGatewayModule, modulePinError } from '@/utils/gateway-modules';
+import type { GatewayModule, ModuleSnapshot, ModuleType } from '@/utils/gateway-modules';
 import { toast } from '@/utils/guard';
-
-/**
- * 网关子设备热插拔
- *
- * 增删的是【网关固件里的模块清单】，不是后台记录：下发 add_module / remove_module
- * 给网关，固件存进 NVS 并上报新的子设备清单，平台据此自动增补/下线设备。
- * 全程无需改 config.h 重新烧录，也无需重新配网。
- */
 
 const id = ref(0);
 const gateway = ref<Device | null>(null);
-const children = ref<Device[]>([]);
+const snapshot = ref<ModuleSnapshot>({ modules: [] });
+const ready = ref(false);
 const busy = ref(false);
-
-// 可挂载的模块类型：与固件 ModuleStore::isSupportedType 一一对应
-const MODULE_TYPES = [
-  { value: 'dht11', label: 'DHT11 温湿度', defaultPin: 4, hint: '数字口，任意 GPIO' },
-  { value: 'sound', label: '声音传感器', defaultPin: 34, hint: '模拟口 AO，需 ADC1（32-39）' },
-  { value: 'ac_ir', label: '红外空调', defaultPin: 25, hint: '发射管需经三极管驱动，勿用 34-39' },
+const message = ref('');
+const editing = ref('');
+const form = ref<{ type: ModuleType | ''; pin: number | ''; name: string }>({ type: '', pin: '', name: '' });
+const server = useServerStore();
+let generation = 0;
+let active = true;
+const types = [
+  { value: 'dht11' as const, label: 'DHT11 温湿度' },
+  { value: 'sound' as const, label: '声音传感器' },
+  { value: 'ac_ir' as const, label: '红外空调' },
 ];
-
-const form = ref({ type: '', pin: 0, name: '' });
-const typeLabel = computed(
-  () => MODULE_TYPES.find((t) => t.value === form.value.type)?.label ?? '请选择 ›',
-);
-const typeHint = computed(() => MODULE_TYPES.find((t) => t.value === form.value.type)?.hint ?? '');
-
+const editable = computed(() => ready.value && snapshot.value.module_config_version === 1 && !!snapshot.value.pins && !!gateway.value?.is_online);
+const typeLabel = computed(() => types.find(t => t.value === form.value.type)?.label || '请选择模块类型');
+const availablePins = computed(() => !form.value.type ? [] : (snapshot.value.pins?.[form.value.type] || []).filter(
+  pin => !snapshot.value.modules.some(m => m.uid !== editing.value && m.pin === pin),
+));
+function resetForm() { editing.value = ''; form.value = { type: '', pin: '', name: '' }; }
 function chooseType() {
-  uni.showActionSheet({
-    itemList: MODULE_TYPES.map((t) => t.label),
-    success: (r) => {
-      const t = MODULE_TYPES[r.tapIndex];
-      if (!t) return;
-      form.value.type = t.value;
-      form.value.pin = t.defaultPin;
-      if (!form.value.name) form.value.name = t.label;
-    },
-  });
+  if (editing.value || busy.value || !editable.value) return;
+  uni.showActionSheet({ itemList: types.map(t => t.label), success: r => {
+    form.value.type = types[r.tapIndex].value; form.value.pin = '';
+  } });
 }
-
+const pinLabels = computed(() => ['请选择 GPIO', ...availablePins.value.map(pin => `GPIO ${pin}`)]);
+const pinIndex = computed(() => form.value.pin === '' ? 0 : availablePins.value.indexOf(Number(form.value.pin)) + 1);
+function choosePin(event: { detail: { value: string | number } }) {
+  if (busy.value || !editable.value) return;
+  const pin = availablePins.value[Number(event.detail.value) - 1];
+  form.value.pin = pin ?? '';
+}
+function editModule(module: GatewayModule) {
+  if (busy.value || !editable.value) return;
+  editing.value = module.uid;
+  form.value = { type: module.type, pin: module.pin, name: module.name };
+}
 async function load() {
+  if (busy.value || !active) return;
+  busy.value = true; ready.value = false; message.value = '';
+  const attempt = ++generation;
   try {
-    const gw = await getDevice(id.value);
-    gateway.value = gw;
-    const page = await getDevices({ per_page: 200 });
-    children.value = (page.items || []).filter((d) => d.gateway_uid === gw.device_uid);
-  } catch (e) {
-    toast((e as Error).message);
-  }
+    const device = await getDevice(id.value);
+    if (!active || attempt !== generation) return;
+    gateway.value = device;
+    if (!device.is_online) throw new Error('网关离线，请连接后读取设备配置');
+    const result = await readGatewayModules(id.value);
+    if (!active || attempt !== generation) return;
+    snapshot.value = result; ready.value = true; resetForm();
+    if (result.module_config_version !== 1 || !result.pins) message.value = '当前固件只支持查看，请升级到 1.4.0 或更新版本后管理模块';
+  } catch (e) { if (active && attempt === generation) message.value = (e as Error).message; }
+  finally { if (attempt === generation) busy.value = false; }
 }
-
-async function addModule() {
+async function apply(action: 'add_module' | 'update_module' | 'remove_module', params: Record<string, unknown>) {
+  if (busy.value || !editable.value || !active) return;
+  busy.value = true; message.value = '等待设备执行确认并读回配置…';
+  const attempt = ++generation;
+  try {
+    const result = await changeGatewayModule(id.value, action, params);
+    if (!active || attempt !== generation) return;
+    snapshot.value = result; ready.value = true;
+    resetForm(); message.value = '设备已执行，配置读回确认成功';
+    toast('设备已确认', 'success');
+  } catch (e) {
+    if (active && attempt === generation) {
+      ready.value = false; message.value = (e as Error).message + '；请刷新读取设备实际配置后再操作';
+    }
+  } finally { if (attempt === generation) busy.value = false; }
+}
+async function saveModule() {
   if (!form.value.type) return toast('请选择模块类型');
+  if (form.value.pin === '') return toast('请选择 GPIO');
   const pin = Number(form.value.pin);
-  if (!Number.isInteger(pin) || pin < 0 || pin > 39) return toast('GPIO 需在 0-39 之间');
-  if (form.value.type === 'ac_ir' && pin >= 34) return toast('34-39 为仅输入引脚，无法驱动红外管');
-  if (!gateway.value?.is_online) return toast('网关离线，无法下发');
-
-  busy.value = true;
-  try {
-    await sendCommand(id.value, {
-      action: 'add_module',
-      params: { type: form.value.type, pin, name: form.value.name.trim() || undefined },
-    });
-    // 指令是异步下发的，固件执行并上报清单后平台才会出现新设备
-    toast('已下发，稍候刷新查看', 'success');
-    form.value = { type: '', pin: 0, name: '' };
-    setTimeout(load, 2500);
-  } catch (e) {
-    toast((e as Error).message);
-  } finally {
-    busy.value = false;
-  }
+  const error = modulePinError(snapshot.value, form.value.type, pin, editing.value);
+  if (error) return toast(error);
+  if (!editing.value && snapshot.value.modules.length >= (snapshot.value.max_modules || 8)) return toast('模块数量已达上限');
+  if (encodeURIComponent(form.value.name.trim()).replace(/%[0-9A-F]{2}/g, 'x').length > 64) return toast('名称过长，请缩短');
+  await apply(editing.value ? 'update_module' : 'add_module', editing.value
+    ? { uid: editing.value, pin }
+    : { type: form.value.type, pin, name: form.value.name.trim() || undefined });
 }
-
-function removeModule(d: Device) {
-  if (!gateway.value?.is_online) return toast('网关离线，无法下发');
-  uni.showModal({
-    title: '拔除模块？',
-    content: `将从网关上移除「${d.name}」。设备记录与历史数据会保留，只是转为离线；要彻底清除请在后台删除。`,
-    success: async (m) => {
-      if (!m.confirm) return;
-      busy.value = true;
-      try {
-        await sendCommand(id.value, { action: 'remove_module', params: { uid: d.device_uid } });
-        toast('已下发', 'success');
-        setTimeout(load, 2500);
-      } catch (e) {
-        toast((e as Error).message);
-      } finally {
-        busy.value = false;
-      }
-    },
-  });
+function removeModule(module: GatewayModule) {
+  if (busy.value || !editable.value) return;
+  const revision = server.connectionRevision;
+  uni.showModal({ title: '移除模块？', content: `移除「${module.name}」并释放 GPIO ${module.pin}。设备历史记录会保留。`, success: result => {
+    if (result.confirm && active && server.connectionRevision === revision) void apply('remove_module', { uid: module.uid });
+  } });
 }
-
-onLoad((q) => {
-  id.value = Number(q?.id || 0);
-});
+watch(() => server.connectionRevision, () => {
+  active = false; generation++; busy.value = false; ready.value = false;
+  gateway.value = null; snapshot.value = { modules: [] }; resetForm();
+  message.value = '服务器已切换，请返回设备列表重新进入';
+}, { flush: 'sync' });
+onLoad(q => { id.value = Number(q?.id || 0); });
 onShow(load);
+onUnmounted(() => { active = false; generation++; });
 </script>
 
 <template>
   <view class="page">
-    <view v-if="gateway" class="card info">
-      <view class="irow"><text class="ik">网关</text><text class="iv">{{ gateway.name }}</text></view>
-      <view class="irow">
-        <text class="ik">状态</text>
-        <text class="iv" :style="{ color: gateway.is_online ? '#2fb56b' : '#7a8299' }">
-          {{ gateway.is_online ? '在线' : '离线（无法下发指令）' }}
-        </text>
-      </view>
-    </view>
-
-    <!-- 已挂载 -->
     <view class="card">
-      <view class="ct">已挂载模块（{{ children.length }}）</view>
-      <view v-if="!children.length" class="empty">暂无子设备</view>
-      <view v-for="d in children" :key="d.id" class="row">
-        <view class="mid">
-          <text class="nm">{{ d.name }}</text>
-          <text class="sub">{{ d.type }} · {{ d.device_uid }}</text>
+      <text class="title">
+        {{ gateway?.name || '网关模块管理' }}
+      </text>
+      <text class="hint">
+        {{ gateway?.is_online ? '网关在线' : '等待网关连接' }} · 配置从设备实际读取
+      </text>
+      <button
+        :disabled="busy || !active"
+        :loading="busy"
+        @tap="load"
+      >
+        刷新设备配置
+      </button>
+      <text
+        v-if="message"
+        class="message"
+      >
+        {{ message }}
+      </text>
+    </view>
+    <view class="card">
+      <text class="title">
+        已挂载模块（{{ ready ? snapshot.modules.length : '待确认' }}）
+      </text>
+      <text
+        v-if="ready && !snapshot.modules.length"
+        class="hint"
+      >
+        暂无模块，可在下方添加。清空后重启仍保持为空。
+      </text>
+      <view
+        v-for="module in snapshot.modules"
+        :key="module.uid"
+        class="row"
+      >
+        <view class="module-info">
+          <text class="name">
+            {{ module.name }}
+          </text>
+          <text class="hint">
+            {{ module.type }} · GPIO {{ module.pin }}
+          </text>
+          <text class="hint">
+            {{ module.uid }}
+          </text>
         </view>
-        <text class="dot" :style="{ color: d.is_online ? '#2fb56b' : '#7a8299' }">●</text>
-        <text class="del" @tap="removeModule(d)">拔除</text>
+        <button
+          size="mini"
+          :disabled="busy || !editable"
+          @tap="editModule(module)"
+        >
+          改引脚
+        </button>
+        <button
+          size="mini"
+          :disabled="busy || !editable"
+          @tap="removeModule(module)"
+        >
+          移除
+        </button>
       </view>
     </view>
-
-    <!-- 新增 -->
     <view class="card">
-      <view class="ct">插入新模块</view>
-      <view class="field">
-        <text class="label">模块类型</text>
-        <view class="picker" @tap="chooseType">{{ typeLabel }}</view>
+      <text class="title">
+        {{ editing ? '修改模块引脚' : '添加模块' }}
+      </text>
+      <text class="hint">
+        断电调整接线后再上电保存。修改引脚保留设备身份、历史记录及红外协议。
+      </text>
+      <view
+        class="field"
+        @tap="chooseType"
+      >
+        <text class="label">
+          模块类型
+        </text><text>{{ typeLabel }}</text>
       </view>
-      <view class="field">
-        <text class="label">GPIO 引脚</text>
-        <input v-model="form.pin" class="input" type="number" placeholder="如 4" placeholder-class="ph" />
-        <text v-if="typeHint" class="hint">{{ typeHint }}</text>
+      <picker
+        :range="pinLabels"
+        :value="pinIndex"
+        :disabled="busy || !editable || !form.type || !availablePins.length"
+        @change="choosePin"
+      >
+        <view class="field">
+          <text class="label">
+            GPIO 引脚
+          </text><text>{{ form.pin === '' ? '选择可用引脚' : 'GPIO ' + form.pin }}</text>
+        </view>
+      </picker>
+      <text class="hint">
+        仅显示设备允许且未被占用的引脚；系统保留引脚不能选择。
+      </text>
+      <view
+        v-if="!editing"
+        class="field"
+      >
+        <text class="label">
+          名称（可空）
+        </text><input
+          v-model="form.name"
+          :disabled="busy || !editable"
+          placeholder="如 客厅温湿度"
+        >
       </view>
-      <view class="field">
-        <text class="label">名称（可空）</text>
-        <input v-model="form.name" class="input" placeholder="如 客厅温湿度" placeholder-class="ph" />
-      </view>
-      <button class="btn" :disabled="busy" @tap="addModule">插入并同步</button>
-      <text class="tip">模块清单存在网关的 NVS 里，掉电重启沿用，无需重新烧录固件。</text>
+      <button
+        class="primary"
+        :disabled="busy || !editable"
+        :loading="busy"
+        @tap="saveModule"
+      >
+        {{ editing ? '保存引脚并确认' : '添加并确认' }}
+      </button>
+      <button
+        v-if="editing"
+        :disabled="busy"
+        @tap="resetForm"
+      >
+        取消修改
+      </button>
+      <text class="hint">
+        设备确认保存并应用后才显示成功；传感器读数和红外响应仍需结合实际接线检查。
+      </text>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.page { padding: 20rpx; }
-.card {
-  background: $hg-card; border-radius: $hg-radius; padding: 8rpx 28rpx 28rpx;
-  box-shadow: $hg-shadow; margin-bottom: 20rpx;
-}
-.info { padding: 20rpx 28rpx; }
-.irow { display: flex; justify-content: space-between; padding: 12rpx 0; }
-.ik { font-size: 26rpx; color: $hg-muted; }
-.iv { font-size: 26rpx; color: $hg-fg; }
-.ct { font-size: 26rpx; font-weight: 600; color: $hg-fg; padding: 22rpx 0 4rpx; }
-.empty { font-size: 26rpx; color: $hg-muted; padding: 24rpx 0; }
-.row { display: flex; align-items: center; padding: 22rpx 0; border-bottom: 1rpx solid $hg-line; }
-.row:last-child { border-bottom: none; }
-.mid { flex: 1; }
-.nm { display: block; font-size: 30rpx; color: $hg-fg; }
-.sub { display: block; font-size: 22rpx; color: $hg-muted; margin-top: 6rpx; }
-.dot { font-size: 22rpx; margin-right: 20rpx; }
-.del { font-size: 26rpx; color: #e5484d; }
-.field { padding: 26rpx 0; border-bottom: 1rpx solid $hg-line; }
+.page { padding: 24rpx; }
+.card { background: $hg-card; border-radius: $hg-radius; padding: 28rpx; margin-bottom: 24rpx; box-shadow: $hg-shadow; }
+.title { display: block; font-size: 30rpx; font-weight: 600; color: $hg-fg; margin-bottom: 16rpx; }
+.hint { display: block; font-size: 24rpx; color: $hg-muted; line-height: 1.6; margin: 12rpx 0; word-break: break-all; }
+.message { display: block; font-size: 26rpx; color: $hg-accent; margin-top: 20rpx; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 12rpx; padding: 20rpx 0; border-bottom: 1rpx solid $hg-line; }
+.module-info { flex: 1; min-width: 240rpx; }
+.name { font-size: 28rpx; color: $hg-fg; }
+.field { padding: 24rpx 0; border-bottom: 1rpx solid $hg-line; color: $hg-fg; font-size: 28rpx; }
 .label { display: block; font-size: 24rpx; color: $hg-muted; margin-bottom: 12rpx; }
-.input { font-size: 30rpx; color: $hg-fg; }
-.picker { font-size: 30rpx; color: $hg-fg; }
-.ph { color: #b6bccb; }
-.hint { display: block; font-size: 22rpx; color: $hg-muted; margin-top: 10rpx; }
-.btn {
-  margin-top: 26rpx; background: $hg-accent; color: #fff; font-size: 30rpx;
-  border-radius: $hg-radius-s; border: none;
-}
-.tip { display: block; font-size: 22rpx; color: $hg-muted; margin-top: 18rpx; line-height: 1.6; }
+button { margin-top: 16rpx; font-size: 26rpx; }
+.primary { background: $hg-accent; color: #fff; }
 </style>

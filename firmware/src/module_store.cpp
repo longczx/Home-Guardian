@@ -6,11 +6,13 @@ static const char* NS  = "hg-mods";
 static const char* KEY = "list";
 
 void ModuleStore::begin(const String& gatewayUid) {
-    load();
-    if (_count == 0) {
+    int state = load();
+    _healthy = state >= 0;
+    if (state == 0) {
         seedFromConfig(gatewayUid);
-        save();
+        _healthy = save();
     }
+    if (!_healthy) Serial.println("[模块] 配置读取/保存失败，保留原始数据并禁止修改");
     Serial.printf("[模块] 已加载 %d 个模块\n", _count);
     for (uint8_t i = 0; i < _count; i++) {
         Serial.printf("[模块]   %s pin=%d uid=%s\n",
@@ -31,55 +33,74 @@ const ModuleSlot* ModuleStore::findByUid(const char* uid) const {
 }
 
 bool ModuleStore::add(const ModuleSlot& slot) {
-    if (_count >= MAX_MODULES) return false;
+    if (!_healthy || _count >= MAX_MODULES) return false;
     if (slot.uid.length() == 0 || !isSupportedType(slot.type)) return false;
     if (findByUid(slot.uid.c_str())) return false;   // uid 不可重复
 
     _slots[_count++] = slot;
-    save();
+    if (!save()) { _slots[--_count] = ModuleSlot{}; return false; }
     return true;
 }
 
 bool ModuleStore::remove(const char* uid) {
-    if (!uid) return false;
+    if (!_healthy || !uid) return false;
     for (uint8_t i = 0; i < _count; i++) {
         if (_slots[i].uid != uid) continue;
+        ModuleSlot previous = _slots[i];
         for (uint8_t j = i; j + 1 < _count; j++) {
             _slots[j] = _slots[j + 1];
         }
         _slots[--_count] = ModuleSlot{};
-        save();
+        if (!save()) {
+            for (uint8_t j = _count; j > i; j--) _slots[j] = _slots[j - 1];
+            _slots[i] = previous; ++_count;
+            return false;
+        }
         return true;
     }
     return false;
 }
 
-void ModuleStore::load() {
-    _prefs.begin(NS, true);
-    String json = _prefs.getString(KEY, "");
-    _prefs.end();
-
-    _count = 0;
-    if (json.length() == 0) return;
-
-    JsonDocument doc;
-    if (deserializeJson(doc, json)) {
-        Serial.println("[模块] NVS 清单解析失败，按空处理");
-        return;
+bool ModuleStore::update(const ModuleSlot& slot) {
+    if (!_healthy) return false;
+    for (uint8_t i = 0; i < _count; i++) {
+        if (_slots[i].uid != slot.uid || _slots[i].type != slot.type) continue;
+        ModuleSlot previous = _slots[i];
+        _slots[i] = slot;
+        if (!save()) { _slots[i] = previous; return false; }
+        return true;
     }
-    for (JsonObject o : doc.as<JsonArray>()) {
-        if (_count >= MAX_MODULES) break;
-        ModuleSlot s;
-        s.type = (const char*)(o["t"]   | "");
-        s.pin  = (uint8_t)(o["pin"]     | 0);
-        s.uid  = (const char*)(o["uid"] | "");
-        s.name = (const char*)(o["n"]   | "");
-        if (s.uid.length() == 0 || !isSupportedType(s.type)) continue;
-        _slots[_count++] = s;
-    }
+    return false;
 }
 
-void ModuleStore::save() {
+int ModuleStore::load() {
+    _count = 0;
+    if (!_prefs.begin(NS, true)) {
+        // Preferences cannot open a namespace that has never been created.
+        if (!_prefs.begin(NS, false)) return -1;
+    }
+    const bool exists = _prefs.isKey(KEY);
+    String json = _prefs.getString(KEY, "");
+    _prefs.end();
+    if (!exists) return 0;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) || !doc.is<JsonArray>()) return -1;
+    for (JsonObject o : doc.as<JsonArray>()) {
+        if (_count >= MAX_MODULES || !o["pin"].is<int>() || o["pin"].as<int>() < 0 || o["pin"].as<int>() > 39) {
+            _count = 0; return -1;
+        }
+        ModuleSlot slot;
+        slot.type = o["t"] | ""; slot.pin = o["pin"].as<int>();
+        slot.uid = o["uid"] | ""; slot.name = o["n"] | "";
+        if (slot.uid.length() == 0 || !isSupportedType(slot.type) || findByUid(slot.uid.c_str())) {
+            _count = 0; return -1;
+        }
+        _slots[_count++] = slot;  // Preserve existing wiring, even outside the new safe pin picker.
+    }
+    return 1;  // [] is an intentional empty configuration, never seed it again.
+}
+
+bool ModuleStore::save() {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < _count; i++) {
@@ -92,9 +113,10 @@ void ModuleStore::save() {
     String json;
     serializeJson(doc, json);
 
-    _prefs.begin(NS, false);
-    _prefs.putString(KEY, json);
+    if (!_prefs.begin(NS, false)) return false;
+    bool saved = _prefs.putString(KEY, json) == json.length();
     _prefs.end();
+    return saved;
 }
 
 // 首次开机：按 config.h 的编译期开关播种，保证升级后原有传感器不丢

@@ -39,3 +39,14 @@ cp firmware/include/config.example.h "$work/stubs/config.h"
 g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
     "$work/config_store.cpp" "$work/app_defaults_test.cpp" -o "$work/app-defaults-test"
 "$work/app-defaults-test"
+cp firmware/include/module_store.h firmware/include/module_manager.h firmware/include/module_pins.h "$work/include/"
+cp firmware/src/module_store.cpp firmware/src/module_manager.cpp tests/Firmware/module_manager_test.cpp "$work/"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" -I"$work/json" \
+    "$work/module_store.cpp" "$work/module_manager.cpp" "$work/module_manager_test.cpp" -o "$work/module-manager-test"
+"$work/module-manager-test"
+cp firmware/include/command_handler.h "$work/include/"
+cp tests/Firmware/stubs/mqtt_manager.h "$work/include/"
+cp firmware/src/command_handler.cpp tests/Firmware/module_command_test.cpp "$work/"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" -I"$work/json" \
+    "$work/command_handler.cpp" "$work/module_command_test.cpp" -o "$work/module-command-test"
+"$work/module-command-test"

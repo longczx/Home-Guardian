@@ -18,6 +18,7 @@ await build({
     export { provisioningStage } from './src/utils/provisioning-stage';
     export { withCommandResult } from './src/utils/command-result';
     export { controlOptions, updateControlValues } from './src/utils/control-options';
+    export { readGatewayModules, changeGatewayModule, modulePinError } from './src/utils/gateway-modules';
   `, resolveDir: process.cwd() },
   alias: { '@': resolve('src') }, outfile: output, bundle: true, platform: 'node', format: 'esm',
 });
@@ -135,4 +136,108 @@ test('switching IR protocol selects its own model and keeps unrelated automation
   assert.equal(current.model, 6, 'The original editor snapshot must remain unchanged');
   assert.deepEqual(runtime.controlOptions(model, next), [{ value: 1, label: 'RCH-R0Y3' }]);
   assert.deepEqual(runtime.controlOptions(model, { protocol: 'unknown' }), []);
+});
+
+
+const modules = {
+  module_config_version: 1, max_modules: 8,
+  pins: { dht11: [4, 13, 26], sound: [32, 33, 34], ac_ir: [25, 26, 27] },
+  modules: [{ uid: 'gw-ac', type: 'ac_ir', pin: 25, name: 'AC' }],
+};
+function ack(id, data, status = 'replied_ok') {
+  sockets.at(-1).handlers.message({ data: JSON.stringify({ type: 'command_reply', request_id: id, status, data }) });
+}
+function accept(request, id, data, status = 'replied_ok') {
+  ack(id, data, status);  // device reply may beat the HTTP response
+  respond(request, 200, { request_id: id, status: 'queued' });
+}
+
+test('module pins follow device capabilities, reject conflicts and require new firmware', () => {
+  assert.match(runtime.modulePinError({ modules: [] }, 'ac_ir', 25), /升级/);
+  assert.match(runtime.modulePinError(modules, 'ac_ir', 34, 'gw-ac'), /允许/);
+  assert.match(runtime.modulePinError(modules, 'dht11', 26.5), /允许/);
+  assert.match(runtime.modulePinError(modules, 'dht11', 4.0), /^$/);
+  assert.match(runtime.modulePinError(modules, 'ac_ir', 25), /占用/);
+  assert.match(runtime.modulePinError(modules, 'ac_ir', 26), /一路/);
+  assert.equal(runtime.modulePinError(modules, 'ac_ir', 26, 'gw-ac'), '');
+});
+
+test('command results return readback data via websocket and persisted polling fallback', async () => {
+  const result = runtime.readGatewayModules(1);
+  accept(requests[0], 'module-list', modules);
+  assert.deepEqual(await result, modules);
+  const fallback = runtime.withCommandResult(async () => ({ request_id: 'poll-data', status: 'queued' }), 100,
+    async id => ({ request_id: id, status: 'replied_ok', reply: modules }));
+  assert.deepEqual(await fallback, modules);
+});
+
+test('module update waits for device ACK and verifies the actual pin from readback', async () => {
+  let complete = false;
+  const pending = runtime.changeGatewayModule(1, 'update_module', { uid: 'gw-ac', pin: 26 }).then(value => { complete = true; return value; });
+  respond(requests[0], 200, { request_id: 'update-pin', status: 'queued' });
+  await tick();
+  assert.equal(complete, false, 'HTTP queued is not device execution');
+  ack('update-pin', { uid: 'gw-ac', pin: 26, applied: true });
+  await tick();
+  const read = requests.find(r => r.data?.action === 'list_modules');
+  assert.ok(read);
+  assert.equal(complete, false, 'ACK is followed by a real configuration read');
+  const changed = { ...modules, modules: [{ ...modules.modules[0], pin: 26 }] };
+  accept(read, 'readback', changed);
+  assert.deepEqual(await pending, changed);
+});
+
+test('module failures expose device error and never report success or perform readback', async () => {
+  const pending = runtime.changeGatewayModule(1, 'update_module', { uid: 'gw-ac', pin: 26 });
+  const rejected = assert.rejects(pending, /GPIO 已被其他模块占用/);
+  accept(requests[0], 'bad-pin', { message: 'GPIO 已被其他模块占用' }, 'replied_error');
+  await rejected;
+  assert.equal(requests.filter(r => r.data?.action === 'list_modules').length, 0);
+});
+
+test('a mismatched device readback rejects the update', async () => {
+  const pending = runtime.changeGatewayModule(1, 'update_module', { uid: 'gw-ac', pin: 26 });
+  const rejected = assert.rejects(pending, /不一致/);
+  accept(requests[0], 'update-mismatch', { uid: 'gw-ac', pin: 26, applied: true });
+  await tick();
+  accept(requests.find(r => r.data?.action === 'list_modules'), 'mismatch-read', modules);
+  await rejected;
+});
+
+test('module removal confirms absence in the device list, including an intentionally empty list', async () => {
+  const pending = runtime.changeGatewayModule(1, 'remove_module', { uid: 'gw-ac' });
+  accept(requests[0], 'remove', { uid: 'gw-ac', applied: true });
+  await tick();
+  accept(requests.find(r => r.data?.action === 'list_modules'), 'empty-read', { ...modules, modules: [] });
+  assert.equal((await pending).modules.length, 0);
+});
+
+test('changing servers while managing modules cannot start a readback on the other server', async () => {
+  const pending = runtime.changeGatewayModule(1, 'update_module', { uid: 'gw-ac', pin: 26 });
+  const rejected = assert.rejects(pending, /服务器已切换/);
+  server.switchTo('b');
+  accept(requests[0], 'old-server-update', { uid: 'gw-ac', pin: 26, applied: true });
+  await rejected;
+  assert.equal(requests.length, 1);
+});
+
+
+test('module add uses the device-assigned UID and confirms its type and GPIO', async () => {
+  const pending = runtime.changeGatewayModule(1, 'add_module', { type: 'sound', pin: 34 });
+  accept(requests[0], 'add-sound', { uid: 'gw-sound-2', pin: 34, applied: true });
+  await tick();
+  const next = { ...modules, modules: [...modules.modules, { uid: 'gw-sound-2', type: 'sound', pin: 34, name: 'sound' }] };
+  accept(requests.find(r => r.data?.action === 'list_modules'), 'added-read', next);
+  assert.deepEqual(await pending, next);
+});
+
+test('module management rejects ACKs for another module and replies without applied confirmation', async () => {
+  const wrong = runtime.changeGatewayModule(1, 'remove_module', { uid: 'gw-ac' });
+  const rejected = assert.rejects(wrong, /回执与操作不一致/);
+  accept(requests[0], 'wrong-module', { uid: 'another-ac', applied: true });
+  await rejected;
+  const old = runtime.changeGatewayModule(1, 'remove_module', { uid: 'gw-ac' });
+  const oldRejected = assert.rejects(old, /未确认配置生效/);
+  accept(requests.at(-1), 'old-firmware', { uid: 'gw-ac' });
+  await oldRejected;
 });

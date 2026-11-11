@@ -14,6 +14,7 @@ public:
                const char* gatewayUid, const char* password);
     void loop();
     bool isConnected();
+    bool isGatewayTarget(const char* uid) const { return uid && _gatewayUid == uid; }
 
     // 网关自身状态
     bool publishGatewayState(bool online);
@@ -29,6 +30,7 @@ public:
     // 订阅子设备的指令主题：子设备不直连 MQTT，由网关代收
     // （后端 ACL 已放行网关订阅其下子设备的 downstream，见 DeviceService::checkMqttAcl）
     void subscribeDevice(const char* uid);
+    void unsubscribeDevice(const char* uid);
 
     // 子设备完整状态上报（子执行器用）：home/upstream/{uid}/state/post
     bool publishDeviceStateJson(const char* uid, const char* json);

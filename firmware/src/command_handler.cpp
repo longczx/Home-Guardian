@@ -2,9 +2,9 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-void CommandHandler::registerAction(const char* action, ActionHandler handler) {
+void CommandHandler::registerAction(const char* action, ActionHandler handler, bool gatewayOnly) {
     if (_count < MAX_ACTIONS) {
-        _actions[_count++] = { action, handler };
+        _actions[_count++] = { action, handler, gatewayOnly };
     }
 }
 
@@ -23,12 +23,37 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
     Serial.printf("[CMD] 收到指令: action=%s, request_id=%s, target=%s\n", action, requestId, targetUid);
 
     if (!requestId[0] || strlen(requestId) > 96) return;
+    for (uint8_t i = 0; i < _count; i++) {
+        if (!strcmp(_actions[i].action, action) && _actions[i].gatewayOnly && !mqtt.isGatewayTarget(targetUid)) {
+            JsonDocument denied;
+            denied["request_id"] = requestId; denied["status"] = "error";
+            denied["message"] = "module management requires gateway target";
+            String json; serializeJson(denied, json);
+            mqtt.publishCommandReplyFor(targetUid, json.c_str());
+            return;
+        }
+    }
+    // Read-only snapshots must not fill the small NVS partition with cached module lists.
+    if (!strcmp(action, "list_modules")) {
+        JsonDocument reply;
+        JsonObject response = reply.to<JsonObject>();
+        bool ok = false;
+        for (uint8_t i = 0; i < _count; i++) {
+            if (!strcmp(_actions[i].action, action)) { ok = _actions[i].handler(params, response); break; }
+        }
+        reply["request_id"] = requestId;
+        reply["status"] = ok ? "ok" : "error";
+        if (!ok && !reply["message"].is<const char*>()) reply["message"] = "list modules failed";
+        String json; serializeJson(reply, json);
+        mqtt.publishCommandReplyFor(targetUid, json.c_str());
+        return;
+    }
     Preferences cache;
     if (!cache.begin("hg_commands", false)) return;
     // 持久化最近 16 条回执，MQTT QoS1 重投或重启后不重复操作硬件。
     for (uint8_t i = 0; i < 16; i++) {
-        String key = "c" + String(i);
-        String saved = cache.getString(key.c_str(), "");
+        char key[8]; snprintf(key, sizeof(key), "c%u", i);
+        String saved = cache.getString(key, "");
         JsonDocument entry;
         if (deserializeJson(entry, saved)) continue;
         if (String(entry["id"] | "") == requestId && String(entry["target"] | "") == targetUid) {
@@ -39,7 +64,7 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
         }
     }
     uint8_t slot = cache.getUChar("next", 0) % 16;
-    String cacheKey = "c" + String(slot);
+    char cacheKey[8]; snprintf(cacheKey, sizeof(cacheKey), "c%u", slot);
     JsonDocument entry;
     entry["id"] = requestId;
     entry["target"] = targetUid;
@@ -53,7 +78,7 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
     String saved;
     serializeJson(entry, saved);
     // 先记执行标记；掉电后返回未知结果，避免再次执行非幂等动作。
-    if (!cache.putString(cacheKey.c_str(), saved) || !cache.putUChar("next", (slot + 1) % 16)) {
+    if (!cache.putString(cacheKey, saved) || !cache.putUChar("next", (slot + 1) % 16)) {
         cache.end();
         mqtt.publishCommandReplyFor(targetUid, tombstone.c_str());
         return;
@@ -96,7 +121,7 @@ void CommandHandler::handle(const char* targetUid, const char* payload, unsigned
     entry["reply"] = response;
     saved = "";
     serializeJson(entry, saved);
-    cache.putString(cacheKey.c_str(), saved);
+    cache.putString(cacheKey, saved);
     cache.end();
     mqtt.publishCommandReplyFor(targetUid, response.c_str());
     Serial.printf("[CMD] → 回复: %s\n", response.c_str());
