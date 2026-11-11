@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
+import { useServerStore } from '@/stores/server';
 import { onLoad } from '@dcloudio/uni-app';
 import { provisioningStage } from '@/utils/provisioning-stage';
 import { createProvisionCode, getProvisionStatus } from '@/api/provisioning';
 import { toast } from '@/utils/guard';
 
+const server = useServerStore();
+const platformUrl = computed(() => server.current?.url || '');
 const location = ref('');
 const rebindId = ref<number>();
 const progress = ref('等待设备注册');
@@ -26,7 +29,7 @@ function stop() {
 }
 
 async function generate() {
-  if (busy.value) return;
+  if (busy.value || !platformUrl.value) return;
   busy.value = true;
   stop();
   const attempt = ++generation;
@@ -34,6 +37,7 @@ async function generate() {
   registeredId.value = 0;
   try {
     const res = await createProvisionCode(location.value.trim() || undefined, targetId || undefined);
+    if (attempt !== generation) return;
     code.value = res.provision_code;
     expiresIn.value = res.expires_in;
     status.value = 'pending';
@@ -66,8 +70,8 @@ async function generate() {
       } catch { if (attempt === generation && ++failures >= 3) connectionError.value = '连续无法联系服务器，请恢复手机网络后重试查询'; }
     }, 3000);
   } catch (e) {
-    toast((e as Error).message);
-  } finally { busy.value = false; }
+    if (attempt === generation) toast((e as Error).message);
+  } finally { if (attempt === generation) busy.value = false; }
 }
 function openRegisteredDevice() { if (code.value) uni.redirectTo({ url: '/pages/device/detail?id=' + registeredId.value }); }
 const registeredId = ref(0);
@@ -83,6 +87,23 @@ function copyCode(silent = false) {
   if (silent) toast('配对码已复制', 'success');
 }
 
+function copyPlatformUrl() {
+  if (!platformUrl.value) return;
+  uni.setClipboardData({
+    data: platformUrl.value,
+    success: () => toast('平台地址已复制', 'success'),
+    fail: () => toast('复制失败'),
+  });
+}
+
+// 配对码与设备 ID 属于生成它们的服务器，切换时必须一起作废。
+watch(() => server.connectionRevision, () => {
+  generation++; stop(); busy.value = false;
+  code.value = ''; expiresIn.value = 0; status.value = 'idle';
+  registeredId.value = 0; rebindId.value = undefined; deviceName.value = '';
+  connectionError.value = '服务器已切换，请重新生成配对码';
+}, { flush: 'sync' });
+
 function configureDevice() { uni.navigateTo({ url: '/pages/manage/device-edit?id=' + registeredId.value }); }
 function done() {
   uni.navigateBack();
@@ -95,8 +116,27 @@ onUnmounted(() => { generation++; stop(); });
   <view class="page">
     <view class="steps">
       <text class="step">
-        1. 生成配对码 → 2. 连接 HG-Setup 热点，打开 192.168.4.1 填 WiFi 和配对码 → 3. 回到手机原网络，等待设备连接和首报
+        1. 生成配对码 → 2. 连接 HG-Setup 热点，打开 192.168.4.1 填 WiFi、配对码和平台地址 → 3. 回到手机原网络，等待设备连接和首报
       </text>
+    </view>
+
+    <view class="card platform-card">
+      <text class="label">
+        当前服务器的平台地址
+      </text>
+      <text class="platform-url">
+        {{ platformUrl || '请先选择服务器' }}
+      </text>
+      <text class="hint">
+        粘贴到设备配网页的「平台地址」，与本页配对码配套使用。
+      </text>
+      <button
+        class="btn btn-copy"
+        :disabled="!platformUrl"
+        @tap="copyPlatformUrl"
+      >
+        复制平台地址
+      </button>
     </view>
 
     <view
@@ -117,7 +157,7 @@ onUnmounted(() => { generation++; stop(); });
       <button
         class="btn btn-primary"
         :loading="busy"
-        :disabled="busy"
+        :disabled="busy || !platformUrl"
         @tap="generate"
       >
         {{ rebindId ? '授权原网关重新配网' : '生成配对码' }}
@@ -228,6 +268,16 @@ onUnmounted(() => { generation++; stop(); });
   border-radius: $hg-radius;
   padding: 32rpx 28rpx;
   box-shadow: $hg-shadow;
+}
+.platform-card {
+  margin-bottom: 24rpx;
+}
+.platform-url {
+  display: block;
+  word-break: break-all;
+  font-size: 30rpx;
+  color: $hg-fg;
+  margin-bottom: 16rpx;
 }
 .card.center {
   text-align: center;

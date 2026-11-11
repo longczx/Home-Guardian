@@ -20,6 +20,7 @@ bool MqttManager::begin(const char* host, uint16_t port,
     _mqtt.setServer(_host.c_str(), port);
     _mqtt.setCallback(_mqttCallback);
     _mqtt.setBufferSize(512);
+    _mqtt.setSocketTimeout(2);
 
     connect();
     return _mqtt.connected();
@@ -28,6 +29,11 @@ bool MqttManager::begin(const char* host, uint16_t port,
 void MqttManager::connect() {
     Serial.printf("[MQTT] 连接 %s:%d (gateway=%s)...\n", _host.c_str(), _port, _gatewayUid.c_str());
 
+    // 限制 TCP 连接等待；预连接后 PubSubClient 复用此 socket。
+    if (!_wifiClient.connected() && !_wifiClient.connect(_host.c_str(), _port, 2000)) {
+        Serial.println("[MQTT] TCP 连接失败");
+        return;
+    }
     bool ok = _mqtt.connect(
         _gatewayUid.c_str(),      // client id
         _gatewayUid.c_str(),      // username (网关的 device_uid)
