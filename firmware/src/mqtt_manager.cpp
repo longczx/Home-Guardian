@@ -19,7 +19,7 @@ bool MqttManager::begin(const char* host, uint16_t port,
     _mqtt.setClient(_wifiClient);
     _mqtt.setServer(_host.c_str(), port);
     _mqtt.setCallback(_mqttCallback);
-    _mqtt.setBufferSize(512);
+    _mqtt.setBufferSize(4096);
     _mqtt.setSocketTimeout(2);
 
     connect();
@@ -78,13 +78,28 @@ void MqttManager::subscribeDevice(const char* uid) {
         return;
     }
     for (uint8_t i = 0; i < _subCount; i++) {
-        if (_subUids[i] == uid) return;   // 已登记
+        if (_subUids[i] == uid) {
+            if (_mqtt.connected()) subscribeCommandTopic(uid);
+            return;
+        }
     }
     _subUids[_subCount++] = uid;
 
     // 已连接则立即生效；未连接时留待下次 connect() 统一订阅
     if (_mqtt.connected()) {
         subscribeCommandTopic(uid);
+    }
+}
+
+void MqttManager::unsubscribeDevice(const char* uid) {
+    for (uint8_t i = 0; i < _subCount; i++) {
+        if (_subUids[i] != uid) continue;
+        char topic[80];
+        snprintf(topic, sizeof(topic), "home/downstream/%s/command/set", uid);
+        if (_mqtt.connected()) _mqtt.unsubscribe(topic);
+        for (uint8_t j = i; j + 1 < _subCount; j++) _subUids[j] = _subUids[j + 1];
+        _subUids[--_subCount] = "";
+        return;
     }
 }
 

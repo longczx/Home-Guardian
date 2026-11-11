@@ -27,6 +27,8 @@
 #include "provisioning.h"
 #include "registration.h"
 #include "reset_button.h"
+#include "module_manager.h"
+#include "gateway_module_runtime.h"
 
 // 模块由运行期清单决定，编译期无从得知接了什么，故各驱动一律编入
 #include "sensor_dht11.h"
@@ -49,6 +51,10 @@ Provisioning provisioning;
 // 它在后台是一台挂在本网关下的独立设备（type=ac），有自己的在线状态与控制卡。
 AcIr* acIr = nullptr;
 String acUid;
+GatewayModuleRuntime moduleRuntime(sensors, acIr, FACTORY_RESET_PIN);
+ModuleManager* moduleManager = nullptr;
+unsigned long acSubscribeAt = 0;
+uint8_t acSubscribeRetries = 0;
 
 enum Mode { MODE_PROVISION, MODE_NORMAL };
 Mode mode = MODE_NORMAL;
@@ -171,107 +177,35 @@ void publishManifest() {
 
 // ─── 热插拔指令：运行期增删模块，免烧录 ────────────────────
 
-bool handleListModules(const JsonObject& params, JsonObject& response) {
-    JsonArray arr = response["modules"].to<JsonArray>();
-    for (uint8_t i = 0; i < modules.count(); i++) {
-        const ModuleSlot* s = modules.get(i);
-        if (!s) continue;
-        JsonObject o = arr.add<JsonObject>();
-        o["type"] = s->type;
-        o["pin"]  = s->pin;
-        o["uid"]  = s->uid;
-        o["name"] = s->name;
-    }
-    return true;
+bool handleListModules(const JsonObject&, JsonObject& response) {
+    return moduleManager && moduleManager->list(response);
 }
 
 bool handleAddModule(const JsonObject& params, JsonObject& response) {
-    ModuleSlot s;
-    s.type = (const char*)(params["type"] | "");
-    s.pin  = (uint8_t)(params["pin"] | 255);
-    s.name = (const char*)(params["name"] | "");
-    s.uid  = (const char*)(params["uid"] | "");
-
-    if (!ModuleStore::isSupportedType(s.type)) {
-        response["message"] = "unsupported type";
-        return false;
+    if (!moduleManager || !moduleManager->add(params, response)) return false;
+    String uid = response["uid"] | "";
+    if (String(params["type"] | "") == "ac_ir") {
+        acUid = uid;
+        acSubscribeRetries = 8;
+        acSubscribeAt = millis() + 1000;  // 平台清单处理后再订阅，重连时也会恢复。
     }
-    if (s.pin > 39) {                       // ESP32 GPIO 上限
-        response["message"] = "invalid pin";
-        return false;
-    }
-    // GPIO34-39 是仅输入引脚，红外发射（需输出）接上去不会工作
-    if (s.type == "ac_ir" && s.pin >= 34) {
-        response["message"] = "pin is input-only, cannot drive IR LED";
-        return false;
-    }
-    if (s.type == "ac_ir" && acIr) {
-        response["message"] = "ac module already exists";
-        return false;
-    }
-    if (s.uid.length() == 0) {
-        // 默认派生：与传感器同规则，保证同一块板重复添加不撞名
-        String suffix = (s.type == "dht11") ? "-temp" : (s.type == "sound") ? "-sound" : "-ac";
-        s.uid = store.gatewayUid() + suffix;
-    }
-    if (s.name.length() == 0) s.name = s.type;
-
-    if (modules.findByUid(s.uid.c_str())) {
-        response["message"] = "uid already exists";
-        return false;
-    }
-    if (!instantiate(s)) {
-        response["message"] = "instantiate failed";
-        return false;
-    }
-    if (!modules.add(s)) {
-        response["message"] = "module list full";
-        return false;
-    }
-    sensors.beginAll();
-
-    // 先让平台建出设备记录，再上线/订阅——否则 EMQX ACL 查不到该子设备会拒绝
     publishManifest();
-    mqtt.publishSensorState(s.uid.c_str(), true);
-    if (s.type == "ac_ir") {
-        // 平台建记录需要一点时间，稍等再订阅它的指令主题
-        delay(800);
-        mqtt.subscribeDevice(acUid.c_str());
-    }
+    mqtt.publishSensorState(uid.c_str(), true);
+    return true;
+}
 
-    response["uid"] = s.uid;
-    Serial.printf("[Main] 已热插入模块: %s pin=%d uid=%s\n", s.type.c_str(), s.pin, s.uid.c_str());
+bool handleUpdateModule(const JsonObject& params, JsonObject& response) {
+    if (!moduleManager || !moduleManager->update(params, response)) return false;
+    publishManifest();
     return true;
 }
 
 bool handleRemoveModule(const JsonObject& params, JsonObject& response) {
-    String uid = (const char*)(params["uid"] | "");
-    if (uid.length() == 0) {
-        response["message"] = "missing uid";
-        return false;
-    }
-    const ModuleSlot* slot = modules.findByUid(uid.c_str());
-    if (!slot) {
-        response["message"] = "module not found";
-        return false;
-    }
-    bool isAc = (slot->type == "ac_ir");
-
-    if (isAc) {
-        delete acIr;
-        acIr = nullptr;
-        acUid = "";
-    } else if (!sensors.removeByUid(uid.c_str())) {
-        response["message"] = "sensor not mounted";
-        return false;
-    }
-    modules.remove(uid.c_str());
-
-    // 标离线 + 同步清单：平台侧保留设备记录与历史，只转离线
+    String uid = params["uid"] | "";
+    if (!moduleManager || !moduleManager->remove(params, response)) return false;
+    if (uid == acUid) { mqtt.unsubscribeDevice(uid.c_str()); acUid = ""; acSubscribeAt = 0; }
     mqtt.publishSensorState(uid.c_str(), false);
     publishManifest();
-
-    Serial.printf("[Main] 已拔除模块: %s\n", uid.c_str());
     return true;
 }
 
@@ -302,8 +236,10 @@ void serviceConnection() {
     mqtt.begin(store.mqttHost().c_str(), store.mqttPort(),
                store.gatewayUid().c_str(), store.mqttPass().c_str());
     if (acIr) {
-        // 代空调子设备收指令：App 下发到 home/downstream/{acUid}/command/set
+        // 先登记，再持续恢复订阅，以覆盖平台清单处理晚于首次订阅的情况。
         mqtt.subscribeDevice(acUid.c_str());
+        acSubscribeRetries = 8;
+        acSubscribeAt = millis() + 1000;
     }
     mqtt.onCommand([](const char* targetUid, const char* payload, unsigned int len) {
         commands.handle(targetUid, payload, len, mqtt);
@@ -336,13 +272,15 @@ void setup() {
     commands.registerAction("reboot",   handleReboot);
     commands.registerAction("set_state", handleSetState);
     // 热插拔：App 可在运行期增删模块，无需重新烧录
-    commands.registerAction("list_modules",  handleListModules);
-    commands.registerAction("add_module",    handleAddModule);
-    commands.registerAction("remove_module", handleRemoveModule);
+    commands.registerAction("list_modules",  handleListModules, true);
+    commands.registerAction("add_module",    handleAddModule, true);
+    commands.registerAction("remove_module", handleRemoveModule, true);
+    commands.registerAction("update_module", handleUpdateModule, true);
 
     // 模块清单来自 NVS；首次开机按 config.h 播种
     modules.begin(store.gatewayUid());
     buildModules();
+    moduleManager = new ModuleManager(modules, moduleRuntime, store.gatewayUid(), FACTORY_RESET_PIN, psramFound());
 
     if (!store.hasWifi()) {
         mode = MODE_PROVISION;
@@ -374,6 +312,11 @@ void loop() {
     // ── 正常模式 ──
     wifi.loop();
     serviceConnection();
+    if (acSubscribeAt && acIr && mqtt.isConnected() && (long)(millis() - acSubscribeAt) >= 0) {
+        mqtt.subscribeDevice(acUid.c_str());
+        if (acSubscribeRetries) --acSubscribeRetries;
+        acSubscribeAt = millis() + (acSubscribeRetries ? 2000 : 30000);
+    }
 
     // MQTT 连接成功后，先同步子设备清单，再逐个报在线
     if (mqtt.isConnected() && !sensorsOnlinePublished) {

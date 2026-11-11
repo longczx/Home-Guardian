@@ -23,6 +23,7 @@ public:
     AcIr(uint16_t irLedPin, decode_type_t defaultProtocol);
 
     void begin();
+    void restoreRuntimeState(const AcIr& previous);
 
     // 合并 params 到当前状态、发射红外；把当前完整状态写回 outState。
     // 返回发送实现是否接受指令；不代表空调实际收到或执行。

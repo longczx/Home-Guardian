@@ -6,7 +6,7 @@
 // =====================================================================
 
 // ─── 固件版本 ─────────────────────────────────────────
-#define FIRMWARE_VERSION       "1.3.0"
+#define FIRMWARE_VERSION       "1.4.0"
 
 // ─── 上报间隔（毫秒）─────────────────────────────────
 #define TELEMETRY_INTERVAL_MS  5000
@@ -20,11 +20,12 @@
 //  生产建议 https（注册响应含明文 MQTT 密码）。
 #define DEFAULT_SERVER_URL     ""
 
-// ─── 传感器模块（引脚 / 使能，编译期决定接了哪些）────
-#define SENSOR_DHT11_ENABLED   1
+// ─── 首次默认模块：全关闭，上线后在 App 动态添加 ─────
+//  已保存的模块清单优先；升级不会覆盖已有开关、引脚和红外协议。
+#define SENSOR_DHT11_ENABLED   0
 #define DHT11_PIN              4    // GPIO4
 
-#define SENSOR_SOUND_ENABLED   1
+#define SENSOR_SOUND_ENABLED   0
 #define SOUND_SENSOR_PIN       34   // GPIO34 (ADC1)
 
 //  传感器 device_uid：默认由网关 UID 自动派生（如 esp32-aabbcc-temp）。

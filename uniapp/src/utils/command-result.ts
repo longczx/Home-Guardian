@@ -1,12 +1,19 @@
 import { onWs } from '@/utils/ws';
 import { useServerStore } from '@/stores/server';
 
+export interface CommandResult extends Record<string, unknown> {
+  request_id: string;
+  status: string;
+  data?: Record<string, unknown>;
+  reply?: Record<string, unknown>;
+}
+
 /** Subscribe before submitting, since an ACK can arrive before the HTTP response. */
 export async function withCommandResult(
   submit: () => Promise<{ request_id: string; status: string }>,
   timeoutMs = 65000,
-  fetchStatus?: (requestId: string) => Promise<{ request_id: string; status: string } | undefined>,
-): Promise<void> {
+  fetchStatus?: (requestId: string) => Promise<CommandResult | undefined>,
+): Promise<Record<string, unknown>> {
   const server = useServerStore();
   const revision = server.connectionRevision;
   const replies = new Map<string, Record<string, unknown>>();
@@ -25,12 +32,13 @@ export async function withCommandResult(
     const command = await submit();
     requestId = command.request_id;
     if (server.connectionRevision !== revision) throw new Error('服务器已切换，请核对设备状态');
-    await new Promise<void>((resolve, reject) => {
+    return await new Promise<Record<string, unknown>>((resolve, reject) => {
       wake = () => {
         const reply = replies.get(requestId);
         if (!reply) return;
-        if (reply.status === 'replied_ok') resolve();
-        else reject(new Error(reply.status === 'timeout' ? '指令执行超时，请核对设备状态' : '设备执行失败，请核对设备状态'));
+        const payload = (reply.data || reply.reply || {}) as Record<string, unknown>;
+        if (reply.status === 'replied_ok') resolve(payload);
+        else reject(new Error(reply.status === 'timeout' ? '指令执行超时，请核对设备状态' : typeof payload.message === 'string' ? payload.message : '设备执行失败，请核对设备状态'));
       };
       timer = setTimeout(() => reject(new Error('尚未收到设备确认，请核对设备状态')), timeoutMs);
       switchTimer = setInterval(() => {

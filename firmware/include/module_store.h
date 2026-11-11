@@ -35,6 +35,8 @@ public:
     // 增删后立即落盘；uid 重复或已满返回 false
     bool add(const ModuleSlot& slot);
     bool remove(const char* uid);
+    bool update(const ModuleSlot& slot);
+    bool healthy() const { return _healthy; }
 
     // 校验模块类型是否受支持
     static bool isSupportedType(const String& type);
@@ -44,8 +46,10 @@ private:
     ModuleSlot  _slots[MAX_MODULES];
     uint8_t     _count = 0;
 
-    void load();
-    void save();
+    bool _healthy = true;
+    // 0: missing, 1: loaded (including []), -1: corrupt/unavailable.
+    int load();
+    bool save();
     void seedFromConfig(const String& gatewayUid);
 };
 

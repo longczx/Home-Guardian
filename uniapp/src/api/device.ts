@@ -1,4 +1,5 @@
 import request from './request';
+import type { CommandResult } from '@/utils/command-result';
 import type { Device, Paginated, LatestMetric, AggregatedPoint, Capability } from './types';
 
 export function getDevices(params?: Record<string, string | number | boolean>) {
@@ -14,7 +15,7 @@ export function sendCommand(id: number, payload: Record<string, unknown>) {
 }
 
 export async function getCommandResult(requestId: string) {
-  const data = await request.get<{ items: { request_id: string; status: string }[] }>('/commands', { request_id: requestId, per_page: 1 });
+  const data = await request.get<{ items: CommandResult[] }>('/commands', { request_id: requestId, per_page: 1 });
   return data.items?.[0];
 }
 

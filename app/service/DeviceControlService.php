@@ -13,13 +13,22 @@ class DeviceControlService
         if (!$redis->set($key, $token, 'EX', 30, 'NX')) throw new BusinessException('该设备正在处理另一条控制请求，请稍后再试', 409, 2110);
         try {
             $device->refresh();
+            $moduleCommand = GatewayModuleService::supports($action);
+            if ($moduleCommand) {
+                GatewayModuleService::validate($device, $action, $params);
+                if (!$manual) throw new BusinessException('模块配置仅支持手动管理', 422, 2121);
+                // Queries do not take over automation or wait behind a pending mutation.
+                if ($action === 'list_modules') return MqttCommandService::sendCommand($device->id, ['action'=>$action, 'params'=>$params]);
+            }
             if (!$manual && $device->manual_override_until?->isFuture()) throw new BusinessException('人工接管期间暂停自动化，至 ' . $device->manual_override_until->toIso8601String(), 409, 2111);
             $commands = CommandLog::where('device_id', $device->id)->orderByDesc('id')->limit(20)->get();
-            foreach ($commands as $command) {
-                if (($command->payload['action'] ?? '') === 'get_info') continue;
+            foreach (CommandLog::where('device_id', $device->id)->pending()->get() as $command) {
+                if (in_array($command->payload['action'] ?? '', ['get_info', 'list_modules'], true)) continue;
                 if (in_array($command->status, ['queued','sent','delivered'], true)) throw new BusinessException('上一条控制指令仍在等待回执', 409, 2112);
             }
-            $last = $commands->first(fn ($c) => ($c->payload['action'] ?? '') !== 'get_info');
+            // Hardware configuration is independent of actuator capability/state and manual holds.
+            if ($moduleCommand) return MqttCommandService::sendCommand($device->id, ['action'=>$action, 'params'=>$params]);
+            $last = $commands->first(fn ($c) => !in_array($c->payload['action'] ?? '', ['get_info', 'list_modules'], true));
             // Protect IR appliances from frequent automated commands; manual control is allowed after ACK.
             if (!$manual && $device->type === 'ac' && $last?->sent_at->gt(now()->subSeconds(180))) throw new BusinessException('空调自动控制保护间隔为 180 秒', 409, 2113);
             // Set the hold before enqueueing so automation cannot race a manual submission.

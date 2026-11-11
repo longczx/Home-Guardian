@@ -41,6 +41,17 @@ int main() {
     invalid["model"] = 6;
     assert(!sender.apply(invalid.as<JsonObject>(), resultState));
 
+    // Moving the transmitter preserves the selected protocol/model and current state.
+    AcIr relocated(26, decode_type_t::COOLIX);
+    relocated.begin();
+    relocated.restoreRuntimeState(sender);
+    JsonDocument relocatedState;
+    JsonObject moved = relocatedState.to<JsonObject>();
+    relocated.fillState(moved);
+    String originalJson, relocatedJson;
+    serializeJson(after, originalJson); serializeJson(relocatedState, relocatedJson);
+    assert(originalJson == relocatedJson);
+
     IRKelon168Ac kelon(25);
     stdAc::state_t desired;
     desired.protocol = decode_type_t::KELON168; desired.model = 1;

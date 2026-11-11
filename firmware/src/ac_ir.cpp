@@ -88,6 +88,13 @@ void AcIr::begin() {
     Serial.printf("[AC-IR] ready protocol=%s model=%d pin=%u\n", typeToString(_protocol).c_str(), _state.model, _irLedPin);
 }
 
+void AcIr::restoreRuntimeState(const AcIr& previous) {
+    _protocol = previous._protocol;
+    _state = previous._state;
+    _lastSent = previous._lastSent;
+    _hasLastSent = previous._hasLastSent;
+}
+
 bool AcIr::apply(const JsonObject& params, JsonObject& outState) {
     stdAc::state_t next = _state;
     if (params["protocol"].is<const char*>()) {
