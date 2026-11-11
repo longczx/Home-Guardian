@@ -6,7 +6,7 @@
  *   2. 手动烧录（config.h 填了真实凭证）：直接连接（向后兼容）
  *
  * 启动状态机（见 setup）：无 WiFi → 配网模式；有 WiFi 无 MQTT → 注册；齐全 → 正常运行。
- * 长按 BOOT 键 5 秒恢复出厂（清空 NVS 重新配网）。
+ * 长按 BOOT 键 5 秒清除联网身份并进入配网（保留模块/红外设置）。
  *
  * 设备热插拔：挂载哪些传感器/执行器由 NVS 的模块清单（ModuleStore）在运行期决定，
  * App 下发 add_module / remove_module 即可增删，增删后上报 manifest 让平台同步，
@@ -26,6 +26,7 @@
 #include "module_store.h"
 #include "provisioning.h"
 #include "registration.h"
+#include "reset_button.h"
 
 // 模块由运行期清单决定，编译期无从得知接了什么，故各驱动一律编入
 #include "sensor_dht11.h"
@@ -56,7 +57,9 @@ unsigned long lastTelemetry = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long rebootAt = 0;
 bool sensorsOnlinePublished = false;
-unsigned long btnPressStart = 0;
+bool mqttStarted = false;
+unsigned long lastRegistration = 0;
+bool registrationAttempted = false;
 
 // ─── 内置指令处理器 ──────────────────────────────────────
 
@@ -277,36 +280,25 @@ bool handleRemoveModule(const JsonObject& params, JsonObject& response) {
 void startNormal() {
     wifi.begin(store.wifiSsid().c_str(), store.wifiPass().c_str());
 
-    // 无 MQTT 凭证 → 先自注册
-    if (!store.hasMqtt()) {
-        Serial.println("[Main] 无 MQTT 凭证，等待 WiFi 后自注册...");
-        unsigned long t = millis();
-        while (!wifi.isConnected() && millis() - t < 30000) {
-            delay(500);
-            watchdog_feed();
-        }
-        if (!wifi.isConnected()) {
-            Serial.println("[Main] WiFi 连接失败，重启重试");
-            delay(2000);
-            ESP.restart();
-        }
+    // 联网重试在 loop 中分步进行，不再在 setup 等待或反复重启。
+}
 
-        int tries = 0;
-        while (!store.hasMqtt() && tries < 5) {
-            if (Registration::run(store, sensors, FIRMWARE_VERSION,
-                                  acIr ? acUid.c_str() : nullptr, "空调", "ac")) break;
-            tries++;
-            Serial.printf("[Main] 注册失败(%d/5)，3 秒后重试\n", tries);
-            delay(3000);
-            watchdog_feed();
-        }
-        if (!store.hasMqtt()) {
-            Serial.println("[Main] 多次注册失败，重启重试");
-            delay(2000);
-            ESP.restart();
+void serviceConnection() {
+    if (!wifi.isConnected()) return;
+    if (!store.hasMqtt()) {
+        if (registrationAttempted && millis() - lastRegistration < 3000) return;
+        registrationAttempted = true;
+        const bool registered = Registration::run(store, sensors, FIRMWARE_VERSION,
+                                   acIr ? acUid.c_str() : nullptr, "空调", "ac");
+        lastRegistration = millis();
+        watchdog_feed();
+        if (!registered) {
+            Serial.println("[Main] 注册失败，3 秒后重试；可长按 BOOT 重新配网");
+            return;
         }
     }
-
+    if (mqttStarted) { mqtt.loop(); return; }
+    mqttStarted = true;
     mqtt.begin(store.mqttHost().c_str(), store.mqttPort(),
                store.gatewayUid().c_str(), store.mqttPass().c_str());
     if (acIr) {
@@ -318,23 +310,6 @@ void startNormal() {
     });
 }
 
-// ─── 恢复出厂：长按 BOOT 键 5 秒 ──────
-
-void checkFactoryReset() {
-    if (digitalRead(FACTORY_RESET_PIN) == LOW) {
-        if (btnPressStart == 0) {
-            btnPressStart = millis();
-        } else if (millis() - btnPressStart > 5000) {
-            Serial.println("[Main] 恢复出厂：清空配置并重启");
-            store.clearAll();
-            delay(500);
-            ESP.restart();
-        }
-    } else {
-        btnPressStart = 0;
-    }
-}
-
 // ─── setup / loop ────────────────────────────────────────
 
 void setup() {
@@ -344,10 +319,16 @@ void setup() {
     Serial.printf("Home Guardian Gateway v%s\n", FIRMWARE_VERSION);
     Serial.println("=============================\n");
 
-    watchdog_init(8000);
-    pinMode(FACTORY_RESET_PIN, INPUT_PULLUP);
+    // 覆盖 SDK 的 DNS/TLS 最坏等待；BOOT 任务独立，响应不受该超时影响。
+    watchdog_init(30000);
 
     store.begin();
+    if (!beginResetButton(FACTORY_RESET_PIN)) {
+        // 不能在缺少重置能力时继续联网。
+        Serial.println("[Main] BOOT 任务创建失败，重启");
+        ESP.restart();
+        return;
+    }
     Serial.printf("[Main] 网关 UID: %s\n", store.gatewayUid().c_str());
 
     commands.registerAction("ping",     handlePing);
@@ -365,6 +346,7 @@ void setup() {
 
     if (!store.hasWifi()) {
         mode = MODE_PROVISION;
+        if (!store.allowsDefaults()) WiFi.eraseAP();
         provisioning.begin(&store);
         Serial.println("[Main] 未配置 WiFi → 进入配网模式");
     } else {
@@ -376,7 +358,7 @@ void setup() {
 
 void loop() {
     watchdog_feed();
-    checkFactoryReset();
+    delay(5);  // 让出 CPU 给系统/按键任务
 
     // ── 配网模式：只跑门户 ──
     if (mode == MODE_PROVISION) {
@@ -391,7 +373,7 @@ void loop() {
 
     // ── 正常模式 ──
     wifi.loop();
-    mqtt.loop();
+    serviceConnection();
 
     // MQTT 连接成功后，先同步子设备清单，再逐个报在线
     if (mqtt.isConnected() && !sensorsOnlinePublished) {

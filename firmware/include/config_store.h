@@ -28,7 +28,7 @@ public:
     const String& gatewayUid()    const { return _gatewayUid; }
 
     // 配网页提交后保存（WiFi + 平台地址 + 配对码），随后重启进入注册
-    void saveProvisioning(const String& ssid, const String& pass,
+    bool saveProvisioning(const String& ssid, const String& pass,
                           const String& serverUrl, const String& code);
 
     String registrationToken();
@@ -37,8 +37,10 @@ public:
     void saveMqtt(const String& host, uint16_t port,
                   const String& user, const String& pass);
 
-    // 恢复出厂：清空全部
-    void clearAll();
+    // 独立按键任务调用：只改持久化存储，不跨任务修改运行期 String。
+    // 成功后必须重启；清除联网身份，保留模块/红外配置，永久禁止旧编译凭证播种。
+    static bool resetNetworkForRestart();
+    bool allowsDefaults() const { return !_manualProvisioning; }
 
     // MAC 派生的稳定设备 UID：esp32-aabbcc（无需预配置即唯一）
     static String deviceUid();
@@ -48,6 +50,7 @@ private:
     String _ssid, _pass, _serverUrl, _code;
     String _mqttHost, _mqttUser, _mqttPass, _gatewayUid;
     uint16_t _mqttPort = 1883;
+    bool _manualProvisioning = false;
 
     void load();
 };

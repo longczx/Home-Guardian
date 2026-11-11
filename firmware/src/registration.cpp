@@ -58,6 +58,7 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
     WiFiClient plain;
     bool ok;
     if (https) {
+        secure.setHandshakeTimeout(3);
         secure.setInsecure();  // 生产可换成 setCACert() 固定证书
         ok = http.begin(secure, endpoint);
     } else {
@@ -68,7 +69,8 @@ bool Registration::run(ConfigStore& store, SensorRegistry& sensors, const char* 
         return false;
     }
     http.addHeader("Content-Type", "application/json");
-    http.setTimeout(10000);
+    http.setConnectTimeout(2000);
+    http.setTimeout(2000);
 
     int status = http.POST(body);
     String resp = http.getString();

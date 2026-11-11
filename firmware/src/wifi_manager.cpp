@@ -10,19 +10,7 @@ void WifiManager::begin(const char* ssid, const char* password) {
     WiFi.setAutoReconnect(true);
     WiFi.begin(_ssid.c_str(), _password.c_str());
 
-    Serial.printf("[WiFi] 正在连接 %s", ssid);
-
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 30000) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("\n[WiFi] 已连接, IP: %s\n", WiFi.localIP().toString().c_str());
-    } else {
-        Serial.println("\n[WiFi] 连接超时，将在后台重试");
-    }
+    Serial.printf("[WiFi] 正在后台连接 %s\n", ssid);
 }
 
 void WifiManager::loop() {

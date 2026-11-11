@@ -23,3 +23,13 @@ printf '%s\0' "$work"/ir/*.cpp "$work"/ac_ir.cpp "$work"/ac_ir_test.cpp | \
     xargs -0 -n1 -P "${IR_TEST_JOBS:-4}" bash -c 'compile "$1"' _
 g++ "$work"/ir/*.cpp.o "$work"/ac_ir.cpp.o "$work"/ac_ir_test.cpp.o -o "$output"
 "$output"
+cp firmware/include/config_store.h firmware/include/long_press.h "$work/include/"
+cp firmware/src/config_store.cpp tests/Firmware/provisioning_test.cpp "$work/"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
+    "$work/config_store.cpp" "$work/provisioning_test.cpp" -o "$work/provisioning-test"
+"$work/provisioning-test"
+cp firmware/include/reset_button.h "$work/include/"
+cp firmware/src/reset_button.cpp tests/Firmware/reset_task_test.cpp "$work/"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
+    "$work/config_store.cpp" "$work/reset_button.cpp" "$work/reset_task_test.cpp" -o "$work/reset-task-test"
+"$work/reset-task-test"

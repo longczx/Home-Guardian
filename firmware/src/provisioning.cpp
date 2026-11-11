@@ -39,7 +39,7 @@ void Provisioning::loop() {
 void Provisioning::handleRoot() {
     String surl = _store->serverUrl();
 #ifdef DEFAULT_SERVER_URL
-    if (surl.length() == 0) surl = DEFAULT_SERVER_URL;
+    if (surl.length() == 0 && _store->allowsDefaults()) surl = DEFAULT_SERVER_URL;
 #endif
 
     String html =
@@ -95,8 +95,11 @@ void Provisioning::handleProvision() {
     code.trim();
     server.trim();
 
-    _store->saveProvisioning(ssid, pass, server, code);
-    Serial.printf("[配网] 已保存: ssid=%s server=%s code=%s\n", ssid.c_str(), server.c_str(), code.c_str());
+    if (!_store->saveProvisioning(ssid, pass, server, code)) {
+        _server.send(503, "text/html", "<meta charset='utf-8'><h3>保存失败，请稍后重试</h3>");
+        return;
+    }
+    Serial.printf("[配网] 已保存: ssid=%s server=%s\n", ssid.c_str(), server.c_str());
 
     _server.send(200, "text/html",
         "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;text-align:center;padding:40px'>"

@@ -6,18 +6,19 @@
 // =====================================================================
 
 // ─── 固件版本 ─────────────────────────────────────────
-#define FIRMWARE_VERSION       "1.2.0"
+#define FIRMWARE_VERSION       "1.3.0"
 
 // ─── 上报间隔（毫秒）─────────────────────────────────
 #define TELEMETRY_INTERVAL_MS  5000
 
-// ─── 恢复出厂按键（长按 5 秒清空配置重新配网）────────
+// ─── 恢复出厂按键（长按 5 秒清空联网配置重新配网，保留模块/红外设置）────────
 #define FACTORY_RESET_PIN      0    // BOOT 键
 
 // ─── 平台地址：SoftAP 配网页会预填此值（用户可改）────
-//  自助配网时设备用它调 /api/provisioning/register。
+//  留空时从 App「添加设备」复制当前服务器平台地址，不含 /app 或 /api。
+//  自助配网时设备用它调 /api/provisioning/register；BOOT 重置后不再预填此值。
 //  生产建议 https（注册响应含明文 MQTT 密码）。
-#define DEFAULT_SERVER_URL     "https://your-server"
+#define DEFAULT_SERVER_URL     ""
 
 // ─── 传感器模块（引脚 / 使能，编译期决定接了哪些）────
 #define SENSOR_DHT11_ENABLED   1
@@ -61,6 +62,7 @@
 //
 //  【可选】手动烧录（向后兼容旧流程）：若在此填入真实 WiFi（及可选的 MQTT
 //   凭证），设备将跳过配网直接连接。留占位值则走自助配网。
+//   BOOT 重置后永久禁用此播种流程，只接受配网页重新提交的信息。
 //   网关 UID 未指定时自动用 MAC 派生（esp32-<mac>）。
 
 #define WIFI_SSID              "YourWiFi"
