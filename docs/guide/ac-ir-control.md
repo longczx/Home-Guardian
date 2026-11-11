@@ -98,7 +98,7 @@ cd firmware && pio run -t upload && pio device monitor
 ```
 
 WiFi/MQTT 凭证走两种方式（与传感器一致）：
-- **自助配网**（推荐）：保持 `WIFI_SSID="YourWiFi"` 占位值，开机进 SoftAP，在 App 生成配对码配网自注册；
+- **自助配网**（默认）：WiFi、MQTT 凭证与平台地址留空，没有已保存 WiFi 时进入 SoftAP；在 App 生成配对码，复制平台地址到设备配网页，自注册获取 MQTT 凭证；
 - **手动烧录**：直接把真实 WiFi + 后台建好的设备 uid/密码填进 `config.h`。
 
 ---

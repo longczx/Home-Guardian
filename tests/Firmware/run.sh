@@ -33,3 +33,9 @@ cp firmware/src/reset_button.cpp tests/Firmware/reset_task_test.cpp "$work/"
 g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
     "$work/config_store.cpp" "$work/reset_button.cpp" "$work/reset_task_test.cpp" -o "$work/reset-task-test"
 "$work/reset-task-test"
+cp tests/Firmware/app_defaults_test.cpp "$work/"
+# Compile the real configuration store against the actual shipped example, not the legacy fixture.
+cp firmware/include/config.example.h "$work/stubs/config.h"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
+    "$work/config_store.cpp" "$work/app_defaults_test.cpp" -o "$work/app-defaults-test"
+"$work/app-defaults-test"

@@ -2,6 +2,16 @@
 
 固件 1.3.0 起，长按 BOOT（默认 GPIO0）满 5 秒，会清除联网配置、重启并开启 `HG-Setup-xxxx` 热点。在连接 WiFi、平台自注册、MQTT 重试及正常运行时均可操作。检测由独立 FreeRTOS 任务每 20ms 执行，不依赖联网主循环。
 
+仓库默认使用 App 配对码配网：WiFi 名称/密码、平台地址、MQTT 主机/密码和固定网关 UID 均为空。`MQTT_PORT=1883` 仅是标准默认端口，实际 MQTT 主机、端口和凭证在配网注册后由平台返回。
+
+`firmware/include/config.h` 是被 Git 忽略的本地配置，`git pull` 不会更新已有文件。已有配置可在仓库根目录执行以下命令，只同步联网默认值和固件版本，保留其他内容，包括模块启用开关、GPIO 引脚、模块 UID 及红外协议：
+
+```bash
+python3 scripts/configure-app-provisioning.py
+```
+
+没有本地配置时，先复制 `firmware/include/config.example.h` 为 `firmware/include/config.h`。清理编译期默认值不会删除板上已保存的联网配置；若要重新配网，烧录后长按 BOOT 5 秒。
+
 ## 各配置的用途与优先级
 
 | 配置 | 用途 |
