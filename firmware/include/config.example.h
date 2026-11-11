@@ -14,8 +14,8 @@
 // ─── 恢复出厂按键（长按 5 秒清空联网配置重新配网，保留模块/红外设置）────────
 #define FACTORY_RESET_PIN      0    // BOOT 键
 
-// ─── 平台地址：SoftAP 配网页会预填此值（用户可改）────
-//  留空时从 App「添加设备」复制当前服务器平台地址，不含 /app 或 /api。
+// ─── 平台地址：默认留空，在设备配网页填写 ────────────
+//  从 App「添加设备」复制当前服务器平台地址，不含 /app 或 /api。
 //  自助配网时设备用它调 /api/provisioning/register；BOOT 重置后不再预填此值。
 //  生产建议 https（注册响应含明文 MQTT 密码）。
 #define DEFAULT_SERVER_URL     ""
@@ -56,22 +56,22 @@
 //  运行期配置（WiFi / MQTT 身份）
 // =====================================================================
 //
-//  【推荐】自助配网：保持下面 WiFi 为占位值 "YourWiFi"，设备首次开机会进入
+//  【默认】App 配对码配网：下面联网字段均留空，无已保存 WiFi 时进入
 //   SoftAP 配网模式（热点 HG-Setup-xxxx），在手机 App「添加设备」生成配对码，
 //   通过配网页填入即可自动注册上线，无需在此填写任何凭证。
 //
 //  【可选】手动烧录（向后兼容旧流程）：若在此填入真实 WiFi（及可选的 MQTT
-//   凭证），设备将跳过配网直接连接。留占位值则走自助配网。
+//   凭证），设备将跳过配网直接连接。默认留空则走自助配网。
 //   BOOT 重置后永久禁用此播种流程，只接受配网页重新提交的信息。
 //   网关 UID 未指定时自动用 MAC 派生（esp32-<mac>）。
 
-#define WIFI_SSID              "YourWiFi"
-#define WIFI_PASSWORD          "YourPassword"
+#define WIFI_SSID              ""
+#define WIFI_PASSWORD          ""
 
 //  可选：连同 MQTT 凭证一起写死（则跳过自注册，需先在后台手动建设备）
-#define MQTT_HOST              "192.168.1.100"
-#define MQTT_PORT              1883
-#define GATEWAY_UID            "gw-001"
-#define MQTT_PASSWORD          "gateway_password"
+#define MQTT_HOST              ""
+#define MQTT_PORT              1883  // 标准端口默认值；自注册后使用平台返回的端口
+#define GATEWAY_UID            ""    // 默认按 MAC 派生；已有 NVS 身份保持不变
+#define MQTT_PASSWORD          ""
 
 #endif // CONFIG_H
