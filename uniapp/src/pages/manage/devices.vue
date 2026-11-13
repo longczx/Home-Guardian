@@ -109,8 +109,8 @@ onShow(load);
       </view>
     </view>
 
-    <view v-if="!loading && !devices.length" class="empty">还没有设备，点右下角添加</view>
-    <view class="fab" @tap="add">＋ 添加设备</view>
+    <view v-if="!loading && !devices.length" class="empty">还没有设备，可先添加一台 ESP32 网关</view>
+    <view class="fab" @tap="add">＋ 添加网关 / 模块</view>
   </view>
 </template>
 

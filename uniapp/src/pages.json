@@ -62,7 +62,7 @@
     },
     {
       "path": "pages/manage/gateway-modules",
-      "style": { "navigationBarTitleText": "子设备管理" }
+      "style": { "navigationBarTitleText": "网关模块管理" }
     },
     {
       "path": "pages/manage/alert-rules",
