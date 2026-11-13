@@ -2,15 +2,19 @@
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { getRooms, saveRoom, deleteRoom, type Room } from '@/api/experience';
-import { toast } from '@/utils/guard';
+import { toast, ensureReady } from '@/utils/guard';
+import { goHome } from '@/utils/navigation';
 const rooms = ref<Room[]>([]); const name = ref(''); const order = ref(0); const busy = ref(false);
 async function load() { try { rooms.value = await getRooms(); } catch (e) { toast((e as Error).message); } }
 async function save(roomName = name.value, sortOrder = order.value) { if (busy.value) return; busy.value = true; try { await saveRoom(roomName, Number(sortOrder)); name.value = ''; await load(); } catch (e) { toast((e as Error).message); } finally { busy.value = false; } }
 function remove(room: Room) { uni.showModal({ title: '删除房间', content: `删除「${room.name}」？房间内有设备时不能删除。`, success: async (r) => { if (!r.confirm) return; try { await deleteRoom(room.id); await load(); } catch (e) { toast((e as Error).message); } } }); }
-onShow(load);
+onShow(() => { if (ensureReady()) void load(); });
 </script>
 <template>
   <view class="page">
+    <button @tap="goHome">
+      返回首页
+    </button>
     <text class="hint">
       排序数字越小，首页越靠前。设备编辑时填写对应房间名即可归入；改变房间名称请先调整设备，避免影响成员权限。
     </text><view class="card">

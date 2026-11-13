@@ -15,7 +15,7 @@ void ConfigStore::begin() {
     flags.begin(RESET_NS, true);
     const bool pending = flags.getBool("pending", false);
     _manualProvisioning = flags.getBool("manual", false) || pending;
-    String stableUid = flags.getString("guid", "");
+    String stableUid = flags.isKey("guid") ? flags.getString("guid", "") : String("");
     flags.end();
     if (stableUid.length() > 0) _gatewayUid = stableUid;
     if (pending) {
@@ -60,7 +60,7 @@ void ConfigStore::load() {
     _mqttPort  = _prefs.getUShort("mport", 1883);
     _mqttUser  = _prefs.getString("muser", "");
     _mqttPass  = _prefs.getString("mpass", "");
-    String guid = _prefs.getString("guid", "");
+    String guid = _prefs.isKey("guid") ? _prefs.getString("guid", "") : String("");
     _prefs.end();
     if (guid.length() > 0) _gatewayUid = guid;
 }
@@ -110,7 +110,7 @@ bool ConfigStore::resetNetworkForRestart() {
     if (!flags.begin(RESET_NS, false)) return false;
     Preferences identity;
     identity.begin(NS, true);
-    String uid = identity.getString("guid", "");
+    String uid = identity.isKey("guid") ? identity.getString("guid", "") : String("");
     identity.end();
     // 网络重配不能改变网关身份，否则已有模块和后台重新配网授权无法对应。
     if (uid.length() > 0 && !flags.putString("guid", uid)) { flags.end(); return false; }

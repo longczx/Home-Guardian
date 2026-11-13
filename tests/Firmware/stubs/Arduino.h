@@ -10,6 +10,7 @@ inline std::atomic<bool> testPressed{false}, testRestarted{false};
 inline std::atomic<uint32_t> testMillis{0};
 inline std::condition_variable testRestartSignal;
 inline std::mutex testRestartMutex;
+inline std::string testSerialOutput;
 #ifndef LOW
 #define LOW 0
 #endif
@@ -20,6 +21,7 @@ inline uint32_t millis() { return testMillis; }
 using String = std::string;
 struct TestESP {
     uint64_t getEfuseMac() { return 0x123456abcdefULL; }
+    uint32_t getFreeHeap() { return 131072; }
     void restart() {
         { std::lock_guard<std::mutex> lock(testRestartMutex); testRestarted = true; }
         testRestartSignal.notify_all();
@@ -29,7 +31,9 @@ struct TestESP {
 static TestESP ESP;
 inline uint32_t esp_random() { return 0x12345678; }
 struct TestSerial {
-    template<typename... Args> void printf(const char*, Args...) {}
-    void println(const char*) {}
+    template<typename... Args> void printf(const char* format, Args... args) {
+        char buffer[4096]; std::snprintf(buffer, sizeof(buffer), format, args...); testSerialOutput += buffer;
+    }
+    void println(const char* text) { testSerialOutput += std::string(text) + "\n"; }
 };
 static TestSerial Serial;
