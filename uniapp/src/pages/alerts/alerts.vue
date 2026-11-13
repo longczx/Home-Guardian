@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app';
+import { onShow, onHide, onPullDownRefresh, onReachBottom } from '@dcloudio/uni-app';
+import RoomPicker from '@/components/RoomPicker.vue';
+import { useServerStore } from '@/stores/server';
 import PageHeader from '@/components/PageHeader.vue';
 import { getAlertLogs, acknowledgeAlert, resolveAlert } from '@/api/alert';
 import { handleAlert } from '@/api/experience';
@@ -26,22 +28,32 @@ const logs = ref<AlertLog[]>([]);
 const filter = ref('');
 const loading = ref(false);
 
-const untreated = computed(() => logs.value.filter((l) => l.status === 'triggered').length);
-
-async function load() {
-  if (!ensureReady()) return;
-  loading.value = true;
+const untreated = ref(0);
+const page = ref(0); const lastPage = ref(1); const total = ref(0); const error = ref('');
+const location = ref(''); const query = ref(''); const days = ref(0);
+const server = useServerStore(); let generation = 0;
+async function load(more = false) {
+  if (!ensureReady() || (more && (loading.value || page.value >= lastPage.value))) return;
+  const attempt = ++generation;
+  const nextPage = more ? page.value + 1 : 1;
+  loading.value = true; error.value = '';
   try {
-    const params: Record<string, string | number> = { per_page: 50 };
+    const params: Record<string, string | number> = { per_page: 30, page: nextPage };
     if (filter.value) params.status = filter.value;
-    const page = await getAlertLogs(params);
-    logs.value = page.items;
-  } catch (e) {
-    toast((e as Error).message);
-  } finally {
-    loading.value = false;
-  }
+    if (location.value) params.location = location.value;
+    if (query.value.trim()) params.q = query.value.trim();
+    if (days.value) params.start = new Date(Date.now() - days.value * 86400000).toISOString();
+    const [result, pending] = await Promise.all([getAlertLogs(params), getAlertLogs({ status: 'triggered', per_page: 1 })]);
+    if (attempt !== generation) return;
+    logs.value = [...new Map((more ? [...logs.value, ...result.items] : result.items).map(l => [l.id, l])).values()];
+    page.value = result.current_page; lastPage.value = result.last_page; total.value = result.total;
+    untreated.value = pending.total;
+  } catch (e) { if (attempt === generation) error.value = (e as Error).message; }
+  finally { if (attempt === generation) loading.value = false; }
 }
+watch([location, days], () => { void load(); });
+watch(() => server.connectionRevision, () => { generation++; logs.value = []; untreated.value = 0; page.value = 0; loading.value = false; error.value = ''; });
+onReachBottom(() => { void load(true); });
 
 function setFilter(k: string) {
   filter.value = k;
@@ -53,6 +65,7 @@ async function onAck(l: AlertLog) {
     await acknowledgeAlert(l.id);
     l.status = 'acknowledged';
     l.acknowledged_at = new Date().toISOString();
+    await load();
   } catch (e) {
     toast((e as Error).message);
   }
@@ -63,6 +76,7 @@ async function onResolve(l: AlertLog) {
     await resolveAlert(l.id);
     l.status = 'resolved';
     l.resolved_at = new Date().toISOString();
+    await load();
   } catch (e) {
     toast((e as Error).message);
   }
@@ -79,8 +93,8 @@ let unsubs: Array<() => void> = [];
 onShow(() => {
   load();
   unsubs = [
-    onWs('alert', load),
-    onWs('alert_resolved', load),
+    onWs('alert', () => { void load(); }),
+    onWs('alert_resolved', () => { void load(); }),
   ];
 });
 onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
@@ -92,18 +106,62 @@ onPullDownRefresh(async () => {
 
 <template>
   <view class="page">
-    <PageHeader :title="t('alert.title')" :subtitle="t('alert.untreated', { n: untreated })" />
+    <PageHeader
+      :title="t('alert.title')"
+      :subtitle="t('alert.untreated', { n: untreated })"
+    />
 
-    <scroll-view scroll-x class="chips" :show-scrollbar="false">
+    <scroll-view
+      scroll-x
+      class="chips"
+      :show-scrollbar="false"
+    >
       <view
         v-for="f in FILTERS"
         :key="f.key"
         class="chip"
         :class="{ on: f.key === filter }"
         @tap="setFilter(f.key)"
-      >{{ f.label }}</view>
+      >
+        {{ f.label }}
+      </view>
     </scroll-view>
 
+    <view class="filters">
+      <input
+        v-model="query"
+        placeholder="搜索设备名称或设备编号"
+        confirm-type="search"
+        @confirm="load()"
+      ><button
+        size="mini"
+        @tap="load()"
+      >
+        搜索
+      </button>
+      <RoomPicker
+        v-model="location"
+        empty-label="全部房间"
+      />
+      <view class="periods">
+        <text
+          v-for="n in [0, 1, 7, 30]"
+          :key="n"
+          :class="{ selected: days === n }"
+          @tap="days = n"
+        >
+          {{ n ? '近 ' + n + ' 天' : '全部时间' }}
+        </text>
+      </view>
+      <text>当前筛选共 {{ total }} 条 · 顶部待处理数为全部可访问告警</text>
+    </view>
+    <text
+      v-if="error"
+      class="load-error"
+      @tap="load()"
+    >
+      {{ error }} · 点击重试
+    </text>
     <view class="list">
       <view
         v-for="l in logs"
@@ -111,43 +169,103 @@ onPullDownRefresh(async () => {
         class="alert"
         :class="{ resolved: l.status === 'resolved' }"
       >
-        <view class="stripe" :style="{ background: l.status === 'resolved' ? '#2fb56b' : severityColor(l.severity) }" />
+        <view
+          class="stripe"
+          :style="{ background: l.status === 'resolved' ? '#2fb56b' : severityColor(l.severity) }"
+        />
         <view class="body">
           <view class="head">
             <text
               v-if="l.status === 'resolved'"
               class="sev done"
-            >{{ t('alert.sevDone') }}</text>
+            >
+              {{ t('alert.sevDone') }}
+            </text>
             <text
               v-else
               class="sev"
               :style="{ background: severityColor(l.severity) }"
-            >{{ sevLabel(l.severity) }}</text>
-            <text class="title">{{ l.rule?.name || '告警' }}</text>
+            >
+              {{ sevLabel(l.severity) }}
+            </text>
+            <text class="title">
+              {{ l.rule?.name || '告警' }}
+            </text>
           </view>
           <text class="desc">
-            {{ l.device?.name || '设备' }}<text v-if="l.device?.location"> · {{ l.device.location }}</text>
-            <text v-if="l.message"> · {{ l.message }}</text>
+            {{ l.device?.name || '设备' }}<text v-if="l.device?.location">
+              · {{ l.device.location }}
+            </text>
+            <text v-if="l.message">
+              · {{ l.message }}
+            </text>
           </text>
-          <text v-if="l.handling_note" class="desc">处理：{{ l.handling_note }}</text><text class="desc">{{ l.recovered_at ? "传感器已恢复：" + l.recovered_at : "尚无传感器恢复记录" }}</text>
+          <text
+            v-if="l.handling_note"
+            class="desc"
+          >
+            处理：{{ l.handling_note }}
+          </text><text class="desc">
+            {{ l.recovered_at ? "传感器已恢复：" + l.recovered_at : "尚无传感器恢复记录" }}
+          </text>
           <view class="foot">
             <text class="time">
-              {{ timeAgo(l.triggered_at) }} {{ t('alert.triggeredAt') }}<text v-if="l.resolved_at"> · {{ l.recovered_at ? '传感器已恢复' : '人工标记完成' }}</text>
+              {{ timeAgo(l.triggered_at) }} {{ t('alert.triggeredAt') }}<text v-if="l.resolved_at">
+                · {{ l.recovered_at ? '传感器已恢复' : '人工标记完成' }}
+              </text>
             </text>
-            <view class="acts"><text class="act" @tap="handling(l)">处理备注</text>
-              <text v-if="l.status === 'triggered'" class="act solid" @tap="onAck(l)">{{ t('alert.ack') }}</text>
-              <text v-if="l.status !== 'resolved'" class="act" @tap="onResolve(l)">{{ t('alert.resolve') }}</text>
+            <view class="acts">
+              <text
+                class="act"
+                @tap="handling(l)"
+              >
+                处理备注
+              </text>
+              <text
+                v-if="l.status === 'triggered'"
+                class="act solid"
+                @tap="onAck(l)"
+              >
+                {{ t('alert.ack') }}
+              </text>
+              <text
+                v-if="l.status !== 'resolved'"
+                class="act"
+                @tap="onResolve(l)"
+              >
+                {{ t('alert.resolve') }}
+              </text>
             </view>
           </view>
         </view>
       </view>
     </view>
 
-    <view v-if="!loading && !logs.length" class="empty">{{ t('alert.empty') }}</view>
+    <button
+      v-if="page < lastPage"
+      :disabled="loading"
+      :loading="loading"
+      @tap="load(true)"
+    >
+      加载更多告警
+    </button>
+    <text
+      v-else-if="logs.length"
+      class="list-end"
+    >
+      已显示全部 {{ total }} 条
+    </text>
+    <view
+      v-if="!loading && !error && !logs.length"
+      class="empty"
+    >
+      {{ t('alert.empty') }}
+    </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
+.filters { margin: 8rpx 24rpx 24rpx; padding: 24rpx; background: $hg-card; border-radius: 20rpx; font-size: 24rpx; color: $hg-muted; }.filters input { color: $hg-fg; padding: 20rpx 0; }.periods { display: flex; gap: 24rpx; margin-bottom: 24rpx; }.selected { color: $hg-accent; }.load-error, .list-end { display: block; padding: 24rpx; text-align: center; color: $hg-muted; }
 .page {
   min-height: 100vh;
   padding-bottom: 40rpx;

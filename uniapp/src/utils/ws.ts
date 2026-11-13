@@ -1,3 +1,6 @@
+import { ref, readonly } from 'vue';
+const connectionState = ref(false);
+export const wsConnected = readonly(connectionState);
 import { useServerStore } from '@/stores/server';
 import { useAuthStore } from '@/stores/auth';
 
@@ -73,7 +76,7 @@ export function connectWs(): void {
 
   task.onOpen(() => {
     if (task !== socketTask || activeUrl !== wsUrl()) { task.close({}); return; }
-    connected = true;
+    connected = true; connectionState.value = true;
     reconnectAttempts = 0;
     startPing();
   });
@@ -90,7 +93,7 @@ export function connectWs(): void {
 
   task.onClose(() => {
     if (task !== socketTask) return;
-    connected = false;
+    connected = false; connectionState.value = false;
     stopPing();
     socketTask = null;
     scheduleReconnect();
@@ -98,7 +101,7 @@ export function connectWs(): void {
 
   task.onError(() => {
     if (task !== socketTask) return;
-    connected = false;
+    connected = false; connectionState.value = false;
     stopPing();
     // onError 后通常紧跟 onClose；此处不重复调度
   });
@@ -114,7 +117,7 @@ export function closeWs(): void {
     socketTask = null;
     try { oldTask.close({}); } catch { /* ignore */ }
   }
-  connected = false;
+  connected = false; connectionState.value = false;
 }
 
 /** 订阅某类型消息，返回取消订阅函数 */

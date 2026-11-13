@@ -61,6 +61,8 @@ async function load() {
   loading.value = true;
   try {
     const [d, l] = await Promise.all([getDevice(id.value), getLatestTelemetry(id.value)]);
+    const fields = d.metric_fields || [];
+    d.metric_fields = [...fields, ...l.filter(m => !fields.some(f => f.key === m.metric_key)).map(m => ({ key: m.metric_key, label: m.metric_key }))];
     device.value = d;
     latest.value = l;
   } catch (e) {
@@ -86,8 +88,12 @@ async function send(ctrl: ControlPoint, value: unknown) {
   commandPending.value = true;
   commandStatus.value = '等待设备确认…';
   try {
-    await withCommandResult(() => sendCommand(id.value, { action: ctrl.command, params: { [ctrl.param]: value } }), 65000, getCommandResult);
-    commandStatus.value = device.value?.type === 'ac' ? '红外已发送，请核对空调实际状态' : '设备已确认执行';
+    await withCommandResult(async () => {
+      const command = await sendCommand(id.value, { action: ctrl.command, params: { [ctrl.param]: value } });
+      if (device.value) device.value.manual_override_until = new Date(Date.now() + 30 * 60000).toISOString();
+      return command;
+    }, 65000, getCommandResult);
+    commandStatus.value = device.value?.type === 'ac' ? '红外已发送，自动化暂停 30 分钟；请核对空调实际状态' : '设备已确认执行；自动化暂停 30 分钟';
   } catch (e) {
     setLocal(ctrl, prev);
     commandStatus.value = (e as Error).message;
@@ -169,37 +175,111 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 </script>
 
 <template>
-  <view v-if="commandStatus" class="command-status">{{ commandStatus }}</view>
+  <view
+    v-if="commandStatus"
+    class="command-status"
+  >
+    {{ commandStatus }}
+  </view>
   <view class="page">
-    <button v-if="device?.type === 'gateway' && auth.canManage" @tap="rebind">授权重新配网（原家庭保留设备）</button>
-    <view v-if="device" class="experience"><button size="mini" @tap="favorite">{{ device.is_favorite ? '★ 已常用' : '☆ 设为常用' }}</button><button v-if="controls.length" size="mini" @tap="override">自动化接管设置</button><text v-if="overrideActive">人工接管至 {{ device.manual_override_until }}</text><text v-if="controls.length">{{ device.state_note }}</text><text v-if="device.reported_at">最近状态上报：{{ device.reported_at }}</text><text v-if="device.reported_state">设备上报：{{ JSON.stringify(device.reported_state) }}</text></view>
-    <view v-if="device" class="nav">
-      <text class="dot" :class="{ gray: !device.is_online }" />
-      <text class="st">{{ device.is_online ? '在线' : '离线' }} · {{ device.type }}<text v-if="device.gateway_uid"> · 网关 {{ device.gateway_uid }}</text></text>
+    <button
+      v-if="device?.type === 'gateway' && auth.canManage"
+      @tap="rebind"
+    >
+      授权重新配网（原家庭保留设备）
+    </button>
+    <view
+      v-if="device"
+      class="experience"
+    >
+      <button
+        size="mini"
+        @tap="favorite"
+      >
+        {{ device.is_favorite ? '★ 已常用' : '☆ 设为常用' }}
+      </button><button
+        v-if="controls.length"
+        size="mini"
+        @tap="override"
+      >
+        自动化接管设置
+      </button><text v-if="overrideActive">
+        人工接管至 {{ device.manual_override_until }}
+      </text><text v-if="controls.length">
+        {{ device.state_note }}
+      </text><text v-if="device.reported_at">
+        最近状态上报：{{ device.reported_at }}
+      </text><text v-if="device.reported_state">
+        设备上报：{{ JSON.stringify(device.reported_state) }}
+      </text>
+    </view>
+    <view
+      v-if="device"
+      class="nav"
+    >
+      <text
+        class="dot"
+        :class="{ gray: !device.is_online }"
+      />
+      <text class="st">
+        {{ device.is_online ? '在线' : '离线' }} · {{ device.type }}<text v-if="device.gateway_uid">
+          · 网关 {{ device.gateway_uid }}
+        </text>
+      </text>
     </view>
 
     <!-- Hero -->
-    <button @tap="openDiagnostics">设备诊断</button>
-    <view v-if="hero" class="hero">
+    <button @tap="openDiagnostics">
+      设备诊断
+    </button>
+    <view
+      v-if="hero"
+      class="hero"
+    >
       <view class="hero-num">
-        <text class="num">{{ hero.value }}</text><text class="unit">{{ hero.unit }}</text>
+        <text class="num">
+          {{ hero.value }}
+        </text><text class="unit">
+          {{ hero.unit }}
+        </text>
       </view>
-      <text class="hero-sub">{{ hero.label }} · {{ device?.is_online ? '实时' : '最后 ' + timeAgo(device?.last_seen ?? null) }}</text>
+      <text class="hero-sub">
+        {{ hero.label }} · {{ device?.is_online ? '实时' : '最后 ' + timeAgo(device?.last_seen ?? null) }}
+      </text>
     </view>
 
     <!-- 其余遥测指标 -->
-    <view v-if="latest.length > 1" class="pills">
-      <view v-for="m in latest.slice(0, 6)" :key="m.metric_key" class="pill">
+    <view
+      v-if="latest.length > 1"
+      class="pills"
+    >
+      <view
+        v-for="m in latest.slice(0, 6)"
+        :key="m.metric_key"
+        class="pill"
+      >
         {{ m.metric_key }}: {{ m.value }}
       </view>
     </view>
 
     <!-- 动态控制 -->
-    <view v-if="controls.length" class="ctl-card">
-      <view v-for="ctrl in controls" :key="ctrl.key" class="ctl-row" :class="{ disabled: disabled(ctrl) }">
+    <view
+      v-if="controls.length"
+      class="ctl-card"
+    >
+      <view
+        v-for="ctrl in controls"
+        :key="ctrl.key"
+        class="ctl-row"
+        :class="{ disabled: disabled(ctrl) }"
+      >
         <view class="ctl-head">
-          <text class="ctl-label">{{ ctrl.label }}</text>
-          <text class="ctl-sub">{{ ctrl.command }} · 经网关下发</text>
+          <text class="ctl-label">
+            {{ ctrl.label }}
+          </text>
+          <text class="ctl-sub">
+            {{ ctrl.command }} · 经网关下发
+          </text>
         </view>
 
         <!-- switch -->
@@ -212,36 +292,72 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
 
         <!-- enum：选项少→分段；选项多→actionSheet 选择器 -->
         <template v-else-if="ctrl.widget === 'enum'">
-          <view v-if="(ctrl.options || []).length <= 5" class="seg">
+          <view
+            v-if="(ctrl.options || []).length <= 5"
+            class="seg"
+          >
             <view
               v-for="op in ctrl.options || []"
               :key="String(op.value)"
               class="seg-btn"
               :class="{ on: stateVal(ctrl) === op.value }"
               @tap="onEnum(ctrl, op.value)"
-            >{{ op.label }}</view>
+            >
+              {{ op.label }}
+            </view>
           </view>
-          <picker v-else :range="ctrl.options || []" range-key="label" :value="Math.max(0, (ctrl.options || []).findIndex((o) => o.value === stateVal(ctrl)))" :disabled="disabled(ctrl)" @change="chooseEnum(ctrl, $event)">
-            <view class="enum-picker"><text class="enum-cur">{{ enumLabel(ctrl) }}</text><text class="enum-arrow">›</text></view>
+          <picker
+            v-else
+            :range="ctrl.options || []"
+            range-key="label"
+            :value="Math.max(0, (ctrl.options || []).findIndex((o) => o.value === stateVal(ctrl)))"
+            :disabled="disabled(ctrl)"
+            @change="chooseEnum(ctrl, $event)"
+          >
+            <view class="enum-picker">
+              <text class="enum-cur">
+                {{ enumLabel(ctrl) }}
+              </text><text class="enum-arrow">
+                ›
+              </text>
+            </view>
           </picker>
         </template>
 
         <!-- stepper → − 值 ＋ -->
-        <view v-else-if="ctrl.widget === 'stepper'" class="stepper">
-          <view class="step-btn" @tap="onStep(ctrl, -1)">−</view>
-          <text class="step-val">{{ Number(stateVal(ctrl) ?? ctrl.default ?? ctrl.min ?? 0) }}{{ ctrl.unit || '' }}</text>
-          <view class="step-btn" @tap="onStep(ctrl, 1)">＋</view>
+        <view
+          v-else-if="ctrl.widget === 'stepper'"
+          class="stepper"
+        >
+          <view
+            class="step-btn"
+            @tap="onStep(ctrl, -1)"
+          >
+            −
+          </view>
+          <text class="step-val">
+            {{ Number(stateVal(ctrl) ?? ctrl.default ?? ctrl.min ?? 0) }}{{ ctrl.unit || '' }}
+          </text>
+          <view
+            class="step-btn"
+            @tap="onStep(ctrl, 1)"
+          >
+            ＋
+          </view>
         </view>
 
         <!-- slider -->
-        <view v-else-if="ctrl.widget === 'slider'" class="slider-wrap">
+        <view
+          v-else-if="ctrl.widget === 'slider'"
+          class="slider-wrap"
+        >
           <slider
             :min="ctrl.min ?? 0"
             :max="ctrl.max ?? 100"
             :step="ctrl.step ?? 1"
             :value="Number(stateVal(ctrl) ?? ctrl.min ?? 0)"
             :block-size="20"
-            activeColor="#2b6fe3"
+            active-color="#2b6fe3"
             show-value
             @change="onSlider(ctrl, $event)"
           />
@@ -252,15 +368,28 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
           v-else-if="ctrl.widget === 'button'"
           class="mini-btn"
           @tap="send(ctrl, ctrl.default ?? true)"
-        >执行</button>
+        >
+          执行
+        </button>
 
-        <text v-else class="ctl-val">{{ stateVal(ctrl) ?? '--' }}{{ ctrl.unit || '' }}</text>
+        <text
+          v-else
+          class="ctl-val"
+        >
+          {{ stateVal(ctrl) ?? '--' }}{{ ctrl.unit || '' }}
+        </text>
       </view>
     </view>
 
     <!-- 趋势入口 -->
-    <view v-if="device?.metric_fields?.length" class="trend-entry" @tap="goTelemetry">
-      <text>查看遥测趋势</text><text class="arrow">›</text>
+    <view
+      v-if="device?.metric_fields?.length"
+      class="trend-entry"
+      @tap="goTelemetry"
+    >
+      <text>{{ device?.is_online ? '查看遥测趋势' : '查看历史趋势（离线可用）' }}</text><text class="arrow">
+        ›
+      </text>
     </view>
   </view>
 </template>

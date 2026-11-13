@@ -134,10 +134,9 @@ class TelemetryController
 
         // Redis 未命中，从数据库查询每个指标的最新值
         $latest = Db::table('telemetry_logs')
-            ->select('metric_key', 'value', 'ts')
+            ->selectRaw('DISTINCT ON (metric_key) metric_key, value, ts')
             ->where('device_id', $deviceId)
-            ->where('ts', '>=', now()->subHours(24))
-            ->orderBy('ts', 'desc')
+            ->orderBy('metric_key')->orderBy('ts', 'desc')
             ->get()
             ->unique('metric_key')  // 每个指标只取最新一条
             ->values()
@@ -151,16 +150,16 @@ class TelemetryController
     }
 
     /**
-     * 查询小时聚合数据（用于 Dashboard 历史图表）
+     * 查询自适应聚合数据（离线设备同样可以查看历史图表）
      *
      * GET /api/telemetry/aggregated?device_id=1&metric_key=temperature&start=2026-01-01&end=2026-02-01
      *
-     * 查询 telemetry_hourly 连续聚合视图，性能远优于查原始表。
+     * 从持久化遥测表查询，按时间跨度使用 5 分钟、30 分钟或 3 小时分桶。
      */
     #[OA\Get(
         path: '/telemetry/aggregated',
-        summary: '小时聚合数据',
-        description: '查询指定设备和指标的小时级聚合数据，用于图表展示。查询 telemetry_hourly 视图，性能优。',
+        summary: '历史遥测聚合数据',
+        description: '查询指定设备和指标已保存的历史数据，不要求设备在线。自适应分桶，最长查询 366 天；可用历史受服务器数据保留策略限制。',
         security: [['bearerAuth' => []]],
         tags: ['遥测数据'],
     )]
@@ -204,9 +203,16 @@ class TelemetryController
         $start = $request->get('start', now()->subDays(7)->toDateTimeString());
         $end = $request->get('end', now()->toDateTimeString());
 
+        if (!is_string($start) || !is_string($end)) return api_error('时间范围格式无效', 422, 1000);
+
         // 按跨度自适应分桶，控制点数在 ~150-300：24h→5min，≤7d→30min，更长→3h
         $startTs = strtotime($start);
         $endTs = strtotime($end);
+        if ($startTs === false || $endTs === false || $endTs <= $startTs || $endTs - $startTs > 366 * 86400) {
+            return api_error('请选择有效时间范围，最长支持 366 天', 422, 1000);
+        }
+        $start = gmdate('Y-m-d\TH:i:s\Z', $startTs);
+        $end = gmdate('Y-m-d\TH:i:s\Z', $endTs);
         $spanHours = ($endTs - $startTs) / 3600;
         if ($spanHours <= 24) {
             $bucket = '5 minutes';

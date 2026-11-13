@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useServerStore } from '@/stores/server';
-import { onLoad } from '@dcloudio/uni-app';
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app';
 import { provisioningStage } from '@/utils/provisioning-stage';
 import { createProvisionCode, getProvisionStatus } from '@/api/provisioning';
 import { toast, ensureReady } from '@/utils/guard';
 import { getDevices } from '@/api/device';
 import type { Device } from '@/api/types';
+import RoomPicker from '@/components/RoomPicker.vue';
+import { useAuthStore } from '@/stores/auth';
 import { goHome } from '@/utils/navigation';
 
 const server = useServerStore();
@@ -25,13 +27,13 @@ const connectionError = ref('');
 const busy = ref(false);
 let failures = 0;
 let generation = 0;
-onLoad((q) => {
-  if (!ensureReady()) return;
-  const target = Number(q?.rebind);
-  if (Number.isInteger(target) && target > 0) { rebindId.value = target; mode.value = 'gateway'; }
-});
+
 const code = ref('');
 const expiresIn = ref(0);
+const step = ref(1); let expiresAt = 0; let checking = false;
+const auth = useAuthStore();
+const pairingKey = () => `hg_pairing_${server.currentId}_${auth.user?.id || 0}`;
+let previousPairingKey = pairingKey();
 const status = ref<'idle' | 'pending' | 'registered' | 'expired'>('idle');
 const deviceName = ref('');
 let poller: ReturnType<typeof setInterval> | null = null;
@@ -60,33 +62,74 @@ async function generate() {
     // 生成即自动复制，方便粘贴到设备配网页
     copyCode(true);
 
-    ticker = setInterval(() => {
-      expiresIn.value = Math.max(0, expiresIn.value - 1);
-      if (expiresIn.value === 0) { connectionError.value = '等待超时，请检查 WiFi、平台地址和 MQTT 连接。已注册设备可从设备列表查看状态。'; stop(); }
-    }, 1000);
+    expiresAt = Date.now() + res.expires_in * 1000;
+    step.value = 1;
+    persistPairing(); startPolling(attempt);
 
-    poller = setInterval(async () => {
-      try {
-        const s = await getProvisionStatus(code.value);
-        if (attempt !== generation) return;
-        failures = 0; connectionError.value = '';
-        registeredId.value = s.device?.id || 0;
-        const stage = provisioningStage(s);
-        progress.value = stage.label;
-        if (stage.ready) {
-          status.value = 'registered';
-          deviceName.value = s.device?.name || '新设备';
-          stop();
-        } else if (s.status === 'expired') {
-          status.value = 'expired';
-          stop();
-        }
-      } catch { if (attempt === generation && ++failures >= 3) connectionError.value = '连续无法联系服务器，请恢复手机网络后重试查询'; }
-    }, 3000);
   } catch (e) {
     if (attempt === generation) toast((e as Error).message);
   } finally { if (attempt === generation) busy.value = false; }
 }
+function persistPairing() {
+  if (status.value === 'pending') uni.setStorageSync(pairingKey(), { code: code.value, expiresAt, platform: platformUrl.value, rebind: rebindId.value, step: step.value });
+}
+async function checkStatus(attempt = generation) {
+  if (checking || !code.value || attempt !== generation || status.value !== 'pending') return;
+  checking = true;
+  try {
+    const s = await getProvisionStatus(code.value);
+    if (attempt !== generation) return;
+    failures = 0; connectionError.value = '';
+    registeredId.value = s.device?.id || 0;
+    const stage = provisioningStage(s); progress.value = stage.label;
+    if (stage.ready) {
+      status.value = 'registered'; deviceName.value = s.device?.name || '新设备';
+      stop(); uni.removeStorageSync(pairingKey());
+    } else if (s.status === 'expired') {
+      status.value = 'expired'; stop(); uni.removeStorageSync(pairingKey());
+    }
+  } catch { if (attempt === generation && ++failures >= 3) connectionError.value = '连接设备热点时无法访问平台属于正常现象；提交配网后切回原网络，再点击检查进度。'; }
+  finally { checking = false; }
+}
+function startPolling(attempt: number) {
+  stop();
+  const tick = () => {
+    expiresIn.value = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    if (!expiresIn.value) {
+      status.value = 'expired'; stop(); uni.removeStorageSync(pairingKey());
+      connectionError.value = '配对码已过期。若已提交配网，可先查看设备列表，确认未加入后再生成新码。';
+    }
+  };
+  tick();
+  if (status.value !== 'pending') return;
+  ticker = setInterval(tick, 1000);
+  poller = setInterval(() => { void checkStatus(attempt); }, 3000);
+}
+function nextStep(value: number) { step.value = value; persistPairing(); }
+function copyPairingNotes() {
+  if (!code.value) return;
+  uni.setClipboardData({ data: `平台地址：${platformUrl.value}\n配对码：${code.value}\n设备配网页：http://192.168.4.1/`, success: () => toast('已复制整份配网信息，可保存到备忘录'), fail: () => toast('复制失败，请手动记录') });
+}
+function restorePairing() {
+  if (status.value !== 'idle') return;
+  const saved = uni.getStorageSync(pairingKey());
+  if (saved && saved.expiresAt <= Date.now()) { uni.removeStorageSync(pairingKey()); return; }
+  if (!saved || saved.platform !== platformUrl.value || saved.expiresAt <= Date.now() || typeof saved.code !== 'string') return;
+  if (rebindId.value && saved.rebind !== rebindId.value) return;
+  code.value = saved.code; expiresAt = saved.expiresAt; rebindId.value = saved.rebind || undefined;
+  step.value = saved.step || 1; mode.value = 'gateway'; status.value = 'pending';
+  startPolling(++generation); void checkStatus();
+}
+onLoad(q => {
+  if (!ensureReady()) return;
+  const target = Number(q?.rebind);
+  if (Number.isInteger(target) && target > 0) { rebindId.value = target; mode.value = 'gateway'; }
+  if (q?.mode === 'module' && !rebindId.value) { void chooseMode('module'); return; }
+  restorePairing();
+});
+onShow(() => {
+  if (status.value === 'pending') { startPolling(generation); void checkStatus(); }
+});
 function openRegisteredDevice() { if (code.value) uni.redirectTo({ url: '/pages/device/detail?id=' + registeredId.value }); }
 const registeredId = ref(0);
 
@@ -110,6 +153,7 @@ function copyPlatformUrl() {
 
 // 配对码与设备 ID 属于生成它们的服务器，切换时必须一起作废。
 watch(() => server.connectionRevision, () => {
+  uni.removeStorageSync(previousPairingKey); previousPairingKey = pairingKey();
   generation++; stop(); busy.value = false;
   code.value = ''; expiresIn.value = 0; status.value = 'idle';
   registeredId.value = 0; rebindId.value = undefined; deviceName.value = '';
@@ -134,6 +178,7 @@ async function chooseMode(next: 'gateway' | 'module') {
   if (next === 'module') await loadGateways();
 }
 function resetPairing() {
+  uni.removeStorageSync(pairingKey()); step.value = 1;
   generation++; stop(); code.value = ''; expiresIn.value = 0;
   status.value = 'idle'; registeredId.value = 0; deviceName.value = ''; connectionError.value = '';
 }
@@ -165,6 +210,7 @@ function openModules(id: number) {
   if (!gateway.is_online) return toast('网关离线，请先恢复联网后添加模块');
   uni.navigateTo({ url: '/pages/manage/gateway-modules?id=' + gateway.id });
 }
+onHide(stop);
 onUnmounted(() => { generation++; gatewayRequest++; stop(); });
 </script>
 
@@ -313,7 +359,7 @@ onUnmounted(() => { generation++; gatewayRequest++; stop(); });
       </text>
 
       <view
-        v-if="status !== 'registered'"
+        v-if="status !== 'registered' && step === 1"
         class="card"
       >
         <text class="section-title">
@@ -329,12 +375,7 @@ onUnmounted(() => { generation++; gatewayRequest++; stop(); });
           <text class="label">
             网关放在哪个房间（可选）
           </text>
-          <input
-            v-model="location"
-            class="input"
-            placeholder="如 客厅；重新配网沿用原位置"
-            placeholder-class="ph"
-          >
+          <RoomPicker v-model="location" />
         </view>
         <button
           v-if="status === 'idle'"
@@ -386,11 +427,11 @@ onUnmounted(() => { generation++; gatewayRequest++; stop(); });
       </view>
 
       <view
-        v-if="status !== 'registered'"
+        v-if="status !== 'registered' && step === 1"
         class="card"
       >
         <text class="section-title">
-          2. 告诉 ESP32 要连接哪个平台
+          平台地址：与配对码一起填入设备
         </text>
         <text class="hint">
           当前平台：{{ server.current?.name || '未选择' }}。下面是已选平台的地址，复制到设备配网页的「平台地址」栏即可。
@@ -411,11 +452,11 @@ onUnmounted(() => { generation++; gatewayRequest++; stop(); });
       </view>
 
       <view
-        v-if="status !== 'registered'"
+        v-if="status !== 'registered' && step >= 2"
         class="card"
       >
         <text class="section-title">
-          3. 连接设备热点，提交配网信息
+          {{ step === 2 ? '2. 连接设备热点并填写' : '3. 返回原网络，检查结果' }}
         </text>
         <text class="hint">
           先把配对码和平台地址分别记下，再到手机系统 WiFi 设置连接 HG-Setup-xxxx 热点。
@@ -432,6 +473,45 @@ onUnmounted(() => { generation++; gatewayRequest++; stop(); });
         >
           {{ progress }}…
         </text>
+      </view>
+      <view
+        v-if="status === 'pending'"
+        class="card"
+      >
+        <text class="hint">
+          步骤 {{ step }} / 3 · 临时切换网络后可回到本页继续。
+        </text>
+        <text
+          selectable
+          class="hint"
+        >
+          平台：{{ platformUrl }}
+          配对码：{{ code }}
+        </text>
+        <button @tap="copyPairingNotes">
+          复制整份配网信息（便于保存）
+        </button>
+        <text class="hint">
+          整份信息用于备忘；设备表单需分别填写地址和配对码。
+        </text>
+        <button
+          v-if="step < 3"
+          @tap="nextStep(step + 1)"
+        >
+          {{ step === 1 ? '信息已记下，去连接设备热点' : '已提交配网，返回原网络检查' }}
+        </button>
+        <button
+          v-if="step === 3"
+          @tap="checkStatus()"
+        >
+          我已切回原网络，检查进度
+        </button>
+        <button
+          v-if="step > 1"
+          @tap="nextStep(step - 1)"
+        >
+          返回上一步
+        </button>
       </view>
       <text
         v-if="connectionError"

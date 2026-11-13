@@ -328,12 +328,19 @@ class AuthController
         $oldPassword = $request->post('old_password', '');
         $newPassword = $request->post('new_password', '');
 
-        if (empty($oldPassword) || empty($newPassword)) {
+        if (!is_string($oldPassword) || !is_string($newPassword) || $oldPassword === '' || $newPassword === '') {
             return api_error('旧密码和新密码不能为空', 422, 1000);
         }
 
         if (mb_strlen($newPassword) < 6) {
             return api_error('新密码长度不能少于 6 位', 422, 1001);
+        }
+
+        if (strlen($newPassword) > 72) {
+            return api_error('新密码过长，请缩短', 422, 1001);
+        }
+        if ($oldPassword === $newPassword) {
+            return api_error('新密码不能与当前密码相同', 422, 1001);
         }
 
         $user = User::find($request->userId());

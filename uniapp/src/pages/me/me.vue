@@ -62,42 +62,98 @@ function onLogout() {
     <PageHeader :title="t('tab.me')" />
 
     <view class="profile">
-      <view class="avatar">{{ (auth.user?.username || 'U').slice(0, 1).toUpperCase() }}</view>
+      <view class="avatar">
+        {{ (auth.user?.username || 'U').slice(0, 1).toUpperCase() }}
+      </view>
       <view class="pinfo">
-        <text class="pname">{{ auth.user?.username || '未登录' }}</text>
-        <text class="prole">{{ roleLabel }}</text>
+        <text class="pname">
+          {{ auth.user?.username || '未登录' }}
+        </text>
+        <text class="prole">
+          {{ roleLabel }}
+        </text>
       </view>
     </view>
 
-    <view class="server-card" @tap="goServers">
+    <view
+      class="server-card"
+      @tap="goServers"
+    >
       <view class="sc-dot" />
       <view class="sc-main">
-        <text class="sc-name">{{ server.current?.name || '未选择服务器' }}</text>
-        <text class="sc-url">{{ server.current?.url }}</text>
+        <text class="sc-name">
+          {{ server.current?.name || '未选择服务器' }}
+        </text>
+        <text class="sc-url">
+          {{ server.current?.url }}
+        </text>
       </view>
-      <text class="sc-switch">切换 ›</text>
+      <text class="sc-switch">
+        切换 ›
+      </text>
     </view>
 
     <view class="menu">
-      <view v-if="auth.canManage" class="item" @tap="uni.navigateTo({ url: '/pages/manage/invite' })">
-        <text class="t">{{ t('me.inviteFamily') }}</text><text class="arrow">›</text>
+      <view
+        v-if="auth.canManage"
+        class="item"
+        @tap="uni.navigateTo({ url: '/pages/manage/invite' })"
+      >
+        <text class="t">
+          {{ t('me.inviteFamily') }}
+        </text><text class="arrow">
+          ›
+        </text>
       </view>
-      <view class="item" @tap="uni.navigateTo({ url: '/pages/me/push-settings' })">
-        <text class="t">{{ t('me.pushSettings') }}</text><text class="arrow">›</text>
+      <view
+        class="item"
+        @tap="uni.navigateTo({ url: '/pages/me/push-settings' })"
+      >
+        <text class="t">
+          {{ t('me.pushSettings') }}
+        </text><text class="arrow">
+          ›
+        </text>
       </view>
-      <view class="item" @tap="chooseLanguage">
-        <text class="t">{{ t('me.language') }}</text>
-        <text class="v">{{ locale.pref === 'system' ? t('me.langSystem') : (locale.pref === 'en' ? 'English' : '简体中文') }}</text>
+      <view
+        class="item"
+        @tap="chooseLanguage"
+      >
+        <text class="t">
+          {{ t('me.language') }}
+        </text>
+        <text class="v">
+          {{ locale.pref === 'system' ? t('me.langSystem') : (locale.pref === 'en' ? 'English' : '简体中文') }}
+        </text>
       </view>
-      <view class="item" @tap="todo">
-        <text class="t">{{ t('me.changePassword') }}</text><text class="arrow">›</text>
+      <view
+        class="item"
+        @tap="uni.navigateTo({ url: '/pages/me/change-password' })"
+      >
+        <text class="t">
+          {{ t('me.changePassword') }}
+        </text><text class="arrow">
+          ›
+        </text>
       </view>
-      <view class="item" @tap="todo">
-        <text class="t">{{ t('me.about') }}</text><text class="v">Home Guardian v1.0.0</text>
+      <view
+        class="item"
+        @tap="todo"
+      >
+        <text class="t">
+          {{ t('me.about') }}
+        </text><text class="v">
+          Home Guardian v1.0.0
+        </text>
       </view>
     </view>
 
-    <button class="logout" @tap="onLogout">{{ t('me.logout') }}</button>
+    <button
+      class="logout"
+      @tap="onLogout"
+    >
+      {{ t('me.logout') }}
+    </button>
   </view>
 </template>
 
