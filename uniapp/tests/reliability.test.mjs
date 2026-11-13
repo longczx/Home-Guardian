@@ -1,7 +1,7 @@
 import { test, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -17,6 +17,8 @@ await build({
     export { connectWs, closeWs, onWs } from './src/utils/ws';
     export { provisioningStage } from './src/utils/provisioning-stage';
     export { withCommandResult } from './src/utils/command-result';
+    export { goHome } from './src/utils/navigation';
+    export { ensureReady } from './src/utils/guard';
     export { controlOptions, updateControlValues } from './src/utils/control-options';
     export { readGatewayModules, changeGatewayModule, modulePinError } from './src/utils/gateway-modules';
   `, resolveDir: process.cwd() },
@@ -240,4 +242,32 @@ test('module management rejects ACKs for another module and replies without appl
   const oldRejected = assert.rejects(old, /未确认配置生效/);
   accept(requests.at(-1), 'old-firmware', { uid: 'gw-ac' });
   await oldRejected;
+});
+
+
+test('cold launch opens the home tab instead of a management subpage', async () => {
+  const pages = JSON.parse(await readFile(resolve('src/pages.json'), 'utf8'));
+  assert.equal(pages.pages[0].path, 'pages/index/index');
+  assert.ok(pages.tabBar.list.some(page => page.pagePath === pages.pages[0].path));
+  assert.ok(pages.pages.some(page => page.path === 'pages/manage/rooms'));
+});
+
+test('a restored room page can return home without any back-stack and has a relaunch fallback', () => {
+  const calls = [];
+  globalThis.uni.switchTab = options => { calls.push(['tab', options.url]); options.fail(); };
+  globalThis.uni.reLaunch = options => calls.push(['relaunch', options.url]);
+  runtime.goHome();
+  assert.deepEqual(calls, [['tab', '/pages/index/index'], ['relaunch', '/pages/index/index']]);
+});
+
+test('protected management routes lead to server selection or login when session is missing', () => {
+  const calls = [];
+  globalThis.uni.reLaunch = options => calls.push(options.url);
+  server.servers = [];
+  assert.equal(runtime.ensureReady(), false);
+  assert.equal(calls.at(-1), '/pages/server/list');
+  server.servers = [{ id: 'fresh', name: 'Fresh', url: 'http://fresh.example' }];
+  server.switchTo('fresh');
+  assert.equal(runtime.ensureReady(), false);
+  assert.equal(calls.at(-1), '/pages/auth/login');
 });

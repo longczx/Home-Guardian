@@ -267,6 +267,14 @@ void setup() {
     }
     Serial.printf("[Main] 网关 UID: %s\n", store.gatewayUid().c_str());
 
+    if (!store.hasWifi()) {
+        mode = MODE_PROVISION;
+        Serial.println("[Main] 未配置 WiFi → 进入配网模式（模块配置保留，配网时不初始化驱动）");
+        provisioning.begin(&store);
+        return;
+    }
+    Serial.println("[Main] 已保存 WiFi → 正常联网；长按 BOOT 5 秒可重新配网");
+
     commands.registerAction("ping",     handlePing);
     commands.registerAction("get_info", handleGetInfo);
     commands.registerAction("reboot",   handleReboot);
@@ -282,16 +290,9 @@ void setup() {
     buildModules();
     moduleManager = new ModuleManager(modules, moduleRuntime, store.gatewayUid(), FACTORY_RESET_PIN, psramFound());
 
-    if (!store.hasWifi()) {
-        mode = MODE_PROVISION;
-        if (!store.allowsDefaults()) WiFi.eraseAP();
-        provisioning.begin(&store);
-        Serial.println("[Main] 未配置 WiFi → 进入配网模式");
-    } else {
-        mode = MODE_NORMAL;
-        startNormal();
-        Serial.println("[Main] 初始化完成\n");
-    }
+    mode = MODE_NORMAL;
+    startNormal();
+    Serial.println("[Main] 初始化完成\n");
 }
 
 void loop() {

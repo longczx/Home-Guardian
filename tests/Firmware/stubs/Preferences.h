@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <set>
+#include <cstdint>
 class Preferences {
     std::string ns;
     static std::map<std::string, std::string>& values() {

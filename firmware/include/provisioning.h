@@ -5,6 +5,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include "config_store.h"
+#include "provisioning_ap.h"
 
 /**
  * SoftAP 配网门户（captive portal）
@@ -21,9 +22,11 @@ public:
 
 private:
     ConfigStore* _store = nullptr;
-    WebServer _server{80};
+    ProvisioningWebServer _server{80};
     DNSServer _dns;
+    ProvisioningAp _ap{_server, _dns};
     bool _done = false;
+    bool _handlersRegistered = false;
 
     void handleRoot();
     void handleScan();

@@ -50,3 +50,8 @@ cp firmware/src/command_handler.cpp tests/Firmware/module_command_test.cpp "$wor
 g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" -I"$work/json" \
     "$work/command_handler.cpp" "$work/module_command_test.cpp" -o "$work/module-command-test"
 "$work/module-command-test"
+cp firmware/include/provisioning_ap.h "$work/include/"
+cp firmware/src/provisioning_ap.cpp tests/Firmware/provisioning_ap_test.cpp "$work/"
+g++ -std=gnu++17 -pthread -I"$work/stubs" -I"$work/include" \
+    "$work/provisioning_ap.cpp" "$work/provisioning_ap_test.cpp" -o "$work/provisioning-ap-test"
+"$work/provisioning-ap-test"

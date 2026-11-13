@@ -2,8 +2,6 @@
 #include <WiFi.h>
 #include "config.h"
 
-static const byte DNS_PORT = 53;
-
 void Provisioning::begin(ConfigStore* store) {
     _store = store;
     _done = false;
@@ -12,26 +10,24 @@ void Provisioning::begin(ConfigStore* store) {
     String uid = ConfigStore::deviceUid();          // esp32-aabbcc
     String ap = "HG-Setup-" + uid.substring(uid.length() - 4);
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(ap.c_str());
-    IPAddress ip = WiFi.softAPIP();  // 默认 192.168.4.1
-    Serial.printf("[配网] 热点已开: %s  →  http://%s\n", ap.c_str(), ip.toString().c_str());
-
-    // captive portal：所有域名解析到本机
-    _dns.start(DNS_PORT, "*", ip);
-
-    _server.on("/", HTTP_GET, [this]() { handleRoot(); });
-    _server.on("/scan", HTTP_GET, [this]() { handleScan(); });
-    _server.on("/provision", HTTP_POST, [this]() { handleProvision(); });
-    // 常见系统探测路径 → 重定向到配网页，触发弹窗
-    _server.onNotFound([this]() {
-        _server.sendHeader("Location", "http://192.168.4.1/", true);
-        _server.send(302, "text/plain", "");
-    });
-    _server.begin();
+    if (!_handlersRegistered) {
+        _server.on("/", HTTP_GET, [this]() { handleRoot(); });
+        _server.on("/scan", HTTP_GET, [this]() { handleScan(); });
+        _server.on("/provision", HTTP_POST, [this]() { handleProvision(); });
+        // 常见系统探测路径 → 重定向到配网页，触发弹窗
+        _server.onNotFound([this]() {
+            _server.sendHeader("Location", "http://192.168.4.1/", true);
+            _server.send(302, "text/plain", "");
+        });
+        _handlersRegistered = true;
+    }
+    _ap.begin(ap.c_str());
 }
 
 void Provisioning::loop() {
+    if (_done) return;
+    _ap.loop();
+    if (!_ap.ready()) return;
     _dns.processNextRequest();
     _server.handleClient();
 }
