@@ -23,6 +23,8 @@ interface RequestOptions {
   /** 跳过鉴权（登录/注册/刷新接口） */
   auth?: boolean;
   _retry?: boolean;
+  /** 业务性 401（如旧密码错误）不触发刷新登录。 */
+  business401Code?: number;
 }
 
 /** 把回调式 uni.request 包成 Promise，规避不同 @dcloudio/types 版本的 Promise 类型差异 */
@@ -82,7 +84,7 @@ async function execute<T>(url: string, options: RequestOptions, context: Request
   const res = await uniRequest({ url: `${context.base}${url}${buildQuery(params)}`, method: method as UniApp.RequestOptions['method'], data, header });
   assertCurrent(context);
   const body = res.data as ApiResponse<T>;
-  if (res.statusCode === 401 && needAuth && !options._retry) {
+  if (res.statusCode === 401 && needAuth && !options._retry && !(options.business401Code !== undefined && body?.code === options.business401Code)) {
     const key = `${context.id}:${context.base}`;
     let job = refreshJobs.get(key);
     if (!job) {

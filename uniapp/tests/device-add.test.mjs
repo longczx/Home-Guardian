@@ -24,7 +24,7 @@ await build({
       return { contents: compileScript(descriptor, { id: 'onboarding-test' }).content, loader: 'ts', resolveDir: resolve('src/pages/manage') };
     });
     builder.onResolve({ filter: /^@dcloudio\/uni-app$/ }, () => ({ path: 'uni-app', namespace: 'mock' }));
-    builder.onLoad({ filter: /.*/, namespace: 'mock' }, () => ({ contents: 'export const onLoad = fn => fn(globalThis.onboardingQuery || {});' }));
+    builder.onLoad({ filter: /.*/, namespace: 'mock' }, () => ({ contents: 'export const onLoad = fn => fn(globalThis.onboardingQuery || {}); export const onShow = () => {}; export const onHide = () => {};' }));
   } }],
 });
 const runtime = await import(pathToFileURL(output));
@@ -32,7 +32,7 @@ let app, state, requests, clipboard, routes, notices, server, auth, first;
 beforeEach(() => {
   requests = []; clipboard = []; routes = []; notices = [];
   globalThis.uni = {
-    getStorageSync() {}, setStorageSync() {}, showToast: options => notices.push(options.title),
+    getStorageSync() {}, setStorageSync() {}, removeStorageSync() {}, showToast: options => notices.push(options.title),
     request: options => requests.push(options),
     reLaunch: options => routes.push(options.url),
     navigateTo: options => routes.push(options.url),

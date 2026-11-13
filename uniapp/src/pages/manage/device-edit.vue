@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import RoomPicker from '@/components/RoomPicker.vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getDevice, updateDevice } from '@/api/device';
 import { getMetricDefinitions, createMetricDefinition, type MetricDefinition } from '@/api/metricDefinition';
@@ -195,87 +196,240 @@ onLoad((q) => {
 <template>
   <view class="page">
     <!-- 只读信息 -->
-    <view v-if="device" class="card info">
-      <view class="irow"><text class="ik">设备标识</text><text class="iv">{{ device.device_uid }}</text></view>
-      <view class="irow"><text class="ik">状态</text>
-        <text class="iv" :style="{ color: device.is_online ? '#2fb56b' : '#7a8299' }">
+    <view
+      v-if="device"
+      class="card info"
+    >
+      <view class="irow">
+        <text class="ik">
+          设备标识
+        </text><text class="iv">
+          {{ device.device_uid }}
+        </text>
+      </view>
+      <view class="irow">
+        <text class="ik">
+          状态
+        </text>
+        <text
+          class="iv"
+          :style="{ color: device.is_online ? '#2fb56b' : '#7a8299' }"
+        >
           {{ device.is_online ? '在线' : '离线 ' + timeAgo(device.last_seen) }}
         </text>
       </view>
-      <view v-if="device.gateway_uid" class="irow"><text class="ik">所属网关</text><text class="iv">{{ device.gateway_uid }}</text></view>
-      <view v-if="device.firmware_version" class="irow"><text class="ik">固件</text><text class="iv">{{ device.firmware_version }}</text></view>
+      <view
+        v-if="device.gateway_uid"
+        class="irow"
+      >
+        <text class="ik">
+          所属网关
+        </text><text class="iv">
+          {{ device.gateway_uid }}
+        </text>
+      </view>
+      <view
+        v-if="device.firmware_version"
+        class="irow"
+      >
+        <text class="ik">
+          固件
+        </text><text class="iv">
+          {{ device.firmware_version }}
+        </text>
+      </view>
     </view>
 
     <!-- 可编辑 -->
     <view class="card">
       <view class="field">
-        <text class="label">设备名称</text>
-        <input v-model="name" class="input" placeholder="设备名称" placeholder-class="ph" />
+        <text class="label">
+          设备名称
+        </text>
+        <input
+          v-model="name"
+          class="input"
+          placeholder="设备名称"
+          placeholder-class="ph"
+        >
       </view>
       <view class="field">
-        <text class="label">位置 / 房间</text>
-        <input v-model="location" class="input" placeholder="如 客厅" placeholder-class="ph" />
+        <text class="label">
+          位置 / 房间
+        </text>
+        <RoomPicker v-model="location" />
       </view>
       <view class="field">
-        <text class="label">设备类型</text>
-        <view class="picker" @tap="chooseType">{{ typeLabel }} ›</view>
+        <text class="label">
+          设备类型
+        </text>
+        <view
+          class="picker"
+          @tap="chooseType"
+        >
+          {{ typeLabel }} ›
+        </view>
       </view>
       <view class="field">
-        <text class="label">控制能力（执行器需要）</text>
-        <view class="picker" @tap="chooseCapability">{{ capabilityLabel }} ›</view>
+        <text class="label">
+          控制能力（执行器需要）
+        </text>
+        <view
+          class="picker"
+          @tap="chooseCapability"
+        >
+          {{ capabilityLabel }} ›
+        </view>
       </view>
       <!-- 网关才有子设备可热插拔 -->
-      <view v-if="type === 'gateway'" class="field">
-        <text class="label">子设备</text>
-        <view class="picker" @tap="openModules">管理挂载的传感器 / 执行器 ›</view>
+      <view
+        v-if="type === 'gateway'"
+        class="field"
+      >
+        <text class="label">
+          子设备
+        </text>
+        <view
+          class="picker"
+          @tap="openModules"
+        >
+          管理挂载的传感器 / 执行器 ›
+        </view>
       </view>
     </view>
 
-    <view class="card"><text class="label">预计上报周期（秒，10-86400）</text><input v-model.number="reportInterval" type="number" /><text class="hint">超过周期三倍，数据标记过期；也用于传感器离线判断。网关心跳单独判断。</text></view>
+    <view class="card">
+      <text class="label">
+        预计上报周期（秒，10-86400）
+      </text><input
+        v-model.number="reportInterval"
+        type="number"
+      ><text class="hint">
+        超过周期三倍，数据标记过期；也用于传感器离线判断。网关心跳单独判断。
+      </text>
+    </view>
     <!-- 遥测指标：从字典勾选 -->
     <view class="card">
       <view class="mhead">
-        <text class="ct">遥测指标</text>
+        <text class="ct">
+          遥测指标
+        </text>
       </view>
-      <text class="hint">从字典勾选设备上报的字段，key 自动对齐——避免手打拼错导致图表不显示、告警不触发。</text>
+      <text class="hint">
+        从字典勾选设备上报的字段，key 自动对齐——避免手打拼错导致图表不显示、告警不触发。
+      </text>
 
-      <view v-if="defs.length" class="chips">
+      <view
+        v-if="defs.length"
+        class="chips"
+      >
         <text
           v-for="d in defs"
           :key="d.metric_key"
           class="chip"
           :class="{ on: isSelected(d.metric_key) }"
           @tap="toggleDef(d)"
-        >{{ d.icon }} {{ d.label }}<text v-if="d.unit" class="cu"> · {{ d.unit }}</text></text>
+        >
+          {{ d.icon }} {{ d.label }}<text
+            v-if="d.unit"
+            class="cu"
+          >
+            · {{ d.unit }}
+          </text>
+        </text>
       </view>
-      <text v-else class="empty">字典为空，可在下方自定义添加</text>
+      <text
+        v-else
+        class="empty"
+      >
+        字典为空，可在下方自定义添加
+      </text>
 
       <!-- 已选的自定义字段（不在字典中） -->
-      <view v-if="customSelected.length" class="custom-list">
-        <text class="sub">自定义字段</text>
-        <view v-for="k in customSelected" :key="k" class="crow">
-          <text class="ck">{{ selected[k].label }} · {{ k }}<text v-if="selected[k].unit"> · {{ selected[k].unit }}</text></text>
-          <text class="mdel" @tap="removeKey(k)">✕</text>
+      <view
+        v-if="customSelected.length"
+        class="custom-list"
+      >
+        <text class="sub">
+          自定义字段
+        </text>
+        <view
+          v-for="k in customSelected"
+          :key="k"
+          class="crow"
+        >
+          <text class="ck">
+            {{ selected[k].label }} · {{ k }}<text v-if="selected[k].unit">
+              · {{ selected[k].unit }}
+            </text>
+          </text>
+          <text
+            class="mdel"
+            @tap="removeKey(k)"
+          >
+            ✕
+          </text>
         </view>
       </view>
 
       <!-- 自定义添加 -->
       <view class="add-wrap">
-        <text class="add" @tap="showCustom = !showCustom">{{ showCustom ? '收起' : '＋ 自定义字段' }}</text>
-        <view v-if="showCustom" class="cform">
-          <input v-model="cf.key" class="min" placeholder="key（须与设备上报一致，如 temperature）" placeholder-class="ph" />
-          <input v-model="cf.label" class="min" placeholder="显示名称，如 温度" placeholder-class="ph" />
-          <input v-model="cf.unit" class="min" placeholder="单位（可空），如 °C" placeholder-class="ph" />
-          <view class="save-dict" @tap="cf.saveToDict = !cf.saveToDict">
-            <text class="cbox">{{ cf.saveToDict ? '☑' : '☐' }}</text>
-            <text class="cbox-txt">同时存入字典，下次可直接勾选</text>
+        <text
+          class="add"
+          @tap="showCustom = !showCustom"
+        >
+          {{ showCustom ? '收起' : '＋ 自定义字段' }}
+        </text>
+        <view
+          v-if="showCustom"
+          class="cform"
+        >
+          <input
+            v-model="cf.key"
+            class="min"
+            placeholder="key（须与设备上报一致，如 temperature）"
+            placeholder-class="ph"
+          >
+          <input
+            v-model="cf.label"
+            class="min"
+            placeholder="显示名称，如 温度"
+            placeholder-class="ph"
+          >
+          <input
+            v-model="cf.unit"
+            class="min"
+            placeholder="单位（可空），如 °C"
+            placeholder-class="ph"
+          >
+          <view
+            class="save-dict"
+            @tap="cf.saveToDict = !cf.saveToDict"
+          >
+            <text class="cbox">
+              {{ cf.saveToDict ? '☑' : '☐' }}
+            </text>
+            <text class="cbox-txt">
+              同时存入字典，下次可直接勾选
+            </text>
           </view>
-          <button class="mini-btn" @tap="addCustom">添加</button>
+          <button
+            class="mini-btn"
+            @tap="addCustom"
+          >
+            添加
+          </button>
         </view>
       </view>
     </view>
 
-    <button class="btn btn-primary" :loading="saving" @tap="save">保存</button>
+    <button
+      class="btn btn-primary"
+      :loading="saving"
+      @tap="save"
+    >
+      保存
+    </button>
   </view>
 </template>
 

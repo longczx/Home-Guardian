@@ -31,6 +31,10 @@ class AlertLogController
     #[OA\Parameter(name: 'device_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer'))]
     #[OA\Parameter(name: 'rule_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer'))]
     #[OA\Parameter(name: 'status', in: 'query', description: 'triggered / acknowledged / resolved', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'location', in: 'query', description: '房间名称', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'q', in: 'query', description: '设备名称或编号关键字', required: false, schema: new OA\Schema(type: 'string'))]
+    #[OA\Parameter(name: 'start', in: 'query', description: '触发时间下限', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
+    #[OA\Parameter(name: 'end', in: 'query', description: '触发时间上限', required: false, schema: new OA\Schema(type: 'string', format: 'date-time'))]
     #[OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1))]
     #[OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 20))]
     #[OA\Response(response: 200, description: '成功', content: new OA\JsonContent(ref: '#/components/schemas/PaginationMeta'))]
@@ -59,8 +63,24 @@ class AlertLogController
             });
         }
 
-        $perPage = min((int)($request->get('per_page', 20)), 100);
-        $paginator = $query->orderBy('triggered_at', 'desc')->paginate($perPage);
+        if ($location = $request->get('location')) {
+            $query->whereHas('device', fn ($q) => $q->where('location', $location));
+        }
+        if ($search = trim((string)$request->get('q', ''))) {
+            $query->whereHas('device', function ($q) use ($search) {
+                $q->where(function ($q) use ($search) {
+                    $q->where('name', 'ilike', '%' . $search . '%')->orWhere('device_uid', 'ilike', '%' . $search . '%');
+                });
+            });
+        }
+        foreach (['start' => '>=', 'end' => '<='] as $key => $operator) {
+            if ($value = $request->get($key)) {
+                if (!is_string($value) || strtotime($value) === false) return api_error('告警时间范围无效', 422, 1000);
+                $query->where('triggered_at', $operator, $value);
+            }
+        }
+        $perPage = max(1, min((int)($request->get('per_page', 20)), 100));
+        $paginator = $query->orderBy('triggered_at', 'desc')->orderBy('id', 'desc')->paginate($perPage);
 
         return api_paginate($paginator);
     }

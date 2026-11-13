@@ -9,11 +9,23 @@ import {
 import { modes, previewAutomationDraft, type RulePreview } from '@/api/experience';
 import { getDevices } from '@/api/device';
 import { getChannels, type NotificationChannel } from '@/api/channel';
-import { CONDITIONS } from '@/api/alertRule';
+import { CONDITIONS as ALERT_CONDITIONS } from '@/api/alertRule';
+// Automation accepts scalar comparisons; alert rules additionally support ranges.
+const CONDITIONS = ALERT_CONDITIONS.filter(c => ['GREATER_THAN', 'LESS_THAN', 'EQUALS', 'NOT_EQUALS'].includes(c.value));
 import type { Device } from '@/api/types';
 import { toast } from '@/utils/guard';
 
 const editId = ref(0);
+const advanced = ref(false);
+const triggerChoices = computed(() => devices.value.filter(d => d.metric_fields?.length));
+const actionChoices = computed(() => devices.value.filter(d => d.capability?.controls.length));
+const durationUnit = ref(60); const cooldownUnit = ref(60);
+const durationInput = computed({ get: () => f.value.durationSec / durationUnit.value, set: value => { f.value.durationSec = Number(value) * durationUnit.value; } });
+const cooldownInput = computed({ get: () => f.value.cooldownSec / cooldownUnit.value, set: value => { f.value.cooldownSec = Number(value) * cooldownUnit.value; } });
+const units = [1, 60, 3600]; const unitNames = ['秒', '分钟', '小时'];
+function boolMetric(deviceId: number | undefined, key: string) { return typeof devices.value.find(d => d.id === deviceId)?.latest_metrics?.find(m => m.metric_key === key)?.value === 'boolean'; }
+function conditionFields(id: number) { return devices.value.find(d => d.id === id)?.metric_fields || []; }
+function metricName(id: number, key: string) { const m = conditionFields(id).find(m => m.key === key); return m ? m.label + (m.unit ? '（' + m.unit + '）' : '') : key || '请选择指标'; }
 const saving = ref(false);
 const devices = ref<Device[]>([]);
 const channels = ref<NotificationChannel[]>([]);
@@ -27,9 +39,19 @@ const originalConfig = ref<Record<string, unknown>>({});
 const actionDrafts = ref<AutomationAction[]>([]); const selectedAction = ref(0);
 function toggleMode(mode: string) { policyModes.value = policyModes.value.includes(mode) ? policyModes.value.filter((m) => m !== mode) : [...policyModes.value, mode]; }
 function addCondition() {
-  if (!devices.value.length || conditions.value.length >= 10) return toast('请先添加设备，组合条件最多 10 项');
-  uni.showActionSheet({ itemList: devices.value.map((d) => d.name), success: (r) => { const d = devices.value[r.tapIndex]; conditions.value.push({ device_id: d.id, metric_key: d.metric_fields?.[0]?.key || '', condition: 'EQUALS', value: 0, max_age_sec: 900 }); } });
+  if (!triggerChoices.value.length || conditions.value.length >= 10) return toast('请先添加传感器，组合条件最多 10 项');
+  const d = triggerChoices.value[0];
+  conditions.value.push({ device_id: d.id, metric_key: d.metric_fields![0].key, condition: 'EQUALS', value: 0, max_age_sec: 900 });
 }
+function pickExtraDevice(index: number, event: { detail: { value: string | number } }) {
+  const d = triggerChoices.value[Number(event.detail.value)];
+  if (d) { conditions.value[index].device_id = d.id; conditions.value[index].metric_key = d.metric_fields![0].key; }
+}
+function pickExtraMetric(index: number, event: { detail: { value: string | number } }) {
+  const m = conditionFields(conditions.value[index].device_id)[Number(event.detail.value)];
+  if (m) conditions.value[index].metric_key = m.key;
+}
+
 function chooseExtraCondition(index: number) { uni.showActionSheet({ itemList: CONDITIONS.map((c) => c.label), success: (r) => { conditions.value[index].condition = CONDITIONS[r.tapIndex].value; } }); }
 async function inspect() { const payload = buildPayload(); if (!payload) return; try { preview.value = await previewAutomationDraft(payload); } catch (e) { toast((e as Error).message); } }
 
@@ -127,23 +149,20 @@ async function loadRefs() {
   try {
     const [dev, ch] = await Promise.all([getDevices({ per_page: 100 }), getChannels({ per_page: 100 })]);
     devices.value = dev.items ?? [];
+    for (let page = 2; page <= dev.last_page; page++) devices.value.push(...(await getDevices({ per_page: 100, page })).items);
     channels.value = Array.isArray(ch) ? ch : [];
   } catch (e) {
     toast((e as Error).message);
   }
 }
 
-function chooseDevice(target: 'trigger' | 'action') {
-  if (!devices.value.length) return toast('暂无设备');
-  uni.showActionSheet({
-    itemList: devices.value.map((d) => d.name),
-    success: (r) => {
-      const id = devices.value[r.tapIndex]?.id;
-      if (target === 'trigger') f.value.deviceId = id;
-      else { f.value.actDeviceId = id; f.value.actName = devices.value[r.tapIndex]?.capability?.controls[0]?.command || ''; f.value.actionParams = '{}'; }
-    },
-  });
+function pickDevice(target: 'trigger' | 'action', event: { detail: { value: string | number } }) {
+  const d = (target === 'trigger' ? triggerChoices.value : actionChoices.value)[Number(event.detail.value)];
+  if (!d) return;
+  if (target === 'trigger') { f.value.deviceId = d.id; f.value.metricKey = d.metric_fields?.[0]?.key || ''; }
+  else { f.value.actDeviceId = d.id; f.value.actName = d.capability?.controls[0]?.command || ''; f.value.actionParams = '{}'; }
 }
+
 function chooseCondition() {
   uni.showActionSheet({
     itemList: CONDITIONS.map((c) => c.label),
@@ -161,12 +180,9 @@ function effectiveCron(): string {
 }
 const cronPreview = computed(() => effectiveCron());
 
-function chooseActCommand() {
-  if (!actCommands.value.length) return;
-  uni.showActionSheet({
-    itemList: actCommands.value.map((c) => `${c.label} (${c.command})`),
-    success: (r) => { f.value.actName = actCommands.value[r.tapIndex].command; },
-  });
+function chooseActCommand(event: { detail: { value: string | number } }) {
+  const command = actCommands.value[Number(event.detail.value)];
+  if (command) f.value.actName = command.command;
 }
 function toggleChannel(id: number) {
   f.value.channelIds = f.value.channelIds.includes(id)
@@ -175,6 +191,7 @@ function toggleChannel(id: number) {
 }
 
 function buildPayload(): AutomationInput | null {
+  if (![f.value.durationSec, f.value.cooldownSec, maxAge.value].every(v => Number.isFinite(Number(v)) && Number(v) >= 0 && Number.isInteger(Number(v)))) { toast('时间必须是有效的非负整秒数'); return null; }
   if (!f.value.name.trim()) { toast('请填写名称'); return null; }
 
   let trigger_config: Record<string, unknown>;
@@ -259,7 +276,7 @@ onLoad(async (q) => {
         value: (tc.value as number) ?? 0,
         durationSec: Number(tc.duration_sec ?? 0),
         cooldownSec: Number(tc.cooldown_sec ?? 0),
-        cronMode: tc.cron ? 'custom' : 'daily',
+        cronMode: 'custom',
         cronTime: '22:00',
         cron: (tc.cron as string) || '0 22 * * *',
         actionType: act?.type === 'notify' ? 'notify' : 'device_command',
@@ -269,6 +286,12 @@ onLoad(async (q) => {
         channelIds: act?.channel_ids || [],
         isEnabled: a.is_enabled,
       };
+      const cron = String(tc.cron || '').split(/\s+/);
+      if (/^\d+$/.test(cron[0] || '') && /^\d+$/.test(cron[1] || '') && cron[2] === '*' && cron[3] === '*' && ['*', '1-5'].includes(cron[4])) {
+        f.value.cronMode = cron[4] === '1-5' ? 'weekday' : 'daily';
+        f.value.cronTime = cron[1].padStart(2, '0') + ':' + cron[0].padStart(2, '0');
+      } else if (tc.cron === '0 * * * *') f.value.cronMode = 'hourly';
+      advanced.value = !!conditions.value.length || policyModes.value.length > 0 || !!windowStart.value;
     } catch (e) {
       toast((e as Error).message);
     }
@@ -279,130 +302,564 @@ onLoad(async (q) => {
 <template>
   <view class="page">
     <view class="card">
-      <text class="ct">场景模板</text>
-      <button size="mini" @tap="template('temperature')">温度过高提醒</button>
-      <button size="mini" @tap="template('night')">夜间定时关闭</button>
-      <text class="hint">{{ summary }}</text>
+      <text class="ct">
+        场景模板
+      </text>
+      <button
+        size="mini"
+        @tap="template('temperature')"
+      >
+        温度过高提醒
+      </button>
+      <button
+        size="mini"
+        @tap="template('night')"
+      >
+        夜间定时关闭
+      </button>
+      <text class="hint">
+        {{ summary }}
+      </text>
     </view>
     <view class="card">
       <view class="field">
-        <text class="label">名称</text>
-        <input v-model="f.name" class="input" placeholder="如 夜间自动关灯" placeholder-class="ph" />
+        <text class="label">
+          名称
+        </text>
+        <input
+          v-model="f.name"
+          class="input"
+          placeholder="如 夜间自动关灯"
+          placeholder-class="ph"
+        >
       </view>
       <view class="field">
-        <text class="label">描述（可选）</text>
-        <input v-model="f.description" class="input" placeholder="" placeholder-class="ph" />
+        <text class="label">
+          描述（可选）
+        </text>
+        <input
+          v-model="f.description"
+          class="input"
+          placeholder=""
+          placeholder-class="ph"
+        >
       </view>
     </view>
 
-    <view class="card"><text class="ct">执行限制与组合条件</text>
-      <view class="field"><text class="label">适用家庭模式（不选则不限）</text><view class="chips"><text v-for="mode in modes" :key="mode.value" class="chip" :class="{ on: policyModes.includes(mode.value) }" @tap="toggleMode(mode.value)">{{ mode.label }}</text></view></view>
-      <view class="field"><text class="label">触发数据有效期（秒）</text><input v-model.number="maxAge" type="number" class="input" /><text class="hint">过期数据不用于试运行判断；组合条件分别判断有效期。</text></view>
-      <view class="field"><text class="label">允许执行时间（北京时间，可跨午夜；留空则不限）</text><input v-model="windowStart" class="input" placeholder="开始 HH:MM" /><input v-model="windowEnd" class="input" placeholder="结束 HH:MM" /></view>
-      <view class="chips"><text class="chip" :class="{ on: conditionLogic === 'all' }" @tap="conditionLogic = 'all'">全部条件满足</text><text class="chip" :class="{ on: conditionLogic === 'any' }" @tap="conditionLogic = 'any'">任一条件满足</text></view>
-      <view v-for="(condition, index) in conditions" :key="index" class="field"><text class="label">{{ devices.find((d) => d.id === condition.device_id)?.name }} <text @tap="conditions.splice(index, 1)">删除</text></text><input v-model="condition.metric_key" class="input" placeholder="指标，如 temperature / door_open" /><view class="picker" @tap="chooseExtraCondition(index)">{{ CONDITIONS.find((c) => c.value === condition.condition)?.label }}</view><input v-model.number="condition.value" class="input" type="number" placeholder="比较值（布尔：1 是，0 否）" /><input v-model.number="condition.max_age_sec" class="input" type="number" placeholder="有效期秒数" /></view>
-      <button size="mini" @tap="addCondition">增加组合条件</button>
+    <button
+      size="mini"
+      @tap="advanced = !advanced"
+    >
+      {{ advanced ? '收起高级条件' : '高级条件：模式、有效期、组合条件' }}{{ conditions.length ? '（已配置 ' + conditions.length + ' 项）' : '' }}
+    </button>
+    <view
+      v-if="advanced"
+      class="card"
+    >
+      <text class="ct">
+        执行限制与组合条件
+      </text>
+      <view class="field">
+        <text class="label">
+          适用家庭模式（不选则不限）
+        </text><view class="chips">
+          <text
+            v-for="mode in modes"
+            :key="mode.value"
+            class="chip"
+            :class="{ on: policyModes.includes(mode.value) }"
+            @tap="toggleMode(mode.value)"
+          >
+            {{ mode.label }}
+          </text>
+        </view>
+      </view>
+      <view class="field">
+        <text class="label">
+          触发数据有效期（秒）
+        </text><input
+          v-model.number="maxAge"
+          type="number"
+          class="input"
+        ><text class="hint">
+          过期数据不用于试运行判断；组合条件分别判断有效期。
+        </text>
+      </view>
+      <view class="field">
+        <text class="label">
+          允许执行时间（北京时间，可跨午夜；留空则不限）
+        </text><input
+          v-model="windowStart"
+          class="input"
+          placeholder="开始 HH:MM"
+        ><input
+          v-model="windowEnd"
+          class="input"
+          placeholder="结束 HH:MM"
+        >
+      </view>
+      <view class="chips">
+        <text
+          class="chip"
+          :class="{ on: conditionLogic === 'all' }"
+          @tap="conditionLogic = 'all'"
+        >
+          全部条件满足
+        </text><text
+          class="chip"
+          :class="{ on: conditionLogic === 'any' }"
+          @tap="conditionLogic = 'any'"
+        >
+          任一条件满足
+        </text>
+      </view>
+      <view
+        v-for="(condition, index) in conditions"
+        :key="index"
+        class="field"
+      >
+        <text class="label">
+          同时检查 <text @tap="conditions.splice(index, 1)">
+            · 删除
+          </text>
+        </text>
+        <picker
+          :range="triggerChoices.map(d => d.name)"
+          :value="Math.max(0, triggerChoices.findIndex(d => d.id === condition.device_id))"
+          @change="pickExtraDevice(index, $event)"
+        >
+          <view class="picker">
+            {{ devices.find(d => d.id === condition.device_id)?.name || '请选择设备' }} ›
+          </view>
+        </picker>
+        <picker
+          :range="conditionFields(condition.device_id).map(m => m.label + (m.unit ? ' / ' + m.unit : ''))"
+          @change="pickExtraMetric(index, $event)"
+        >
+          <view class="picker">
+            {{ metricName(condition.device_id, condition.metric_key) }} ›
+          </view>
+        </picker>
+        <view
+          class="picker"
+          @tap="chooseExtraCondition(index)"
+        >
+          {{ CONDITIONS.find(c => c.value === condition.condition)?.label }}
+        </view>
+        <picker
+          v-if="boolMetric(condition.device_id, condition.metric_key)"
+          :range="['关闭 / 否', '开启 / 是']"
+          :value="Number(condition.value)"
+          @change="condition.value = Number($event.detail.value)"
+        >
+          <view class="picker">
+            {{ condition.value ? '开启 / 是' : '关闭 / 否' }}
+          </view>
+        </picker>
+        <input
+          v-else
+          v-model.number="condition.value"
+          class="input"
+          type="digit"
+          placeholder="比较值"
+        >
+        <text class="hint">
+          数据在多少秒内有效
+        </text><input
+          v-model.number="condition.max_age_sec"
+          class="input"
+          type="number"
+        >
+      </view>
+      <button
+        size="mini"
+        @tap="addCondition"
+      >
+        增加组合条件
+      </button>
     </view>
     <!-- 触发 -->
     <view class="card">
-      <text class="ct">触发条件</text>
+      <text class="ct">
+        触发条件
+      </text>
       <view class="seg">
-        <view class="seg-btn" :class="{ on: f.triggerType === 'telemetry' }" @tap="f.triggerType = 'telemetry'">遥测条件</view>
-        <view class="seg-btn" :class="{ on: f.triggerType === 'schedule' }" @tap="f.triggerType = 'schedule'">定时</view>
+        <view
+          class="seg-btn"
+          :class="{ on: f.triggerType === 'telemetry' }"
+          @tap="f.triggerType = 'telemetry'"
+        >
+          遥测条件
+        </view>
+        <view
+          class="seg-btn"
+          :class="{ on: f.triggerType === 'schedule' }"
+          @tap="f.triggerType = 'schedule'"
+        >
+          定时
+        </view>
       </view>
 
       <template v-if="f.triggerType === 'telemetry'">
-        <view class="field"><text class="label">设备</text>
-          <view class="picker" @tap="chooseDevice('trigger')">{{ triggerDevice ? triggerDevice.name : '请选择设备 ›' }}</view>
+        <view class="field">
+          <text class="label">
+            设备
+          </text>
+          <picker
+            :range="triggerChoices.map(d => d.name)"
+            :value="Math.max(0, triggerChoices.findIndex(d => d.id === f.deviceId))"
+            @change="pickDevice('trigger', $event)"
+          >
+            <view class="picker">
+              {{ triggerDevice ? triggerDevice.name : '请选择传感器 ›' }}
+            </view>
+          </picker>
         </view>
-        <view class="field"><text class="label">指标</text>
-          <input v-model="f.metricKey" class="input" placeholder="如 temperature" placeholder-class="ph" />
-          <view v-if="metricOptions.length" class="chips">
-            <text v-for="m in metricOptions" :key="m.key" class="chip" :class="{ on: f.metricKey === m.key }" @tap="f.metricKey = m.key">{{ m.label }}</text>
+        <view class="field">
+          <text class="label">
+            指标
+          </text>
+          <text class="hint">
+            {{ triggerDevice ? '选择需要监测的指标' : '请先选择传感器' }}
+          </text><text
+            v-if="f.metricKey && !metricOptions.some(m => m.key === f.metricKey)"
+            class="hint"
+          >
+            原指标 {{ f.metricKey }}（设备未声明，请重新选择）
+          </text>
+          <view
+            v-if="metricOptions.length"
+            class="chips"
+          >
+            <text
+              v-for="m in metricOptions"
+              :key="m.key"
+              class="chip"
+              :class="{ on: f.metricKey === m.key }"
+              @tap="f.metricKey = m.key"
+            >
+              {{ m.label }}
+            </text>
           </view>
         </view>
-        <view class="field"><text class="label">条件</text>
-          <view class="picker" @tap="chooseCondition">{{ conditionLabel }} ›</view>
+        <view class="field">
+          <text class="label">
+            条件
+          </text>
+          <view
+            class="picker"
+            @tap="chooseCondition"
+          >
+            {{ conditionLabel }} ›
+          </view>
         </view>
-        <view class="field"><text class="label">阈值</text>
-          <input v-model.number="f.value" type="number" class="input" placeholder="如 30" placeholder-class="ph" />
+        <view class="field">
+          <text class="label">
+            阈值
+          </text>
+          <picker
+            v-if="boolMetric(f.deviceId, f.metricKey)"
+            :range="['关闭 / 否', '开启 / 是']"
+            :value="Number(f.value)"
+            @change="f.value = Number($event.detail.value)"
+          >
+            <view class="picker">
+              {{ f.value ? '开启 / 是' : '关闭 / 否' }}
+            </view>
+          </picker><input
+            v-else
+            v-model.number="f.value"
+            type="digit"
+            class="input"
+            :placeholder="'输入数值 ' + (metricOptions.find(m => m.key === f.metricKey)?.unit || '')"
+          >
         </view>
-        <view class="field"><text class="label">持续满足（秒）</text>
-          <input v-model.number="f.durationSec" type="number" class="input" />
+        <view class="field">
+          <text class="label">
+            持续满足多久（0 表示立即）
+          </text>
+          <input
+            v-model.number="durationInput"
+            type="digit"
+            class="input"
+          ><picker
+            :range="unitNames"
+            :value="units.indexOf(durationUnit)"
+            @change="durationUnit = units[Number($event.detail.value)]"
+          >
+            <view class="picker">
+              {{ unitNames[units.indexOf(durationUnit)] }} ›
+            </view>
+          </picker>
         </view>
-        <view class="field"><text class="label">两次触发间隔（秒）</text>
-          <input v-model.number="f.cooldownSec" type="number" class="input" />
+        <view class="field">
+          <text class="label">
+            两次触发至少间隔
+          </text>
+          <input
+            v-model.number="cooldownInput"
+            type="digit"
+            class="input"
+          ><picker
+            :range="unitNames"
+            :value="units.indexOf(cooldownUnit)"
+            @change="cooldownUnit = units[Number($event.detail.value)]"
+          >
+            <view class="picker">
+              {{ unitNames[units.indexOf(cooldownUnit)] }} ›
+            </view>
+          </picker>
         </view>
-        <text class="hint">持续满足只执行一次，条件恢复后可再次触发。</text>
+        <text class="hint">
+          持续满足只执行一次，条件恢复后可再次触发。
+        </text>
       </template>
 
       <template v-else>
-        <view class="field"><text class="label">频率</text>
+        <view class="field">
+          <text class="label">
+            频率
+          </text>
           <view class="seg wrap">
-            <view class="seg-btn" :class="{ on: f.cronMode === 'daily' }" @tap="f.cronMode = 'daily'">每天</view>
-            <view class="seg-btn" :class="{ on: f.cronMode === 'weekday' }" @tap="f.cronMode = 'weekday'">工作日</view>
-            <view class="seg-btn" :class="{ on: f.cronMode === 'hourly' }" @tap="f.cronMode = 'hourly'">每小时</view>
-            <view class="seg-btn" :class="{ on: f.cronMode === 'custom' }" @tap="f.cronMode = 'custom'">自定义</view>
+            <view
+              class="seg-btn"
+              :class="{ on: f.cronMode === 'daily' }"
+              @tap="f.cronMode = 'daily'"
+            >
+              每天
+            </view>
+            <view
+              class="seg-btn"
+              :class="{ on: f.cronMode === 'weekday' }"
+              @tap="f.cronMode = 'weekday'"
+            >
+              工作日
+            </view>
+            <view
+              class="seg-btn"
+              :class="{ on: f.cronMode === 'hourly' }"
+              @tap="f.cronMode = 'hourly'"
+            >
+              每小时
+            </view>
+            <view
+              class="seg-btn"
+              :class="{ on: f.cronMode === 'custom' }"
+              @tap="f.cronMode = 'custom'"
+            >
+              自定义
+            </view>
           </view>
         </view>
-        <view v-if="f.cronMode === 'daily' || f.cronMode === 'weekday'" class="field">
-          <text class="label">时间</text>
-          <picker mode="time" :value="f.cronTime" @change="f.cronTime = $event.detail.value">
-            <view class="picker">{{ f.cronTime }} ›</view>
+        <view
+          v-if="f.cronMode === 'daily' || f.cronMode === 'weekday'"
+          class="field"
+        >
+          <text class="label">
+            时间
+          </text>
+          <picker
+            mode="time"
+            :value="f.cronTime"
+            @change="f.cronTime = $event.detail.value"
+          >
+            <view class="picker">
+              {{ f.cronTime }} ›
+            </view>
           </picker>
         </view>
-        <view v-else-if="f.cronMode === 'custom'" class="field">
-          <text class="label">Cron 表达式</text>
-          <input v-model="f.cron" class="input" placeholder="0 22 * * *" placeholder-class="ph" />
-          <text class="hint">格式：分 时 日 月 周</text>
+        <view
+          v-else-if="f.cronMode === 'custom'"
+          class="field"
+        >
+          <text class="label">
+            Cron 表达式
+          </text>
+          <input
+            v-model="f.cron"
+            class="input"
+            placeholder="0 22 * * *"
+            placeholder-class="ph"
+          >
+          <text class="hint">
+            格式：分 时 日 月 周
+          </text>
         </view>
-        <text class="hint" style="padding-left:0;">将执行：<text style="font-family:monospace;">{{ cronPreview }}</text></text>
+        <text
+          class="hint"
+          style="padding-left:0;"
+        >
+          将执行：<text style="font-family:monospace;">
+            {{ cronPreview }}
+          </text>
+        </text>
       </template>
     </view>
 
     <!-- 动作 -->
     <view class="card">
-      <text class="ct">执行动作</text>
+      <text class="ct">
+        执行动作
+      </text>
       <view class="seg">
-        <view class="seg-btn" :class="{ on: f.actionType === 'device_command' }" @tap="f.actionType = 'device_command'">控制设备</view>
-        <view class="seg-btn" :class="{ on: f.actionType === 'notify' }" @tap="f.actionType = 'notify'">发送通知</view>
+        <view
+          class="seg-btn"
+          :class="{ on: f.actionType === 'device_command' }"
+          @tap="f.actionType = 'device_command'"
+        >
+          控制设备
+        </view>
+        <view
+          class="seg-btn"
+          :class="{ on: f.actionType === 'notify' }"
+          @tap="f.actionType = 'notify'"
+        >
+          发送通知
+        </view>
       </view>
 
       <template v-if="f.actionType === 'device_command'">
-        <view class="field"><text class="label">目标设备</text>
-          <view class="picker" @tap="chooseDevice('action')">{{ actionDevice ? actionDevice.name : '请选择设备 ›' }}</view>
+        <view class="field">
+          <text class="label">
+            目标设备
+          </text>
+          <picker
+            :range="actionChoices.map(d => d.name)"
+            :value="Math.max(0, actionChoices.findIndex(d => d.id === f.actDeviceId))"
+            @change="pickDevice('action', $event)"
+          >
+            <view class="picker">
+              {{ actionDevice ? actionDevice.name : '请选择执行设备 ›' }}
+            </view>
+          </picker>
         </view>
-        <view class="field"><text class="label">指令</text>
-          <view v-if="actCommands.length" class="picker" @tap="chooseActCommand">
-            {{ f.actName || '请选择指令 ›' }}
-          </view>
-          <input v-else v-model="f.actName" class="input" placeholder="如 turn_on / turn_off" placeholder-class="ph" />
+        <view class="field">
+          <text class="label">
+            指令
+          </text>
+          <picker
+            v-if="actCommands.length"
+            :range="actCommands.map(c => c.label)"
+            :value="Math.max(0, actCommands.findIndex(c => c.command === f.actName))"
+            @change="chooseActCommand"
+          >
+            <view class="picker">
+              {{ actCommands.find(c => c.command === f.actName)?.label || f.actName || '请选择指令 ›' }}
+            </view>
+          </picker>
+          <input
+            v-else
+            v-model="f.actName"
+            class="input"
+            placeholder="如 turn_on / turn_off"
+            placeholder-class="ph"
+          >
         </view>
-        <ActionParameters v-model="actionValues" :controls="actionControls" />
-        <text v-if="!actionControls.length" class="hint">请选择已声明控制能力的设备和指令。</text>
+        <ActionParameters
+          v-model="actionValues"
+          :controls="actionControls"
+        />
+        <text
+          v-if="!actionControls.length"
+          class="hint"
+        >
+          请选择已声明控制能力的设备和指令。
+        </text>
       </template>
 
       <template v-else>
-        <view class="field"><text class="label">通知渠道</text>
-          <view v-if="channels.length" class="chips">
-            <text v-for="c in channels" :key="c.id" class="chip" :class="{ on: f.channelIds.includes(c.id) }" @tap="toggleChannel(c.id)">{{ c.name }}</text>
+        <view class="field">
+          <text class="label">
+            通知渠道
+          </text>
+          <view
+            v-if="channels.length"
+            class="chips"
+          >
+            <text
+              v-for="c in channels"
+              :key="c.id"
+              class="chip"
+              :class="{ on: f.channelIds.includes(c.id) }"
+              @tap="toggleChannel(c.id)"
+            >
+              {{ c.name }}
+            </text>
           </view>
-          <text v-else class="hint">暂无渠道，可先在「通知渠道」创建</text>
+          <text
+            v-else
+            class="hint"
+          >
+            暂无渠道，可先在「通知渠道」创建
+          </text>
         </view>
       </template>
     </view>
 
     <view class="card">
       <view class="field row-between">
-        <text class="label nomb">启用</text>
-        <switch :checked="f.isEnabled" color="#2b6fe3" @change="f.isEnabled = switchValue($event)" />
+        <text class="label nomb">
+          启用
+        </text>
+        <switch
+          :checked="f.isEnabled"
+          color="#2b6fe3"
+          @change="f.isEnabled = switchValue($event)"
+        />
       </view>
     </view>
 
-    <view class="card"><text class="ct">动作列表</text><view v-for="(action, index) in actionDrafts" :key="index" class="field"><text @tap="selectAction(index)">{{ selectedAction === index ? '正在编辑 ' : '点击编辑 ' }}动作 {{ index + 1 }}：{{ action.type === 'notify' ? '通知' : action.payload?.action || '待填写' }}</text><text class="hint" @tap="removeAction(index)">删除动作</text></view><button size="mini" @tap="addAction">添加动作（先填写当前动作）</button><text class="hint">按顺序提交；每个动作独立记录回执结果。人工控制后暂停该设备自动化 30 分钟。</text></view>
-    <view class="card"><button @tap="inspect">试运行当前草稿（不发送指令）</button><text v-if="preview" class="hint">{{ preview.eligible ? '当前快照满足条件' : '当前快照不满足条件' }}。{{ preview.note }}</text><text v-for="(check, i) in [...(preview?.checks || []), ...(preview?.conditions || [])]" :key="i" class="hint">{{ check.passed ? '✓' : '×' }} {{ check.label }}：{{ check.reason }}</text></view>
-    <button class="btn btn-primary" :loading="saving" @tap="save">保存</button>
-    <text class="foot-hint">支持数值和布尔指标（1/0）；只有条件再次恢复并满足时才重新触发。</text>
+    <view class="card">
+      <text class="ct">
+        动作列表
+      </text><view
+        v-for="(action, index) in actionDrafts"
+        :key="index"
+        class="field"
+      >
+        <text @tap="selectAction(index)">
+          {{ selectedAction === index ? '正在编辑 ' : '点击编辑 ' }}动作 {{ index + 1 }}：{{ action.type === 'notify' ? '通知' : action.payload?.action || '待填写' }}
+        </text><text
+          class="hint"
+          @tap="removeAction(index)"
+        >
+          删除动作
+        </text>
+      </view><button
+        size="mini"
+        @tap="addAction"
+      >
+        添加动作（先填写当前动作）
+      </button><text class="hint">
+        按顺序提交；每个动作独立记录回执结果。人工控制后暂停该设备自动化 30 分钟。
+      </text>
+    </view>
+    <view class="card">
+      <button @tap="inspect">
+        试运行当前草稿（不发送指令）
+      </button><text
+        v-if="preview"
+        class="hint"
+      >
+        {{ preview.eligible ? '当前快照满足条件' : '当前快照不满足条件' }}。{{ preview.note }}
+      </text><text
+        v-for="(check, i) in [...(preview?.checks || []), ...(preview?.conditions || [])]"
+        :key="i"
+        class="hint"
+      >
+        {{ check.passed ? '✓' : '×' }} {{ check.label }}：{{ check.reason }}
+      </text>
+    </view>
+    <button
+      class="btn btn-primary"
+      :loading="saving"
+      @tap="save"
+    >
+      保存
+    </button>
+    <text class="foot-hint">
+      支持数值和布尔指标（1/0）；只有条件再次恢复并满足时才重新触发。
+    </text>
   </view>
 </template>
 
