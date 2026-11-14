@@ -2,7 +2,8 @@ import request from './request';
 import type { Device } from './types';
 export type HomeMode = 'home' | 'away' | 'sleep';
 export const modes: { value: HomeMode; label: string }[] = [{ value: 'home', label: '在家' }, { value: 'away', label: '离家' }, { value: 'sleep', label: '睡眠' }];
-export interface HomeOverview { mode: HomeMode; mode_changed_at: string | null; devices: Device[]; rooms: string[]; offline_count: number; active_alerts: number }
+import type { BackupHealth } from './operations';
+export interface HomeOverview { backup_health?: BackupHealth | null; mode: HomeMode; mode_changed_at: string | null; devices: Device[]; rooms: string[]; offline_count: number; active_alerts: number }
 export interface PolicyCheck { label: string; passed: boolean; reason: string; observed_at?: string }
 export interface RulePreview { eligible: boolean; checks: PolicyCheck[]; conditions: PolicyCheck[]; note: string }
 export const getHomeOverview = () => request.get<HomeOverview>('/home/overview');

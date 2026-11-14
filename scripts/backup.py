@@ -55,6 +55,22 @@ def validate_archive(path):
         return manifest
 
 
+def record_check(root, archive, **fields):
+    manifest = validate_archive(archive)
+    catalog = root / 'runtime/backup-catalog'
+    catalog.mkdir(parents=True, exist_ok=True)
+    target = catalog / (manifest['id'] + '.json')
+    with (catalog / '.checks.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        row = json.loads(target.read_text()) if target.is_file() else {
+            'id': manifest['id'], 'created_at': manifest['created_at'], 'status': 'success',
+            'commit': manifest.get('commit'), 'size_bytes': archive.stat().st_size}
+        row.update(fields)
+        temporary = target.with_suffix('.tmp')
+        temporary.write_text(json.dumps(row), encoding='utf-8')
+        temporary.chmod(0o644); temporary.replace(target)
+
+
 class Backups:
     def __init__(self, root, directory):
         self.root = root.resolve()
@@ -161,7 +177,7 @@ class Backups:
                 validate_archive(partial)
                 target = self.directory / (identity + '.zip')
                 partial.replace(target)
-            metadata.update(status='success', size_bytes=target.stat().st_size)
+            metadata.update(status='success', size_bytes=target.stat().st_size, integrity_verified_at=dt.datetime.now(dt.timezone.utc).isoformat())
             self.record(metadata)
             if keep > 0:
                 archives = sorted((p for p in self.directory.glob('*.zip') if ID_PATTERN.fullmatch(p.stem)), reverse=True)
@@ -175,8 +191,58 @@ class Backups:
             self.record(metadata)
             raise
 
+    def drill(self, archive):
+        validate_archive(archive)
+        database = self.service('postgres')
+        redis, _ = self.redis_volume()
+        identity = 'hg_verify_' + secrets.token_hex(8)
+        assert re.fullmatch(r'hg_verify_[a-f0-9]{16}', identity)
+        env = dict(item.split('=', 1) for item in database['Config']['Env'] if '=' in item)
+        assert identity != env['POSTGRES_DB']
+        created = False
+        fields = {'integrity_verified_at': dt.datetime.now(dt.timezone.utc).isoformat()}
+        try:
+            self.db(database, 'createdb -U "$POSTGRES_USER" ' + identity, stdout=subprocess.DEVNULL)
+            created = True
+            with tempfile.TemporaryDirectory(dir=self.directory) as temp:
+                staging = Path(temp)
+                with zipfile.ZipFile(archive) as zipped:
+                    with zipped.open('database.dump') as source, (staging / 'database.dump').open('wb') as target:
+                        shutil.copyfileobj(source, target)
+                    with zipped.open('redis.tar') as source, (staging / 'redis.tar').open('wb') as target:
+                        shutil.copyfileobj(source, target)
+                self.db(database, 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d ' + identity + ' -c "CREATE EXTENSION IF NOT EXISTS timescaledb; SELECT timescaledb_pre_restore();"', stdout=subprocess.DEVNULL)
+                with (staging / 'database.dump').open('rb') as source:
+                    self.db(database, 'pg_restore --exit-on-error -U "$POSTGRES_USER" -d ' + identity, stdin=source, stdout=subprocess.DEVNULL)
+                self.db(database, 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d ' + identity + ' -c "SELECT timescaledb_post_restore(); SELECT count(*) FROM telemetry_logs;"', stdout=subprocess.DEVNULL)
+                fields['database_restore_verified_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
+                redis_copy = staging / 'redis-check'; redis_copy.mkdir()
+                with tarfile.open(staging / 'redis.tar') as nested:
+                    for member in nested:
+                        if Path(member.name).is_absolute() or '..' in Path(member.name).parts or not (member.isfile() or member.isdir()):
+                            raise ValueError('Unsafe Redis archive entry')
+                    nested.extractall(redis_copy, filter='data')
+                # A private copy and no network: never mount the live Redis volume into this check.
+                execute(['docker', 'run', '--rm', '--network', 'none', '-v', str(redis_copy) + ':/data', redis['Image'], 'sh', '-c',
+                    'redis-server --dir /data --port 0 --unixsocket /tmp/verify.sock --appendonly yes --daemonize yes && '
+                    'for n in 1 2 3 4 5 6 7 8 9 10; do '
+                    'if redis-cli -s /tmp/verify.sock ping >/dev/null 2>&1; then redis-cli -s /tmp/verify.sock shutdown nosave; exit 0; fi; '
+                    'sleep 1; done; exit 1'], stdout=subprocess.DEVNULL)
+                fields['redis_restore_verified_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
+                fields['drill_error'] = None
+                record_check(self.root, archive, **fields)
+                print('Verified database and Redis restoration in isolation; EMQX archive integrity only.', flush=True)
+        except Exception:
+            record_check(self.root, archive, **fields, drill_failed_at=dt.datetime.now(dt.timezone.utc).isoformat(), drill_error='恢复演练失败，请管理员检查服务日志')
+            raise
+        finally:
+            if created: self.db(database, 'dropdb --force -U "$POSTGRES_USER" ' + identity, stdout=subprocess.DEVNULL)
+
     def restore(self, archive, confirm, restore_config=False):
         manifest = validate_archive(archive)
+        current = self.commit()
+        if manifest.get('commit') not in (None, 'unknown', current):
+            raise ValueError('Backup code version differs; prepare the matching application version before restoring')
         if confirm != manifest['id']: raise ValueError('Restore requires --confirm with the complete backup ID')
         if manifest.get('commit') != self.commit(): raise ValueError('Check out the backup code commit before restoring')
         database = self.service('postgres')
@@ -253,18 +319,26 @@ def main():
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--backup-dir', type=Path)
     commands = parser.add_subparsers(dest='command', required=True)
-    backup = commands.add_parser('backup'); backup.add_argument('--keep', type=int, default=14)
+    backup = commands.add_parser('backup'); backup.add_argument('--keep', type=int, default=14); backup.add_argument('--drill', action='store_true', help='Verify database and Redis restoration in isolation after backup')
     verify = commands.add_parser('verify'); verify.add_argument('archive', type=Path)
+    drill = commands.add_parser('drill'); drill.add_argument('archive', type=Path)
+    copy = commands.add_parser('record-copy'); copy.add_argument('archive', type=Path); copy.add_argument('--label', required=True)
     restore = commands.add_parser('restore'); restore.add_argument('archive', type=Path)
     restore.add_argument('--confirm', required=True); restore.add_argument('--restore-config', action='store_true')
     args = parser.parse_args()
     os.umask(0o077)
     if args.command == 'verify':
-        m = validate_archive(args.archive); print('Verified ' + m['id']); return
+        m = validate_archive(args.archive); record_check(args.root, args.archive, integrity_verified_at=dt.datetime.now(dt.timezone.utc).isoformat()); print('Verified ' + m['id']); return
+    if args.command == 'record-copy':
+        if not args.label.strip() or len(args.label) > 100 or '\n' in args.label or '\r' in args.label: raise ValueError('Use a short storage label without credentials')
+        record_check(args.root, args.archive, external_copy_at=dt.datetime.now(dt.timezone.utc).isoformat(), external_copy_label=args.label.strip()); print('External copy recorded by operator; contents are not remotely verified.'); return
     manager = Backups(args.root, args.backup_dir or args.root / 'runtime/backups')
     with (manager.directory / '.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if args.command == 'backup': manager.backup(args.keep)
+        if args.command == 'backup':
+            archive = manager.backup(args.keep)
+            if args.drill: manager.drill(archive)
+        elif args.command == 'drill': manager.drill(args.archive.resolve())
         else: manager.restore(args.archive.resolve(), args.confirm, args.restore_config)
 
 

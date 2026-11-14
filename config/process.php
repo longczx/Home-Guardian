@@ -17,6 +17,7 @@ use app\process\Http;
 global $argv;
 
 return [
+    'backup_health' => ['handler'=>app\process\BackupHealthProcess::class,'count'=>1,'listen'=>''],
     /*
     |--------------------------------------------------------------------------
     | HTTP Worker（主 Web 服务）

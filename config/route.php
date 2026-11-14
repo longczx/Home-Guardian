@@ -204,6 +204,20 @@ Route::group('/api/provisioning', function () {
 */
 Route::group('/api', function () {
 
+    Route::patch('/rooms/{id:\d+}', [app\controller\RoomController::class, 'rename'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::put('/rooms/order', [app\controller\RoomController::class, 'reorder'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::put('/rooms/{id:\d+}/devices', [app\controller\RoomController::class, 'move'])
+        ->middleware([new app\middleware\HomeRoleMiddleware(\app\model\HomeUser::ROLE_ADMIN)]);
+    Route::get('/scenes', [app\controller\SceneController::class, 'index']);
+    Route::post('/scenes', [app\controller\SceneController::class, 'save']);
+    Route::delete('/scenes/{id:\d+}', [app\controller\SceneController::class, 'remove']);
+    Route::post('/scenes/{id:\d+}/execute', [app\controller\SceneController::class, 'execute'])
+        ->middleware([new PermissionMiddleware('commands.send'), new app\middleware\RateLimitMiddleware('scenes', 10, 60)]);
+    Route::get('/scene-runs', [app\controller\SceneController::class, 'runs']);
+    Route::get('/devices/{id:\d+}/module-check', [app\controller\ModuleCheckController::class, 'show'])
+        ->middleware([new PermissionMiddleware('devices.view')]);
     Route::get('/rooms', [app\controller\HomeExperienceController::class, 'rooms'])
         ->middleware([new PermissionMiddleware('devices.view')]);
     Route::put('/rooms', [app\controller\HomeExperienceController::class, 'saveRoom'])

@@ -22,9 +22,10 @@ class HomeExperienceController
         $home = Home::find($homeId);
         $roomNames = (new Device)->getConnection()->table('rooms')->where('home_id', $homeId)->orderBy('sort_order')->orderBy('id')->pluck('name')->all();
         if (!empty($request->user->locations)) $roomNames = array_values(array_intersect($roomNames, $request->user->locations));
+        $backupWarning = ($request->user->home_role ?? '') === 'owner' && Home::withoutGlobalScopes()->count() === 1 ? \app\service\BackupHealthService::summary()['health'] : null;
         return api_success(['mode'=>$home?->mode ?? 'home', 'mode_changed_at'=>$home?->mode_changed_at,
             'devices'=>$data, 'rooms'=>array_values(array_unique(array_merge($roomNames, $devices->pluck('location')->filter()->unique()->values()->all()))),
-            'offline_count'=>$devices->where('is_online', false)->count(),
+            'backup_health'=>$backupWarning, 'offline_count'=>$devices->where('is_online', false)->count(),
             'active_alerts'=>$request->hasPermission('alerts.view') ? AlertLog::withoutGlobalScopes()->where('home_id', $homeId)->whereIn('status', ['triggered','acknowledged'])->whereIn('device_id', $devices->pluck('id'))->count() : 0]);
     }
     public function mode(Request $request)
@@ -33,6 +34,15 @@ class HomeExperienceController
         if (!in_array($mode, ['home','away','sleep'], true)) return api_error('模式只能为 home/away/sleep', 422, 8022);
         // A restricted-location member cannot alter automation across the entire home.
         if (!empty($request->user->locations)) return api_error('切换全屋模式需要全部房间权限', 403, 1004);
+        if ($request->post('execute_scene', false) === true) {
+            $homeId=SceneController::home($request);
+            $scene=\app\model\Scene::withoutGlobalScopes()->where('home_id',$homeId)->where('enter_mode',$mode)->first();
+            $key=$request->post('request_key');
+            if (!$scene || !is_string($key)) return api_error('请先绑定进入模式的场景并提供执行标识',422,4002);
+            $run=\app\service\SceneService::execute($homeId,$scene->id,$key,$mode);
+            AuditService::log($request,'execute','home_mode',$homeId,['mode'=>$mode,'scene_run_id'=>$run->id]);
+            return api_success(['mode'=>$mode,'scene_run'=>$run]);
+        }
         $home = Home::find((int)$request->user->home_id);
         if (!$home) return api_error('家庭不存在', 404, 8020);
         if ($home->mode !== $mode) $home->update(['mode'=>$mode, 'mode_changed_at'=>now()]);
@@ -97,7 +107,10 @@ class HomeExperienceController
         $name = $request->post('name', ''); $order = $request->post('sort_order', 0);
         if (!is_string($name) || trim($name) === '' || mb_strlen($name) > 100 || filter_var($order, FILTER_VALIDATE_INT) === false || abs((int)$order) > 10000) return api_error('房间名称 1-100 字，排序需为 -10000 到 10000 的整数', 422, 1000);
         $db = (new Device)->getConnection();
-        $db->table('rooms')->updateOrInsert(['home_id'=>$request->user->home_id, 'name'=>trim($name)], ['sort_order'=>(int)$order]);
+        $db->transaction(function () use ($db, $request, $name, $order) {
+            $db->table('homes')->where('id', $request->user->home_id)->lockForUpdate()->first();
+            $db->table('rooms')->updateOrInsert(['home_id'=>$request->user->home_id, 'name'=>trim($name)], ['sort_order'=>(int)$order]);
+        });
         AuditService::log($request, 'update', 'room', null, ['name'=>trim($name)]);
         return api_success(null, '房间已保存');
     }
@@ -106,9 +119,12 @@ class HomeExperienceController
         if (!empty($request->user->locations)) return api_error('管理房间需要全部房间权限', 403, 1004);
         $db = (new Device)->getConnection();
         return $db->transaction(function () use ($db, $request, $id) {
+            $db->table('homes')->where('id', $request->user->home_id)->lockForUpdate()->first();
             $room = $db->table('rooms')->where('home_id', $request->user->home_id)->where('id', $id)->lockForUpdate()->first();
             if (!$room) return api_error('房间不存在', 404, 2001);
             if (Device::withoutGlobalScopes()->where('home_id', $request->user->home_id)->where('location', $room->name)->exists()) return api_error('请先移出房间中的设备', 409, 2003);
+            $members = \app\model\HomeUser::where('home_id', $request->user->home_id)->pluck('user_id');
+            if ($db->table('user_allowed_locations')->whereIn('user_id', $members)->where('location', $room->name)->exists()) return api_error('房间仍被成员位置权限引用，请先由管理员调整权限', 409, 2003);
             $db->table('rooms')->where('id', $id)->delete();
             AuditService::log($request, 'delete', 'room', $id);
             return api_success(null, '房间已删除');

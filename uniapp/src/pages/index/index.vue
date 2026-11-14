@@ -28,6 +28,7 @@ const room = ref(ALL);
 const configuredRooms = ref<string[]>([]);
 const loading = ref(false);
 const loadError = ref(''); const syncedAt = ref(0); const now = ref(Date.now());
+const backupHealth = ref<import('@/api/operations').BackupHealth | null>(null);
 const gatewayCount = ref(0); const server = useServerStore(); let loadGeneration = 0;
 let clock: ReturnType<typeof setInterval> | null = null;
 const connectionLabel = computed(() => loading.value ? '正在同步…' : loadError.value ? '同步失败 · 显示上次数据' : !syncedAt.value ? '尚未同步' : `${wsConnected.value ? '实时连接正常' : '实时连接中断 · 可下拉刷新'} · 同步于 ${new Date(syncedAt.value).toLocaleTimeString()}`);
@@ -37,7 +38,7 @@ async function resume(d: Device) {
   catch (e) { toast((e as Error).message); }
 }
 function addDevice(module = false) { uni.navigateTo({ url: '/pages/manage/device-add' + (module ? '?mode=module' : '') }); }
-watch(() => server.connectionRevision, () => { loadGeneration++; devices.value = []; configuredRooms.value = []; gatewayCount.value = 0; syncedAt.value = 0; loadError.value = ''; pendingDevices.value = []; });
+watch(() => server.connectionRevision, () => { loadGeneration++; backupHealth.value = null; devices.value = []; configuredRooms.value = []; gatewayCount.value = 0; syncedAt.value = 0; loadError.value = ''; pendingDevices.value = []; });
 
 const rooms = computed(() => {
   const set = new Set<string>();
@@ -91,6 +92,7 @@ async function load() {
     loadError.value = ''; syncedAt.value = Date.now();
     gatewayCount.value = overview.devices.filter(d => d.type === 'gateway').length;
     devices.value = overview.devices.filter((d) => d.type !== 'gateway');
+    backupHealth.value = overview.backup_health || null;
     mode.value = overview.mode;
     configuredRooms.value = overview.rooms;
     activeAlerts.value = overview.active_alerts;
@@ -181,6 +183,7 @@ onPullDownRefresh(async () => {
     >
       {{ loadError }} · 点击重试
     </view>
+    <view v-if="backupHealth?.needs_attention" class="backup-warning" @tap="uni.navigateTo({ url: '/pages/manage/backups' })">备份需要关注 · {{ backupHealth.warnings[0] }} ›</view>
     <view class="mode-line">
       <text @tap="auth.canManage && openMode()">
         家庭模式：{{ modes.find((m) => m.value === mode)?.label }} {{ auth.canManage ? '›' : '' }}
@@ -349,6 +352,7 @@ onPullDownRefresh(async () => {
 </template>
 
 <style lang="scss" scoped>
+.backup-warning { margin: 16rpx 32rpx; padding: 22rpx; background: #fff5e8; border-radius: 14rpx; color: #9a6100; font-size: 25rpx; }
 .sync-error { margin: 16rpx 32rpx; color: $hg-crit; font-size: 25rpx; }.hold { color: $hg-warn; font-size: 22rpx; margin: 12rpx 0; }.hold text { display: block; color: $hg-accent; padding: 10rpx 0; }.empty text { display: block; margin-bottom: 18rpx; }
 .mode-line { display: flex; justify-content: space-between; margin: 0 32rpx 20rpx; font-size: 26rpx; color: $hg-accent; }
 .page {

@@ -44,14 +44,18 @@ class ActuatorService
      *
      * @throws BusinessException 设备无控制能力或参数校验失败
      */
-    public static function applyCommand(Device $device, string $action, array $params): \app\model\CommandLog
+    public static function applyCommand(Device $device, string $action, array $params, bool $dispatch = true, ?callable $persisted = null): \app\model\CommandLog
     {
-        try { $log = (new Device)->getConnection()->transaction(fn () => self::persistCommand($device, $action, $params)); }
+        try { $log = (new Device)->getConnection()->transaction(function () use ($device, $action, $params, $persisted) {
+            $log = self::persistCommand($device, $action, $params);
+            if ($persisted) $persisted($log);
+            return $log;
+        }); }
         catch (\Throwable $e) {
             try { Redis::connection('default')->del(self::STATE_CACHE_KEY . $device->id); } catch (\Throwable) {}
             throw $e;
         }
-        CommandOutboxService::tryDispatch($log->request_id);
+        if ($dispatch) CommandOutboxService::tryDispatch($log->request_id);
         return $log;
     }
 
