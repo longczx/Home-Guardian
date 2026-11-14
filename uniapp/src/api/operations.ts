@@ -13,11 +13,13 @@ export interface AutomationRun {
   trigger_context: Record<string, unknown>;
   action_results: { index: number; type: string; status: string; action?: string; error?: string; command_status?: string; deliveries?: { channel_id: number; status: string; attempts: number }[] }[];
 }
-export interface Backup { id: string; status: string; created_at: string; size_bytes?: number; commit?: string; error?: string }
+export interface Backup { id: string; status: string; created_at: string; size_bytes?: number; commit?: string; error?: string; integrity_verified_at?: string;
+  database_restore_verified_at?: string; redis_restore_verified_at?: string; external_copy_at?: string; external_copy_label?: string; drill_failed_at?: string; drill_error?: string }
+export interface BackupHealth { last_success: Backup | null; age_hours: number | null; consecutive_failures: number; warnings: string[]; stale: boolean; needs_attention: boolean; checked_at: string }
 export const getDiagnostics = (id: number) => request.get<Diagnostic>(`/devices/${id}/diagnostics`);
 export const probeDiagnostics = (id: number) => request.post<{ request_id: string; status: string }>(`/devices/${id}/diagnostics/probe`);
 export const getAutomationRuns = (page: number) => request.get<{ items: AutomationRun[]; total: number }>('/automation-runs', { page, per_page: 20 });
-export const getBackups = () => request.get<{ items: Backup[] }>('/backups');
+export const getBackups = () => request.get<{ items: Backup[]; health?: BackupHealth; current_commit?: string }>('/backups');
 export const statusLabel = (status: string) => ({ running: '等待执行结果', pending: '等待结果', queued: '已排队', sent: '已发送到 MQTT',
   delivered: '等待设备回执', replied_ok: '设备已确认', replied_error: '设备执行失败', timeout: '设备确认超时',
   success: '成功', partial_failed: '部分失败', failed: '失败', skipped: '已跳过' }[status] || status);

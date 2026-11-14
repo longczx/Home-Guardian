@@ -6,7 +6,7 @@ use support\Redis;
 class DeviceControlService
 {
     // One control submission at a time; Redis lock spans API and worker processes.
-    public static function send(Device $device, string $action, array $params, bool $manual = false): CommandLog
+    public static function send(Device $device, string $action, array $params, bool $manual = false, bool $dispatch = true, ?callable $persisted = null): CommandLog
     {
         $redis = Redis::connection('default');
         $key = "device:control:lock:{$device->id}"; $token = bin2hex(random_bytes(16));
@@ -34,7 +34,7 @@ class DeviceControlService
             // Set the hold before enqueueing so automation cannot race a manual submission.
             $previous = $device->manual_override_until;
             if ($manual) $device->update(['manual_override_until'=>now()->addMinutes(30)]);
-            try { return ActuatorService::applyCommand($device, $action, $params); }
+            try { return ActuatorService::applyCommand($device, $action, $params, $dispatch, $persisted); }
             catch (\Throwable $e) { if ($manual) $device->update(['manual_override_until'=>$previous]); throw $e; }
         } finally {
             $redis->eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", 1, $key, $token);

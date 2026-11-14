@@ -10,6 +10,7 @@
     },
     { "path": "pages/me/change-password", "style": { "navigationBarTitleText": "修改密码" } },
     { "path": "pages/manage/rooms", "style": { "navigationBarTitleText": "房间管理" } },
+    { "path": "pages/manage/scene-edit", "style": { "navigationBarTitleText": "编辑一键场景" } },
     { "path": "pages/manage/home-mode", "style": { "navigationBarTitleText": "家庭模式" } },
     { "path": "pages/device/diagnostics", "style": { "navigationBarTitleText": "设备诊断", "enablePullDownRefresh": true } },
     { "path": "pages/manage/automation-runs", "style": { "navigationBarTitleText": "自动化执行记录", "enablePullDownRefresh": true } },

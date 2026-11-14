@@ -29,6 +29,9 @@ COPY . .
 # 执行 composer 后置脚本（如有）
 RUN composer dump-autoload --optimize
 
+ARG HG_BUILD_COMMIT=unknown
+ENV HG_BUILD_COMMIT=$HG_BUILD_COMMIT
+
 # 暴露 Webman 默认端口
 EXPOSE 8787
 

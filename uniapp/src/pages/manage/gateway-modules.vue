@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ModuleGuide from '@/components/ModuleGuide.vue';
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { onLoad, onShow } from '@dcloudio/uni-app';
 import { getDevice } from '@/api/device';
@@ -14,7 +15,8 @@ const snapshot = ref<ModuleSnapshot>({ modules: [] });
 const ready = ref(false);
 const busy = ref(false);
 const message = ref('');
-const editing = ref('');
+const editing = ref(''); const selectedGuide = ref('');
+const guideModule = computed(() => snapshot.value.modules.find(module => module.uid === selectedGuide.value));
 const form = ref<{ type: ModuleType | ''; pin: number | ''; name: string }>({ type: '', pin: '', name: '' });
 const server = useServerStore();
 let generation = 0;
@@ -69,9 +71,11 @@ async function apply(action: 'add_module' | 'update_module' | 'remove_module', p
   busy.value = true; message.value = '等待设备执行确认并读回配置…';
   const attempt = ++generation;
   try {
+    const previousUids = snapshot.value.modules.map(m => m.uid);
     const result = await changeGatewayModule(id.value, action, params);
     if (!active || attempt !== generation) return;
     snapshot.value = result; ready.value = true;
+    selectedGuide.value = action === 'add_module' ? result.modules.find(m => !previousUids.includes(m.uid))?.uid || '' : action === 'update_module' ? String(params.uid) : '';
     resetForm(); message.value = '设备已执行，配置读回确认成功';
     toast('设备已确认', 'success');
   } catch (e) {
@@ -158,22 +162,37 @@ onUnmounted(() => { active = false; generation++; });
             {{ module.uid }}
           </text>
         </view>
-        <button
-          size="mini"
-          :disabled="busy || !editable"
-          @tap="editModule(module)"
-        >
-          改引脚
-        </button>
-        <button
-          size="mini"
-          :disabled="busy || !editable"
-          @tap="removeModule(module)"
-        >
-          移除
-        </button>
+        <view class="module-actions">
+          <button
+            size="mini"
+            :disabled="busy || !editable"
+            @tap="editModule(module)"
+          >
+            改引脚
+          </button>
+          <button
+            size="mini"
+            :disabled="busy || !ready"
+            @tap="selectedGuide = selectedGuide === module.uid ? '' : module.uid"
+          >
+            接线与验收
+          </button>
+          <button
+            size="mini"
+            :disabled="busy || !editable"
+            @tap="removeModule(module)"
+          >
+            移除
+          </button>
+        </view>
       </view>
     </view>
+    <ModuleGuide
+      v-if="ready && guideModule"
+      :key="guideModule.uid + ':' + guideModule.pin"
+      :gateway-id="id"
+      :module="guideModule"
+    />
     <view class="card">
       <text class="title">
         {{ editing ? '修改模块引脚' : '添加模块' }}
@@ -245,7 +264,7 @@ onUnmounted(() => { active = false; generation++; });
 .hint { display: block; font-size: 24rpx; color: $hg-muted; line-height: 1.6; margin: 12rpx 0; word-break: break-all; }
 .message { display: block; font-size: 26rpx; color: $hg-accent; margin-top: 20rpx; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12rpx; padding: 20rpx 0; border-bottom: 1rpx solid $hg-line; }
-.module-info { flex: 1; min-width: 240rpx; }
+.module-actions { display: flex; gap: 12rpx; width: 100%; }.module-actions button { flex: 1; margin: 0; padding: 0 10rpx; font-size: 24rpx; }.module-info { flex: 1; flex-basis: 100%; min-width: 240rpx; }
 .name { font-size: 28rpx; color: $hg-fg; }
 .field { padding: 24rpx 0; border-bottom: 1rpx solid $hg-line; color: $hg-fg; font-size: 28rpx; }
 .label { display: block; font-size: 24rpx; color: $hg-muted; margin-bottom: 12rpx; }

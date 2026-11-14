@@ -1,12 +1,12 @@
 <?php
 namespace app\service;
 
-use app\model\{AutomationRun, CommandLog, NotificationDelivery};
+use app\model\{AutomationRun, SceneRun, CommandLog, NotificationDelivery};
 
 class AutomationRunService
 {
     // Queue submission is not completion: derive the outcome from durable ACK/delivery records.
-    public static function refresh(AutomationRun $run): AutomationRun
+    public static function refresh(AutomationRun|SceneRun $run): AutomationRun|SceneRun
     {
         if ($run->status !== 'running') return $run;
         if (!$run->submission_finished) {
