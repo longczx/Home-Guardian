@@ -74,10 +74,15 @@ class ActuatorService
         if ($mode === CapabilityTemplate::MODE_MERGE) {
             // 2a. merge：读期望状态 → 合并改动 → 下发完整状态
             $current = self::getState($device->id) ?: self::defaultState($cap);
-            $next = AcProtocolCatalog::isInfrared($cap)
+            $infrared = AcProtocolCatalog::isInfrared($cap);
+            $next = $infrared
                 ? AcProtocolCatalog::mergeState($current, $params) : array_merge($current, $params);
 
-            $log = MqttCommandService::sendCommand($device->id, ['action' => $action, 'params' => $next]);
+            $commandParams = $next;
+            if ($infrared && ($next['protocol'] ?? null) === 'KELON168') {
+                $commandParams['_controls'] = array_keys($params);
+            }
+            $log = MqttCommandService::sendCommand($device->id, ['action' => $action, 'params' => $commandParams]);
             self::saveState($device->id, $next, false);
             self::pushStateWs($device, $next);
             return $log;
