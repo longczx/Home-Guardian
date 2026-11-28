@@ -39,6 +39,37 @@ static const char* fanStr(stdAc::fanspeed_t f) {
     }
 }
 
+#if SEND_KELON168
+static uint8_t kelon168Command(JsonArrayConst controls, const stdAc::state_t& next,
+                               const stdAc::state_t& current, bool hasPrevious) {
+    if (!controls.isNull()) {
+        bool power = false, mode = false, fan = false, swing = false;
+        for (JsonVariantConst control : controls) {
+            const char* key = control | "";
+            if (!strcmp(key, "power")) power = true;
+            else if (!strcmp(key, "mode")) mode = true;
+            else if (!strcmp(key, "fan")) fan = true;
+            else if (!strcmp(key, "swing")) swing = true;
+        }
+        if (power && (!hasPrevious || next.power != current.power)) return kKelon168CommandPower;
+        if (mode) return kKelon168CommandMode;
+        if (swing) return kKelon168CommandSwing;
+        if (fan) return kKelon168CommandFanSpeed;
+        return kKelon168CommandTemp;
+    }
+
+    // Older servers only send a full snapshot. With no previous transmission,
+    // prefer a settings change over inferring that the user pressed Power.
+    if (hasPrevious && next.power != current.power) return kKelon168CommandPower;
+    if (next.mode != current.mode) return kKelon168CommandMode;
+    if (next.swingv != current.swingv) return kKelon168CommandSwing;
+    if (next.fanspeed != current.fanspeed) return kKelon168CommandFanSpeed;
+    if (next.degrees != current.degrees) return kKelon168CommandTemp;
+    if (next.power != current.power) return kKelon168CommandPower;
+    return kKelon168CommandTemp;
+}
+#endif
+
 AcIr::AcIr(uint16_t irLedPin, decode_type_t defaultProtocol)
     : _ac(irLedPin), _irLedPin(irLedPin), _protocol(defaultProtocol) {}
 
@@ -122,9 +153,13 @@ bool AcIr::apply(const JsonObject& params, JsonObject& outState) {
     bool ok = false;
 #if SEND_KELON168
     if (next.protocol == decode_type_t::KELON168) {
+        const uint8_t command = kelon168Command(params["_controls"].as<JsonArrayConst>(),
+                                                next, previous ? *previous : _state, previous != nullptr);
         IRKelon168Ac ac(_irLedPin);
         ac.begin();
-        configureKelon168(ac, next, previous);
+        configureKelon168(ac, next, command);
+        Serial.printf("[AC-IR] KELON168 cmd=0x%02x power_toggle=%d swing=%d fan=%u\n",
+                      command, ac.getPower(), ac.getSwing(), ac.getFan());
         ac.send();
         ok = true;
     } else

@@ -1,6 +1,7 @@
 #include <cassert>
 #include <iostream>
 #include <cstring>
+#include <Arduino.h>
 #include <IRutils.h>
 #include <IRrecv.h>
 #include "ac_ir.h"
@@ -56,19 +57,18 @@ int main() {
     stdAc::state_t desired;
     desired.protocol = decode_type_t::KELON168; desired.model = 1;
     desired.power = true; desired.mode = stdAc::opmode_t::kCool; desired.degrees = 25;
-    configureKelon168(kelon, desired, nullptr);
+    configureKelon168(kelon, desired, kKelon168CommandPower);
     Kelon168Protocol frame{};
     std::memcpy(frame.raw, kelon.getRaw(), kKelon168StateLength);
     assert(frame.Power && frame.On && frame.Cmd == kKelon168CommandPower);
     assert(IRKelon168Ac::validChecksum(frame.raw));
-    auto previous = desired;
     desired.degrees = 26;
-    configureKelon168(kelon, desired, &previous);
+    configureKelon168(kelon, desired, kKelon168CommandTemp);
     std::memcpy(frame.raw, kelon.getRaw(), kKelon168StateLength);
     assert(!frame.Power && frame.On && frame.Cmd == kKelon168CommandTemp);
     assert(kelon.getTemp() == 26 && IRKelon168Ac::validChecksum(frame.raw));
-    previous = desired; desired.power = false;
-    configureKelon168(kelon, desired, &previous);
+    desired.power = false;
+    configureKelon168(kelon, desired, kKelon168CommandPower);
     std::memcpy(frame.raw, kelon.getRaw(), kKelon168StateLength);
     assert(frame.Power && !frame.On && frame.Cmd == kKelon168CommandPower);
     kelon.begin(); kelon.send(); kelon._irsend.makeDecodeResult();
@@ -79,5 +79,38 @@ int main() {
     assert(kelon._irsend.capture.decode_type == decode_type_t::KELON168);
     assert(kelon._irsend.capture.bits == 168);
     assert(std::memcmp(frame.raw, kelon._irsend.capture.state, kKelon168StateLength) == 0);
+
+    AcIr hisense(25, decode_type_t::KELON168);
+    hisense.begin();
+    JsonDocument input;
+    input["protocol"] = "KELON168";
+    input["model"] = 1;
+    input["power"] = true;  // Snapshot may differ from the ESP32's state after a restart.
+    input["temp"] = 27;
+    input["swing"] = false;
+    auto applyAndCheck = [&](const char* expected) {
+        testSerialOutput.clear();
+        assert(hisense.apply(input.as<JsonObject>(), resultState));
+        assert(testSerialOutput.find(expected) != std::string::npos);
+    };
+    applyAndCheck("cmd=0x02 power_toggle=0");  // Old server, first temperature change.
+    auto controls = input["_controls"].to<JsonArray>();
+    controls.add("temp");
+    input["power"] = false;  // Non-power edits never take a stale power value as a button press.
+    input["temp"] = 28;
+    applyAndCheck("cmd=0x02 power_toggle=0");
+    controls[0] = "fan";
+    input["fan"] = "high";
+    applyAndCheck("cmd=0x11 power_toggle=0 swing=0 fan=5");
+    applyAndCheck("cmd=0x11 power_toggle=0 swing=0 fan=5");
+    controls[0] = "swing";
+    input["swing"] = true;
+    applyAndCheck("cmd=0x07 power_toggle=0 swing=1");
+    input["swing"] = false;
+    applyAndCheck("cmd=0x07 power_toggle=0 swing=0");
+    applyAndCheck("cmd=0x07 power_toggle=0 swing=0");
+    controls[0] = "power";
+    input["power"] = true;
+    applyAndCheck("cmd=0x01 power_toggle=1");
     std::cout << "IR firmware tests passed: " << protocols << " protocols; Kelon168 state, checksum and waveform decode" << std::endl;
 }

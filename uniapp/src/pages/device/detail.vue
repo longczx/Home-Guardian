@@ -51,6 +51,13 @@ function stateVal(ctrl: ControlPoint): unknown {
   return device.value?.state?.[key];
 }
 
+function isKelonVerticalSwing(ctrl: ControlPoint): boolean {
+  const protocol = device.value?.state?.protocol
+    ?? controls.value.find((control) => control.param === 'protocol')?.default;
+  return ctrl.command === 'set_state' && ctrl.param === 'swing'
+    && ctrl.widget === 'switch' && protocol === 'KELON168';
+}
+
 function setLocal(ctrl: ControlPoint, v: unknown) {
   if (!device.value) return;
   if (!device.value.state) device.value.state = {};
@@ -275,16 +282,36 @@ onHide(() => { unsubs.forEach((u) => u()); unsubs = []; });
       >
         <view class="ctl-head">
           <text class="ctl-label">
-            {{ ctrl.label }}
+            {{ isKelonVerticalSwing(ctrl) ? '上下风向' : ctrl.label }}
           </text>
           <text class="ctl-sub">
-            {{ ctrl.command }} · 经网关下发
+            {{ isKelonVerticalSwing(ctrl) ? '先启动扫风，叶片到达想要的位置时点「停在当前位置」' : ctrl.command + ' · 经网关下发' }}
           </text>
+        </view>
+
+        <view
+          v-if="isKelonVerticalSwing(ctrl)"
+          class="seg"
+        >
+          <button
+            class="seg-btn"
+            :disabled="disabled(ctrl)"
+            @tap="send(ctrl, true)"
+          >
+            上下扫风
+          </button>
+          <button
+            class="seg-btn"
+            :disabled="disabled(ctrl)"
+            @tap="send(ctrl, false)"
+          >
+            停在当前位置
+          </button>
         </view>
 
         <!-- switch -->
         <view
-          v-if="ctrl.widget === 'switch'"
+          v-else-if="ctrl.widget === 'switch'"
           class="sw"
           :class="{ on: !!stateVal(ctrl) }"
           @tap="onSwitch(ctrl)"
