@@ -47,6 +47,7 @@ class MqttSubscriber
      */
     private ?MqttClient $mqttClient = null;
     private bool $mqttConnected = false;
+    private int $connectionGeneration = 0;
     private array $inFlight = [];
 
     /**
@@ -138,14 +139,36 @@ class MqttSubscriber
             ]
         );
 
-        // 连接成功回调
-        $this->mqttClient->onConnect = function () {
-            $this->mqttConnected = true;
-            Log::info('MQTT 已连接到 Broker');
+        $this->configureMqttCallbacks();
+        $this->mqttClient->connect();
+    }
 
-            // 订阅所有设备的上行主题
-            $this->mqttClient->subscribe('home/upstream/#', ['qos' => 1]);
+    private function configureMqttCallbacks(): void
+    {
+        // Workerman invokes onConnect only once; subsequent CONNACKs use onReconnect.
+        $connected = function () {
+            $client = $this->mqttClient;
+            $generation = ++$this->connectionGeneration;
+            $this->mqttConnected = false;
+            $this->inFlight = [];
+            // Resume dispatch only after upstream subscriptions are confirmed, so ACKs cannot be lost.
+            $client->subscribe('home/upstream/#', ['qos' => 1], function ($error = null, array $granted = []) use ($client, $generation) {
+                if ($generation !== $this->connectionGeneration || $client !== $this->mqttClient) return;
+                $code = $granted['home/upstream/#'] ?? 128;
+                if ($error || !in_array($code, [0, 1, 2], true)) {
+                    $this->mqttConnected = false;
+                    Log::warning('MQTT 上行订阅未确认，暂停指令投递并等待重试');
+                    Timer::add(5, function () use ($client, $generation) {
+                        if ($generation === $this->connectionGeneration && !$this->mqttConnected && $client === $this->mqttClient) $client->reconnect();
+                    }, [], false);
+                    return;
+                }
+                $this->mqttConnected = true;
+                Log::info('MQTT 已连接并确认上行订阅，恢复指令投递');
+            });
         };
+        $this->mqttClient->onConnect = $connected;
+        $this->mqttClient->onReconnect = $connected;
 
         // 收到消息回调
         $this->mqttClient->onMessage = function ($topic, $payload) {
@@ -166,12 +189,12 @@ class MqttSubscriber
 
         // 连接关闭回调
         $this->mqttClient->onClose = function () {
+            ++$this->connectionGeneration;
             $this->mqttConnected = false;
             $this->inFlight = [];
             Log::warning('MQTT 连接已关闭，将自动重连');
         };
 
-        $this->mqttClient->connect();
     }
 
     /**

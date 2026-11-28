@@ -24,7 +24,8 @@ return [
             'prefix'   => '',
             'schema'   => 'public',
             // 时区与 PHP 保持一致（Asia/Shanghai），TimescaleDB 需要 TIMESTAMPTZ
-            'timezone' => '+08:00',
+            // PostgreSQL treats numeric zone strings as POSIX offsets (reversed sign).
+            'timezone' => 'Asia/Shanghai',
         ],
     ],
 ];
